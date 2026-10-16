@@ -139,6 +139,23 @@ public sealed class CaparOptions
         return this;
     }
 
+    /// <summary>
+    /// The publisher used for notifications, as an instance. A <see cref="NotificationPublishers.ForeachAwaitPublisher"/>
+    /// by default.
+    /// </summary>
+    /// <remarks>
+    /// With the default, the generated mediator runs handlers itself, one after another, without building an
+    /// executor per handler. Any other publisher is handed the handlers the way MediatR hands them over.
+    /// </remarks>
+    public INotificationPublisher NotificationPublisher { get; set; } = new NotificationPublishers.ForeachAwaitPublisher();
+
+    /// <summary>
+    /// The publisher used for notifications, as a type the container creates with <see cref="Lifetime"/>. Takes
+    /// precedence over <see cref="NotificationPublisher"/> when set.
+    /// </summary>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+    public Type? NotificationPublisherType { get; set; }
+
     /// <summary>Whether exception actions see every exception or only unhandled ones.</summary>
     public RequestExceptionActionProcessorStrategy RequestExceptionActionProcessorStrategy { get; set; }
 

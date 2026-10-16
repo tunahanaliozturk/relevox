@@ -9,6 +9,7 @@
   <ItemGroup>
     <Using Include="MediatR" />
     <Using Include="MediatR.Pipeline" />
+    <Using Include="MediatR.NotificationPublishers" />
     <Compile Include="../Capar.DifferentialTests.Scenarios/*.cs" LinkBase="Scenarios" />
   </ItemGroup>
 

@@ -11,6 +11,16 @@ public static partial class Library
             configuration.RegisterServicesFromAssembly(typeof(Library).Assembly);
             configuration.Lifetime = lifetime;
 
+            if (profile == Profile.WhenAll)
+            {
+                configuration.NotificationPublisherType = typeof(TaskWhenAllPublisher);
+            }
+
+            if (profile == Profile.ReversePublisher)
+            {
+                configuration.NotificationPublisher = new ReversePublisher();
+            }
+
             if (profile == Profile.AllExceptions)
             {
                 configuration.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;

@@ -63,6 +63,12 @@ public enum Profile
 
     /// <summary>Handlers, with exception actions applied to every exception rather than unhandled ones.</summary>
     AllExceptions,
+
+    /// <summary>Handlers, with notifications published through TaskWhenAllPublisher, set by type.</summary>
+    WhenAll,
+
+    /// <summary>Handlers, with notifications published through ReversePublisher, set as an instance.</summary>
+    ReversePublisher,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>

@@ -30,10 +30,19 @@ internal static class Containers
     }
 
     /// <summary>Capar with its default transient handlers, or with singleton handlers to compare like with like.</summary>
-    public static ServiceProvider Capar(ServiceLifetime lifetime)
+    public static ServiceProvider Capar(ServiceLifetime lifetime, bool withPipeline = false)
     {
         ServiceCollection services = new();
-        services.AddCapar(options => options.HandlerLifetime = lifetime);
+        services.AddCapar(options =>
+        {
+            options.HandlerLifetime = lifetime;
+            if (withPipeline)
+            {
+                options.AddBehavior<global::Capar.IPipelineBehavior<CaparPeer.Piped, int>, CaparPeer.First>();
+                options.AddBehavior<global::Capar.IPipelineBehavior<CaparPeer.Piped, int>, CaparPeer.Second>();
+                options.AddBehavior<global::Capar.IPipelineBehavior<CaparPeer.Piped, int>, CaparPeer.Third>();
+            }
+        });
         return services.BuildServiceProvider();
     }
 
