@@ -297,6 +297,8 @@ milestones:
   diagnostics use external-file locations, so `#pragma warning disable` around a declaration does not
   reach them and the IDE shows no squiggle.
 - **M3:** the NativeAOT publish smoke test in CI that this plan promises.
+- **M4:** the pipeline row (0.61 of MediatR with three behaviours) and streams (about even with MediatR).
+  See [the M2 numbers](benchmark-results/2026-10-16-m2.md) for why each costs what it does.
 - **M4:** cache the reference scan per referenced assembly. It is correct today, and its output is
   value-equal, so downstream stages stay cached, but the walk itself repeats on every compilation.
 
