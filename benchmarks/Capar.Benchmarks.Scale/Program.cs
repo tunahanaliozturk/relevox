@@ -14,11 +14,13 @@ if (args is ["--sanity"])
         await benchmarks.MediatorTyped(),
         await benchmarks.MediatorInterface(),
     ];
+    int[] rotating = [await benchmarks.MediatRRotating(), await benchmarks.CaparRotating(), await benchmarks.MediatorRotating()];
     benchmarks.Cleanup();
 
-    if (answers.Any(answer => answer != 250))
+    // The three rotating rows share one turn counter, so they reach requests 0, 60 and 120.
+    if (answers.Any(answer => answer != 250) || !rotating.SequenceEqual([0, 60, 120]))
     {
-        Console.Error.WriteLine($"Expected 250 from every path, got {string.Join(", ", answers)}.");
+        Console.Error.WriteLine($"Unexpected answers: {string.Join(", ", answers)}; rotating {string.Join(", ", rotating)}.");
         return 1;
     }
 
