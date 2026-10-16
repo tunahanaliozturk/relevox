@@ -29,11 +29,11 @@ internal static class Containers
         return services.BuildServiceProvider();
     }
 
-    /// <summary>Capar with its default transient handlers, or with singletons to compare like with like.</summary>
+    /// <summary>Capar with its default transient handlers, or with singleton handlers to compare like with like.</summary>
     public static ServiceProvider Capar(ServiceLifetime lifetime)
     {
         ServiceCollection services = new();
-        services.AddCapar(options => options.Lifetime = lifetime);
+        services.AddCapar(options => options.HandlerLifetime = lifetime);
         return services.BuildServiceProvider();
     }
 

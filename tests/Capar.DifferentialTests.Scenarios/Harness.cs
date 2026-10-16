@@ -36,15 +36,15 @@ public sealed class Trace
 /// <summary>Builds the container the way each library's documentation does.</summary>
 public static partial class Library
 {
-    public static ServiceProvider Build()
+    public static ServiceProvider Build(ServiceLifetime lifetime = ServiceLifetime.Transient)
     {
         ServiceCollection services = new();
         services.AddSingleton<Trace>();
-        Register(services);
+        Register(services, lifetime);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
-    static partial void Register(IServiceCollection services);
+    static partial void Register(IServiceCollection services, ServiceLifetime lifetime);
 }
 
 /// <summary>How a scenario's trace is compared.</summary>
@@ -68,9 +68,10 @@ public static class Run
 {
     public static async Task<string> Scenario(
         Func<IServiceProvider, Task<object?>> body,
-        TraceOrder order = TraceOrder.Exact)
+        TraceOrder order = TraceOrder.Exact,
+        ServiceLifetime lifetime = ServiceLifetime.Transient)
     {
-        await using ServiceProvider root = Library.Build();
+        await using ServiceProvider root = Library.Build(lifetime);
         await using AsyncServiceScope scope = root.CreateAsyncScope();
         Trace trace = scope.ServiceProvider.GetRequiredService<Trace>();
 

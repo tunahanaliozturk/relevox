@@ -2,22 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Capar.SourceGenerator;
 
 /// <summary>A request with exactly one handler, ready to emit.</summary>
-internal sealed record RequestEntry(string RequestType, string? ResponseType, string HandlerType, bool IsValueType);
+/// <param name="Request">The request type.</param>
+/// <param name="ResponseSyntax">Annotated response type, or null for a request that returns nothing.</param>
+/// <param name="HandlerType">The handler class.</param>
+internal sealed record RequestEntry(MessageShape Request, string? ResponseSyntax, string HandlerType);
 
 /// <summary>A stream request with exactly one handler, ready to emit.</summary>
-internal sealed record StreamEntry(string RequestType, string ResponseType, string HandlerType, bool IsValueType);
+internal sealed record StreamEntry(MessageShape Request, string ResponseSyntax, string HandlerType);
 
 /// <summary>One handler a notification reaches, and the notification type that handler was written for.</summary>
 /// <param name="HandlerType">The handler class.</param>
-/// <param name="HandledType">The type in its <c>INotificationHandler&lt;T&gt;</c>, which may be a base type.</param>
-internal sealed record NotificationTarget(string HandlerType, string HandledType);
+/// <param name="HandledSyntax">The annotated type in its <c>INotificationHandler&lt;T&gt;</c>, which may be a base type.</param>
+internal sealed record NotificationTarget(string HandlerType, string HandledSyntax);
 
 /// <summary>A concrete notification and every handler it reaches, in the order they run.</summary>
-internal sealed record NotificationEntry(string NotificationType, bool IsValueType, EquatableArray<NotificationTarget> Targets);
+internal sealed record NotificationEntry(MessageShape Notification, EquatableArray<NotificationTarget> Targets);
 
 /// <summary>A diagnostic, reduced to values so it can sit in a cached model.</summary>
 internal sealed record DiagnosticEntry(string Rule, EquatableArray<string> Arguments, LocationModel? Location);
@@ -29,6 +33,7 @@ internal sealed record EmitPlan(
     EquatableArray<StreamEntry> Streams,
     EquatableArray<NotificationEntry> Notifications,
     EquatableArray<string> HandlerTypes,
+    EquatableArray<string> SuppressedWarnings,
     EquatableArray<DiagnosticEntry> Diagnostics);
 
 /// <summary>Turns what discovery found into what gets emitted, deciding every conflict on the way.</summary>
@@ -42,10 +47,11 @@ internal static class Planner
     {
         List<DiagnosticEntry> diagnostics = [];
 
-        // The same message can arrive twice, from a partial declaration or from source and a reference at
-        // once. The source copy wins because it carries a location for diagnostics.
+        // The same message can arrive more than once: from a partial declaration, from a notification handler
+        // naming a closed generic, or from source and a reference at once. The source copy wins because it
+        // carries a location for diagnostics.
         Dictionary<string, MessageModel> messages = discovery.Messages
-            .GroupBy(static message => message.MessageType + "|" + message.Kind, StringComparer.Ordinal)
+            .GroupBy(static message => Key(message.Shape.Type, message.Kind), StringComparer.Ordinal)
             .ToDictionary(
                 static group => group.Key,
                 static group => group.OrderByDescending(static message => message.FromSource).First(),
@@ -56,7 +62,7 @@ internal static class Planner
         {
             if (Single(group, MessageKind.Request) is { } handler)
             {
-                requests.Add(new RequestEntry(handler.MessageType, handler.ResponseType, handler.HandlerType, handler.MessageIsValueType));
+                requests.Add(new RequestEntry(handler.Message, handler.ResponseSyntax, handler.HandlerType));
             }
         }
 
@@ -65,24 +71,24 @@ internal static class Planner
         {
             if (Single(group, MessageKind.Stream) is { } handler)
             {
-                streams.Add(new StreamEntry(handler.MessageType, handler.ResponseType!, handler.HandlerType, handler.MessageIsValueType));
+                streams.Add(new StreamEntry(handler.Message, handler.ResponseSyntax!, handler.HandlerType));
             }
         }
 
         HashSet<string> handledRequests = new(
             discovery.Handlers
                 .Where(static handler => handler.Kind != HandlerKind.Notification)
-                .Select(static handler => handler.MessageType),
+                .Select(static handler => handler.Message.Type),
             StringComparer.Ordinal);
 
         foreach (MessageModel message in messages.Values
             .Where(static message => message.FromSource && message.Kind != MessageKind.Notification)
-            .Where(message => !handledRequests.Contains(message.MessageType))
-            .OrderBy(static message => message.MessageType, StringComparer.Ordinal))
+            .Where(message => !handledRequests.Contains(message.Shape.Type))
+            .OrderBy(static message => message.Shape.Type, StringComparer.Ordinal))
         {
             diagnostics.Add(new DiagnosticEntry(
                 SourceGenerator.Diagnostics.NoHandler.Id,
-                new[] { Trim(message.MessageType) }.ToEquatableArray(),
+                new[] { Trim(message.Shape.Type) }.ToEquatableArray(),
                 message.Location));
         }
 
@@ -91,23 +97,23 @@ internal static class Planner
             .. discovery.Handlers
                 .Where(static handler => handler.Kind == HandlerKind.Notification)
                 .OrderBy(static handler => handler.HandlerType, StringComparer.Ordinal)
-                .ThenBy(static handler => handler.MessageType, StringComparer.Ordinal),
+                .ThenBy(static handler => handler.Message.Type, StringComparer.Ordinal),
         ];
 
-        HashSet<string> directlyHandled = new(notificationHandlers.Select(static handler => handler.MessageType), StringComparer.Ordinal);
+        HashSet<string> directlyHandled = new(notificationHandlers.Select(static handler => handler.Message.Type), StringComparer.Ordinal);
         List<NotificationEntry> notifications = [];
         foreach (MessageModel message in messages.Values
             .Where(static message => message.Kind == MessageKind.Notification)
-            .OrderBy(static message => message.MessageType, StringComparer.Ordinal))
+            .OrderBy(static message => message.Shape.Type, StringComparer.Ordinal))
         {
             // MediatR 12 registers a handler for a base type or for INotification only under the notification
             // types that some handler names exactly. A notification nobody handles directly therefore reaches no
             // handler at all, catch-all handlers included. The differential tests caught this, and it is matched
             // on purpose: after migrating, a catch-all audit handler must not start seeing notifications it never
             // saw before.
-            if (!directlyHandled.Contains(message.MessageType))
+            if (!directlyHandled.Contains(message.Shape.Type))
             {
-                notifications.Add(new NotificationEntry(message.MessageType, message.IsValueType, EquatableArray<NotificationTarget>.Empty));
+                notifications.Add(new NotificationEntry(message.Shape, EquatableArray<NotificationTarget>.Empty));
                 continue;
             }
 
@@ -119,15 +125,15 @@ internal static class Planner
             NotificationTarget[] targets =
             [
                 .. notificationHandlers
-                    .Where(handler => reachable.Contains(handler.MessageType))
+                    .Where(handler => reachable.Contains(handler.Message.Type))
                     .GroupBy(static handler => handler.HandlerType, StringComparer.Ordinal)
                     .Select(group => group
-                        .OrderBy(handler => IndexOf(message.AssignableTo, handler.MessageType))
+                        .OrderBy(handler => IndexOf(message.AssignableTo, handler.Message.Type))
                         .First())
-                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.MessageType)),
+                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax)),
             ];
 
-            notifications.Add(new NotificationEntry(message.MessageType, message.IsValueType, targets.ToEquatableArray()));
+            notifications.Add(new NotificationEntry(message.Shape, targets.ToEquatableArray()));
         }
 
         string[] handlerTypes =
@@ -139,20 +145,20 @@ internal static class Planner
                 .OrderBy(static type => type, StringComparer.Ordinal),
         ];
 
-        foreach (SkippedModel skipped in discovery.Skipped.OrderBy(static skipped => skipped.TypeName, StringComparer.Ordinal))
+        foreach (SkippedModel skipped in discovery.Skipped
+            .OrderBy(static skipped => skipped.Rule, StringComparer.Ordinal)
+            .ThenBy(static skipped => string.Join("|", skipped.Arguments), StringComparer.Ordinal))
         {
-            string[] arguments = skipped.Rule == SourceGenerator.Diagnostics.Inaccessible.Id
-                ? [skipped.TypeName, skipped.Detail]
-                : [skipped.TypeName];
-            diagnostics.Add(new DiagnosticEntry(skipped.Rule, arguments.ToEquatableArray(), skipped.Location));
+            diagnostics.Add(new DiagnosticEntry(skipped.Rule, skipped.Arguments, skipped.Location));
         }
 
         return new EmitPlan(
             ToNamespace(assemblyName),
-            requests.OrderBy(static request => request.RequestType, StringComparer.Ordinal).ToEquatableArray(),
-            streams.OrderBy(static stream => stream.RequestType, StringComparer.Ordinal).ToEquatableArray(),
+            requests.OrderBy(static request => request.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
+            streams.OrderBy(static stream => stream.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
             notifications.ToEquatableArray(),
             handlerTypes.ToEquatableArray(),
+            discovery.Experimental,
             diagnostics.ToEquatableArray());
 
         HandlerModel? Single(IGrouping<string, HandlerModel> group, MessageKind kind)
@@ -163,7 +169,7 @@ internal static class Planner
                 return candidates[0];
             }
 
-            messages.TryGetValue(group.Key + "|" + kind, out MessageModel? message);
+            messages.TryGetValue(Key(group.Key, kind), out MessageModel? message);
             diagnostics.Add(new DiagnosticEntry(
                 SourceGenerator.Diagnostics.AmbiguousHandler.Id,
                 new[]
@@ -177,10 +183,12 @@ internal static class Planner
         }
     }
 
+    private static string Key(string type, MessageKind kind) => type + "|" + kind;
+
     private static IEnumerable<IGrouping<string, HandlerModel>> GroupHandlers(DiscoveryModel discovery, params HandlerKind[] kinds) =>
         discovery.Handlers
             .Where(handler => kinds.Contains(handler.Kind))
-            .GroupBy(static handler => handler.MessageType, StringComparer.Ordinal)
+            .GroupBy(static handler => handler.Message.Type, StringComparer.Ordinal)
             .OrderBy(static group => group.Key, StringComparer.Ordinal);
 
     private static int IndexOf(EquatableArray<string> names, string name)
@@ -225,7 +233,8 @@ internal static class Planner
                 builder.Insert(0, '_');
             }
 
-            segments[index] = builder.ToString();
+            string segment = builder.ToString();
+            segments[index] = SyntaxFacts.GetKeywordKind(segment) != SyntaxKind.None ? "@" + segment : segment;
         }
 
         return string.Join(".", segments);

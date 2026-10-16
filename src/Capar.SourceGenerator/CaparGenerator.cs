@@ -76,6 +76,7 @@ public sealed class CaparGenerator : IIncrementalGenerator
         "CPR0001" => SourceGenerator.Diagnostics.NoHandler,
         "CPR0002" => SourceGenerator.Diagnostics.AmbiguousHandler,
         "CPR0003" => SourceGenerator.Diagnostics.Inaccessible,
+        "CPR0005" => SourceGenerator.Diagnostics.OwnMediator,
         _ => SourceGenerator.Diagnostics.GenericHandler,
     };
 }

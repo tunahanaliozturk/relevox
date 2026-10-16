@@ -288,6 +288,18 @@ Each milestone is a branch and a PR with green CI. Commits land as each unit pas
 | M5 | Migration guide and migrated sample, README, ADRs, operations notes, CHANGELOG | a reader can migrate the sample from the guide alone |
 | M6 | v1.0.0: NuGet publish, repository made public | only with the owner's go-ahead |
 
+### Carried over from the M1 review
+
+The M1 review found fifteen issues. Most were fixed in M1 and are covered by tests. These moved to later
+milestones:
+
+- **M3:** report CPR0001-CPR0004 from a `DiagnosticAnalyzer` with real symbol locations. Generator
+  diagnostics use external-file locations, so `#pragma warning disable` around a declaration does not
+  reach them and the IDE shows no squiggle.
+- **M3:** the NativeAOT publish smoke test in CI that this plan promises.
+- **M4:** cache the reference scan per referenced assembly. It is correct today, and its output is
+  value-equal, so downstream stages stay cached, but the walk itself repeats on every compilation.
+
 ## 9. ADRs to write
 
 - 0001 Source-generated dispatch, not reflection or expression trees.
