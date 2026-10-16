@@ -476,23 +476,18 @@ internal static class Emitter
             code.Open($"public {AsyncEnumerable}<{stream.ResponseSyntax}> CreateStream({stream.Request.Syntax} request, {Token} cancellationToken = default)");
             NullCheck(code, "request", stream.Request);
             RuntimeTypeCheck(code, "request", stream.Request, $"CreateStream<{stream.ResponseSyntax}>((global::Capar.IStreamRequest<{stream.ResponseSyntax}>)request, cancellationToken)");
-            code.Line($"return Stream{index}(request, cancellationToken);");
+            code.Line($"return new global::Capar.Internal.DeferredEnumerable<CaparMediator, {stream.Request.Syntax}, {stream.ResponseSyntax}>(this, request, static (mediator, message, token) => mediator.OpenStream{index}(message, token), cancellationToken);");
             code.Close();
 
-            // An iterator rather than the handler's own stream, for two reasons MediatR 12 shares. The handler is
-            // resolved when enumeration starts, so enumerating twice gets a fresh transient handler. And the token
-            // reaching the handler is the combined one, so a caller's WithCancellation cancels a handler that
-            // does not declare [EnumeratorCancellation] itself.
+            // Called on the first MoveNextAsync, with the combined token: the handler is resolved when enumeration
+            // starts, as in MediatR, and its stream is then enumerated directly, without a wrapper per item.
             code.Line();
-            code.Open($"private async {AsyncEnumerable}<{stream.ResponseSyntax}> Stream{index}({stream.Request.Syntax} request, [global::System.Runtime.CompilerServices.EnumeratorCancellation] {Token} cancellationToken)");
+            code.Open($"private {AsyncEnumerable}<{stream.ResponseSyntax}> OpenStream{index}({stream.Request.Syntax} request, {Token} cancellationToken)");
             string contract = $"global::Capar.IStreamRequestHandler<{stream.Request.Syntax}, {stream.ResponseSyntax}>";
             code.Line($"global::Capar.IStreamPipelineBehavior<{stream.Request.Syntax}, {stream.ResponseSyntax}>[]? behaviors = _pipelines.StreamBehaviors<{stream.Request.Syntax}, {stream.ResponseSyntax}>({position}, _services);");
-            code.Line($"{AsyncEnumerable}<{stream.ResponseSyntax}> items = behaviors is null");
+            code.Line("return behaviors is null");
             code.Line($"    ? (({contract})Handler{handler}()).Handle(request, cancellationToken)");
             code.Line($"    : global::Capar.Internal.StreamPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);");
-            code.Open($"await foreach ({stream.ResponseSyntax} item in global::System.Threading.Tasks.TaskAsyncEnumerableExtensions.WithCancellation(items, cancellationToken).ConfigureAwait(false))");
-            code.Line("yield return item;");
-            code.Close();
             code.Close();
         }
     }
