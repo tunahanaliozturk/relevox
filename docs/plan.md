@@ -174,7 +174,9 @@ The generator emits, per compilation that calls `AddCapar`:
 
 Handlers are registered and resolved by their concrete type, from `IServiceProvider` on each call, as
 in MediatR, so lifetimes behave the same.
-Caching a handler instance would be faster and would also be a bug for every scoped handler.
+Caching every handler instance would be faster and would also be a bug for every scoped handler, so only
+handlers and behaviours registered as singletons are resolved once and held (ADR 0004, amended after the
+baseline).
 
 ### 4.3 Publish
 
@@ -226,7 +228,10 @@ Hypotheses to confirm or disprove (not claims):
 - Typed `Send` takes at most half of MediatR 12.5.0's time (fastcast reached 0.60 with async plumbing
   Çapar does not have).
 - Interface `Send` is no slower than MediatR at 1 and at 500 request types.
-- Typed `Send` is within 10% of Mediator 3.x despite returning `Task`.
+- ~~Typed `Send` is within 10% of Mediator 3.x despite returning `Task`.~~ Rejected by the
+  [baseline](benchmark-results/2026-10-16-baseline.md) for transient handlers: Mediator's 1.2 ns comes from
+  holding singleton handlers. Replaced by: with singleton handlers, typed `Send` is within 2x of
+  Mediator's typed send; with transient handlers, it is compared against a transient Mediator build (M4).
 - Cold start is faster than MediatR's because nothing is scanned.
 
 Results go under `docs/benchmark-results/`. A hypothesis the numbers reject is reported as rejected.

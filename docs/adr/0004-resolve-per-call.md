@@ -23,7 +23,17 @@ performs open-generic resolution on the send path.
 - Concrete-type registration means a handler is visible in the container under its own type, which is also
   what makes it straightforward to replace in tests.
 
+## Amendment, same day: cache singletons
+
+The [baseline](../benchmark-results/2026-10-16-baseline.md) showed Mediator 3.0 sending in 1.2 ns with its
+default singleton handlers, against MediatR's 36 ns with transient ones. The difference is almost entirely
+that Mediator never asks the container. So the singleton case is part of v1: at startup the generated
+code reads each handler's and behaviour's registered lifetime from the service descriptors, and the ones
+registered as singletons are resolved once and held. Transient and scoped registrations keep the per-call
+resolution above. The default lifetime stays transient, as in MediatR.
+
 ## Alternatives considered
 
-- **Cache handlers registered as singletons.** Possible as a later optimisation, decided per handler from
-  its registered lifetime at startup. Not done until the per-call lookup shows up as the dominant cost.
+- **Singleton by default, as Mediator does.** Fastest out of the box, and it turns every handler with a
+  scoped dependency into a captive dependency in codebases that were written for MediatR's transient
+  default. Opt-in instead.
