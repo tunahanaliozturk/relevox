@@ -26,6 +26,9 @@ public static partial class Scenarios
             return "done";
         });
 
+    public static Task<string> SendRequestThatIsOnlyAuditedThroughAnInterface() =>
+        Run.Scenario(async services => await services.GetRequiredService<ISender>().Send(new Cached("plain")));
+
     public static Task<string> SendObjectWithResponse() =>
         Run.Scenario(async services => await services.GetRequiredService<ISender>().Send((object)new Ping("boxed")));
 

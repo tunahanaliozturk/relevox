@@ -8,9 +8,13 @@ namespace Capar.SourceGenerator;
 
 /// <summary>A request with exactly one handler, ready to emit.</summary>
 /// <param name="Request">The request type.</param>
+/// <param name="ResponseType">Plain response type, for typeof, or null for a request that returns nothing.</param>
 /// <param name="ResponseSyntax">Annotated response type, or null for a request that returns nothing.</param>
 /// <param name="HandlerType">The handler class.</param>
-internal sealed record RequestEntry(MessageShape Request, string? ResponseSyntax, string HandlerType);
+internal sealed record RequestEntry(MessageShape Request, string? ResponseType, string? ResponseSyntax, string HandlerType);
+
+/// <summary>A closed service registration, such as a pre-processor under its <c>IRequestPreProcessor&lt;T&gt;</c>.</summary>
+internal sealed record ServiceRegistration(string ServiceType, string ImplementationType);
 
 /// <summary>A stream request with exactly one handler, ready to emit.</summary>
 internal sealed record StreamEntry(MessageShape Request, string ResponseSyntax, string HandlerType);
@@ -33,6 +37,8 @@ internal sealed record EmitPlan(
     EquatableArray<StreamEntry> Streams,
     EquatableArray<NotificationEntry> Notifications,
     EquatableArray<string> HandlerTypes,
+    EquatableArray<ServiceRegistration> Processors,
+    EquatableArray<OpenRegistration> OpenProcessors,
     EquatableArray<string> SuppressedWarnings,
     EquatableArray<DiagnosticEntry> Diagnostics);
 
@@ -62,7 +68,7 @@ internal static class Planner
         {
             if (Single(group, MessageKind.Request) is { } handler)
             {
-                requests.Add(new RequestEntry(handler.Message, handler.ResponseSyntax, handler.HandlerType));
+                requests.Add(new RequestEntry(handler.Message, handler.ResponseType, handler.ResponseSyntax, handler.HandlerType));
             }
         }
 
@@ -77,7 +83,7 @@ internal static class Planner
 
         HashSet<string> handledRequests = new(
             discovery.Handlers
-                .Where(static handler => handler.Kind != HandlerKind.Notification)
+                .Where(static handler => handler.Kind is HandlerKind.Request or HandlerKind.VoidRequest or HandlerKind.Stream)
                 .Select(static handler => handler.Message.Type),
             StringComparer.Ordinal);
 
@@ -145,6 +151,45 @@ internal static class Planner
                 .OrderBy(static type => type, StringComparer.Ordinal),
         ];
 
+        // Processors are registered under the interface they implement, as MediatR's scan does. They are not
+        // dispatched to directly: the built-in pre and post processor behaviours resolve them per request.
+        //
+        // As with notifications, a processor written for a base type or an interface is also registered under
+        // every request type that some processor names exactly and that derives from it. A request no processor
+        // names exactly gets none of the base-type ones. The differential tests established both halves.
+        HandlerModel[] processorHandlers =
+        [
+            .. discovery.Handlers.Where(static handler => handler.Kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor),
+        ];
+
+        List<ServiceRegistration> processors = [];
+        foreach (HandlerModel processor in processorHandlers)
+        {
+            processors.Add(new ServiceRegistration(ProcessorService(processor, processor.Message.Type), processor.HandlerType));
+        }
+
+        foreach (string named in processorHandlers.Select(static processor => processor.Message.Type).Distinct(StringComparer.Ordinal))
+        {
+            if (!messages.TryGetValue(Key(named, MessageKind.Request), out MessageModel? request))
+            {
+                continue;
+            }
+
+            HashSet<string> bases = new(request.AssignableTo.Where(type => type != named), StringComparer.Ordinal);
+            foreach (HandlerModel processor in processorHandlers.Where(processor => bases.Contains(processor.Message.Type)))
+            {
+                bool namesThisKind = processorHandlers.Any(other => other.Kind == processor.Kind && other.Message.Type == named);
+                if (namesThisKind)
+                {
+                    processors.Add(new ServiceRegistration(ProcessorService(processor, named), processor.HandlerType));
+                }
+            }
+        }
+
+        processors = [.. processors.Distinct()
+            .OrderBy(static registration => registration.ServiceType, StringComparer.Ordinal)
+            .ThenBy(static registration => registration.ImplementationType, StringComparer.Ordinal)];
+
         foreach (SkippedModel skipped in discovery.Skipped
             .OrderBy(static skipped => skipped.Rule, StringComparer.Ordinal)
             .ThenBy(static skipped => string.Join("|", skipped.Arguments), StringComparer.Ordinal))
@@ -158,6 +203,11 @@ internal static class Planner
             streams.OrderBy(static stream => stream.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
             notifications.ToEquatableArray(),
             handlerTypes.ToEquatableArray(),
+            processors.ToEquatableArray(),
+            discovery.Open
+                .OrderBy(static registration => registration.ServiceType, StringComparer.Ordinal)
+                .ThenBy(static registration => registration.ImplementationType, StringComparer.Ordinal)
+                .ToEquatableArray(),
             discovery.Experimental,
             diagnostics.ToEquatableArray());
 
@@ -184,6 +234,11 @@ internal static class Planner
     }
 
     private static string Key(string type, MessageKind kind) => type + "|" + kind;
+
+    private static string ProcessorService(HandlerModel processor, string requestType) =>
+        processor.Kind == HandlerKind.PreProcessor
+            ? $"global::Capar.Pipeline.IRequestPreProcessor<{requestType}>"
+            : $"global::Capar.Pipeline.IRequestPostProcessor<{requestType}, {processor.ResponseType}>";
 
     private static IEnumerable<IGrouping<string, HandlerModel>> GroupHandlers(DiscoveryModel discovery, params HandlerKind[] kinds) =>
         discovery.Handlers

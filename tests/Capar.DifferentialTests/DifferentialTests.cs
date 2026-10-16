@@ -69,13 +69,42 @@ public sealed class DifferentialTests
     }
 
     /// <summary>Pins down the pipeline order, so agreement cannot mean "no behaviour ran in either".</summary>
+    /// <remarks>
+    /// Pre-processors run ahead of every behaviour and post-processors after all of them, because MediatR
+    /// registers the processor behaviours before any behaviour from the configuration.
+    /// </remarks>
     [Fact]
     public async Task Behaviours_run_outermost_first_in_registration_order()
     {
         string outcome = await Invoke(OnCapar, "PipelineRunsInRegistrationOrder");
 
         outcome.ShouldBe(
-            "result=\"p pong!\" | trace=[Outer>Ping/String, Inner>, PingAudit>, Late>, PingHandler(p), Late<, Inner<, Outer<] | error=none");
+            "result=\"p pong!\" | trace=[PingPre(p), StampPre(Ping), Outer>Ping/String, Inner>, PingAudit>, Late>, PingHandler(p), Late<, Inner<, Outer<, PingPost(p pong!)] | error=none");
+    }
+
+    /// <summary>
+    /// Pins down MediatR's processor rule: processors found by scanning do not run unless some processor was
+    /// added through the configuration, which makes the processor behaviour exist.
+    /// </summary>
+    [Fact]
+    public async Task Scanned_processors_alone_do_not_run()
+    {
+        string plain = await Invoke(OnCapar, "SendThroughSender");
+
+        plain.ShouldNotContain("PingPre");
+        plain.ShouldNotContain("PingPost");
+    }
+
+    /// <summary>
+    /// Pins down which requests a processor written for an interface reaches: the ones some other processor
+    /// names exactly. Cached has CachedPre, so AuditedPre reaches it.
+    /// </summary>
+    [Fact]
+    public async Task An_interface_processor_reaches_requests_that_have_a_processor_of_their_own()
+    {
+        string cached = await Invoke(OnCapar, "PipelineCanShortCircuit");
+
+        cached.ShouldContain("AuditedPre(Cached), CachedPre");
     }
 
     private static Task<string> Invoke(Type scenarios, string name) =>

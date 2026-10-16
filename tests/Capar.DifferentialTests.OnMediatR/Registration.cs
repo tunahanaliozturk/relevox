@@ -13,6 +13,9 @@ public static partial class Library
 
             if (profile == Profile.Pipeline)
             {
+                configuration.AutoRegisterRequestProcessors = true;
+                configuration.AddOpenRequestPreProcessor(typeof(StampPre<>));
+                configuration.AddRequestPostProcessor<IRequestPostProcessor<Ping, string>, PingPost>();
                 configuration.AddOpenBehavior(typeof(OuterBehavior<,>));
                 configuration.AddOpenBehavior(typeof(InnerBehavior<,>));
                 configuration.AddOpenBehavior(typeof(AuditedBehavior<,>));

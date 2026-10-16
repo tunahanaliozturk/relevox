@@ -16,6 +16,7 @@ namespace Capar.SourceGenerator;
 internal static class Discovery
 {
     private const string ContractsNamespace = "Capar";
+    private const string PipelineNamespace = "Capar.Pipeline";
     private const string ContractsAssembly = "Capar.Contracts";
 
     private static readonly SymbolDisplayFormat PlainFormat = SymbolDisplayFormat.FullyQualifiedFormat;
@@ -27,6 +28,7 @@ internal static class Discovery
         EquatableArray<HandlerModel>.Empty,
         EquatableArray<MessageModel>.Empty,
         EquatableArray<SkippedModel>.Empty,
+        EquatableArray<OpenRegistration>.Empty,
         EquatableArray<string>.Empty);
 
     public static DiscoveryModel Classify(
@@ -45,6 +47,7 @@ internal static class Discovery
         List<HandlerModel> handlers = [];
         List<MessageModel> messages = [];
         List<SkippedModel> skipped = [];
+        List<OpenRegistration> open = [];
         HashSet<string> experimental = [];
 
         LocationModel? location = fromSource ? ToLocationModel(symbol) : null;
@@ -53,8 +56,29 @@ internal static class Discovery
 
         foreach (INamedTypeSymbol contract in symbol.AllInterfaces)
         {
-            if (contract.ContainingNamespace?.ToDisplayString() != ContractsNamespace
-                || contract.ContainingAssembly?.Name != ContractsAssembly)
+            if (contract.ContainingAssembly?.Name != ContractsAssembly)
+            {
+                continue;
+            }
+
+            if (contract.ContainingNamespace?.ToDisplayString() == PipelineNamespace)
+            {
+                switch (contract.MetadataName)
+                {
+                    case "IRequestPreProcessor`1":
+                        AddHandler(HandlerKind.PreProcessor, contract.TypeArguments[0], null, contract);
+                        break;
+                    case "IRequestPostProcessor`2":
+                        AddHandler(HandlerKind.PostProcessor, contract.TypeArguments[0], contract.TypeArguments[1], contract);
+                        break;
+                    default:
+                        break;
+                }
+
+                continue;
+            }
+
+            if (contract.ContainingNamespace?.ToDisplayString() != ContractsNamespace)
             {
                 continue;
             }
@@ -62,16 +86,16 @@ internal static class Discovery
             switch (contract.MetadataName)
             {
                 case "IRequestHandler`2":
-                    AddHandler(HandlerKind.Request, contract.TypeArguments[0], contract.TypeArguments[1]);
+                    AddHandler(HandlerKind.Request, contract.TypeArguments[0], contract.TypeArguments[1], contract);
                     break;
                 case "IRequestHandler`1":
-                    AddHandler(HandlerKind.VoidRequest, contract.TypeArguments[0], null);
+                    AddHandler(HandlerKind.VoidRequest, contract.TypeArguments[0], null, contract);
                     break;
                 case "INotificationHandler`1":
-                    AddHandler(HandlerKind.Notification, contract.TypeArguments[0], null);
+                    AddHandler(HandlerKind.Notification, contract.TypeArguments[0], null, contract);
                     break;
                 case "IStreamRequestHandler`2":
-                    AddHandler(HandlerKind.Stream, contract.TypeArguments[0], contract.TypeArguments[1]);
+                    AddHandler(HandlerKind.Stream, contract.TypeArguments[0], contract.TypeArguments[1], contract);
                     break;
                 case "IRequest`1" or "IRequest":
                     AddMessage(symbol, MessageKind.Request, location, fromSource);
@@ -87,18 +111,35 @@ internal static class Discovery
             }
         }
 
-        return handlers.Count == 0 && messages.Count == 0 && skipped.Count == 0
+        return handlers.Count == 0 && messages.Count == 0 && skipped.Count == 0 && open.Count == 0
             ? Empty
             : new DiscoveryModel(
                 handlers.Distinct().ToEquatableArray(),
                 messages.Distinct().ToEquatableArray(),
                 skipped.Distinct().ToEquatableArray(),
+                open.Distinct().ToEquatableArray(),
                 experimental.OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
 
-        void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response)
+        void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response, INamedTypeSymbol contract)
         {
             if (!concrete || symbol.TypeKind != TypeKind.Class)
             {
+                return;
+            }
+
+            // A generic processor whose type parameters are exactly the contract's, such as
+            // LoggingPreProcessor<T> : IRequestPreProcessor<T>, applies to every request. It is registered open
+            // and the container closes it, as MediatR's scan does. A generic handler has no such reading: it
+            // would have to be closed over requests the generator cannot enumerate.
+            if (symbol.IsGenericType
+                && kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor
+                && accessible
+                && contract.TypeArguments.Length == symbol.TypeParameters.Length
+                && contract.TypeArguments.Select((argument, index) => SymbolEqualityComparer.Default.Equals(argument, symbol.TypeParameters[index])).All(static same => same))
+            {
+                open.Add(new OpenRegistration(
+                    contract.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
+                    symbol.ConstructUnboundGenericType().ToDisplayString(PlainFormat)));
                 return;
             }
 
@@ -138,6 +179,7 @@ internal static class Discovery
                 kind,
                 Plain(symbol),
                 Shape(message),
+                response is null ? null : Plain(response),
                 response is null ? null : AnnotatedName(response),
                 symbol.DeclaredAccessibility == Accessibility.Public,
                 location));
@@ -243,6 +285,7 @@ internal static class Discovery
             list.SelectMany(static part => part.Handlers).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Messages).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Skipped).Distinct().ToEquatableArray(),
+            list.SelectMany(static part => part.Open).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Experimental).Distinct().OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
     }
 

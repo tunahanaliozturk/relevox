@@ -54,7 +54,8 @@ public enum Profile
     Plain,
 
     /// <summary>
-    /// Handlers plus pipeline behaviours: two open behaviours through the library's configuration, a
+    /// Handlers, processors registered automatically, and pipeline behaviours: two open behaviours through the
+    /// library's configuration, a
     /// constrained open behaviour, several closed ones, and one more open behaviour registered straight into
     /// the container afterwards.
     /// </summary>

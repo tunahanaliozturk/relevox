@@ -156,6 +156,49 @@ internal static class Emitter
         int streamCount = plan.Streams.Count(static stream => !stream.Request.IsAbstract);
         code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), static _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
+        code.Line("if (options.AutoRegisterRequestProcessors)");
+        code.Line("{");
+        foreach (ServiceRegistration processor in plan.Processors)
+        {
+            code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({processor.ServiceType}), typeof({processor.ImplementationType}), handlerLifetime));");
+        }
+
+        foreach (OpenRegistration processor in plan.OpenProcessors)
+        {
+            code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({processor.ServiceType}), typeof({processor.ImplementationType}), handlerLifetime));");
+        }
+
+        code.Line("}");
+        code.Line();
+
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor processor in global::System.Linq.Enumerable.Concat(options.RequestPreProcessorsToRegister, options.RequestPostProcessorsToRegister))");
+        code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, processor);");
+        code.Close();
+        code.Line();
+
+        // The processor behaviours sit ahead of every user behaviour, pre before post, as MediatR registers them.
+        // They are registered closed per request rather than as an open generic, so nothing has to be closed at
+        // run time.
+        //
+        // MediatR 12 adds a processor behaviour only when a processor of that kind was added through its
+        // configuration. Processors it found by scanning, or that the application registered with the container
+        // itself, are registered but never run unless one was also added explicitly. That is surprising, and it
+        // is matched on purpose: code moving from MediatR must not find processors running that never ran.
+        RequestEntry[] dispatched = [.. plan.Requests.Where(static request => !request.Request.IsAbstract)];
+        foreach ((string list, string behavior) in new[] { ("RequestPreProcessorsToRegister", "RequestPreProcessorBehavior"), ("RequestPostProcessorsToRegister", "RequestPostProcessorBehavior") })
+        {
+            code.Line($"if (options.{list}.Count > 0)");
+            code.Line("{");
+            foreach (RequestEntry request in dispatched)
+            {
+                string response = request.ResponseType ?? "global::Capar.Unit";
+                code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.IPipelineBehavior<{request.Request.Type}, {response}>), typeof(global::Capar.Pipeline.{behavior}<{request.Request.Type}, {response}>), {DependencyInjection}.ServiceLifetime.Transient));");
+            }
+
+            code.Line("}");
+            code.Line();
+        }
+
         code.Line("// Behaviours are resolved from the container on every send, as in MediatR, so these are simply registered.");
         code.Line("// TryAddEnumerable keeps a behaviour added twice from running twice.");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor behavior in options.BehaviorsToRegister)");
@@ -170,6 +213,7 @@ internal static class Emitter
 
         code.Line("return services;");
         code.Close();
+
 
         code.Line();
         code.Open($"private static bool IsShared({DependencyInjection}.IServiceCollection services, {Type} type)");

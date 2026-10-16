@@ -68,6 +68,14 @@ public sealed class PipelineState<TMediator>
 
         IEnumerable<T> resolved = services.GetServices<T>();
         T[] behaviors = resolved as T[] ?? [.. resolved];
+
+        // A built-in processor behaviour with no processors for this request does nothing, so leaving it out is
+        // invisible and keeps the request on the direct path.
+        if (Array.Exists(behaviors, static behavior => behavior is Pipeline.IOptionalBehavior { IsEmpty: true }))
+        {
+            behaviors = Array.FindAll(behaviors, static behavior => behavior is not Pipeline.IOptionalBehavior { IsEmpty: true });
+        }
+
         states[index] = behaviors.Length == 0 ? None : Some;
         return behaviors.Length == 0 ? null : behaviors;
     }

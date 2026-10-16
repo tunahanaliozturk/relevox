@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <Using Include="Capar" />
+    <Using Include="Capar.Pipeline" />
     <Compile Include="../Capar.DifferentialTests.Scenarios/*.cs" LinkBase="Scenarios" />
   </ItemGroup>
 

@@ -84,22 +84,92 @@ public sealed class CaparOptions
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type openBehaviorType,
         ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
-        ArgumentNullException.ThrowIfNull(openBehaviorType);
-
-        if (!openBehaviorType.IsGenericTypeDefinition)
-        {
-            throw new InvalidOperationException($"{openBehaviorType.Name} must be an open generic type, such as LoggingBehavior<,>.");
-        }
-
-        bool implements = openBehaviorType
-            .GetInterfaces()
-            .Any(contract => contract.IsGenericType && contract.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>));
-        if (!implements)
-        {
-            throw new InvalidOperationException($"{openBehaviorType.Name} must implement {typeof(IPipelineBehavior<,>).FullName}.");
-        }
-
-        BehaviorsToRegister.Add(new ServiceDescriptor(typeof(IPipelineBehavior<,>), openBehaviorType, serviceLifetime));
+        BehaviorsToRegister.Add(new ServiceDescriptor(typeof(IPipelineBehavior<,>), RequireOpen(openBehaviorType, typeof(IPipelineBehavior<,>)), serviceLifetime));
         return this;
+    }
+
+    /// <summary>
+    /// Whether the pre and post processors found at build time are registered. Off by default.
+    /// </summary>
+    /// <remarks>
+    /// Off because it is off in MediatR 12: its assembly scan skips processors unless this is set, and code
+    /// moving from MediatR should not find processors running that never ran before. Processors added with
+    /// <see cref="AddRequestPreProcessor{TServiceType, TImplementationType}"/> and its siblings are registered
+    /// either way.
+    /// </remarks>
+    public bool AutoRegisterRequestProcessors { get; set; }
+
+    /// <summary>Pre-processors to register, in addition to the ones found at build time.</summary>
+    public IList<ServiceDescriptor> RequestPreProcessorsToRegister { get; } = [];
+
+    /// <summary>Post-processors to register, in addition to the ones found at build time.</summary>
+    public IList<ServiceDescriptor> RequestPostProcessorsToRegister { get; } = [];
+
+    /// <summary>Registers a closed pre-processor.</summary>
+    /// <typeparam name="TServiceType">The processor interface, such as <c>IRequestPreProcessor&lt;Ping&gt;</c>.</typeparam>
+    /// <typeparam name="TImplementationType">The processor class.</typeparam>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPreProcessor<TServiceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementationType>(
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        RequestPreProcessorsToRegister.Add(new ServiceDescriptor(typeof(TServiceType), typeof(TImplementationType), serviceLifetime));
+        return this;
+    }
+
+    /// <summary>Registers an open generic pre-processor that applies to every request.</summary>
+    /// <param name="openBehaviorType">An open generic type implementing <c>IRequestPreProcessor&lt;&gt;</c>.</param>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddOpenRequestPreProcessor(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type openBehaviorType,
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        RequestPreProcessorsToRegister.Add(new ServiceDescriptor(typeof(Pipeline.IRequestPreProcessor<>), RequireOpen(openBehaviorType, typeof(Pipeline.IRequestPreProcessor<>)), serviceLifetime));
+        return this;
+    }
+
+    /// <summary>Registers a closed post-processor.</summary>
+    /// <typeparam name="TServiceType">The processor interface, such as <c>IRequestPostProcessor&lt;Ping, Pong&gt;</c>.</typeparam>
+    /// <typeparam name="TImplementationType">The processor class.</typeparam>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPostProcessor<TServiceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementationType>(
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        RequestPostProcessorsToRegister.Add(new ServiceDescriptor(typeof(TServiceType), typeof(TImplementationType), serviceLifetime));
+        return this;
+    }
+
+    /// <summary>Registers an open generic post-processor that applies to every request.</summary>
+    /// <param name="openBehaviorType">An open generic type implementing <c>IRequestPostProcessor&lt;,&gt;</c>.</param>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddOpenRequestPostProcessor(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type openBehaviorType,
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        RequestPostProcessorsToRegister.Add(new ServiceDescriptor(typeof(Pipeline.IRequestPostProcessor<,>), RequireOpen(openBehaviorType, typeof(Pipeline.IRequestPostProcessor<,>)), serviceLifetime));
+        return this;
+    }
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)]
+    private static Type RequireOpen(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type type,
+        Type contract)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        if (!type.IsGenericTypeDefinition)
+        {
+            throw new InvalidOperationException($"{type.Name} must be an open generic type, such as LoggingBehavior<,>.");
+        }
+
+        bool implements = type
+            .GetInterfaces()
+            .Any(candidate => candidate.IsGenericType && candidate.GetGenericTypeDefinition() == contract);
+        return implements
+            ? type
+            : throw new InvalidOperationException($"{type.Name} must implement {contract.FullName}.");
     }
 }
