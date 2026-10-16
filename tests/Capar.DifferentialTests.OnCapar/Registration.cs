@@ -11,6 +11,11 @@ public static partial class Library
         {
             options.Lifetime = lifetime;
 
+            if (profile == Profile.AllExceptions)
+            {
+                options.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
+            }
+
             if (profile == Profile.Pipeline)
             {
                 options.AutoRegisterRequestProcessors = true;

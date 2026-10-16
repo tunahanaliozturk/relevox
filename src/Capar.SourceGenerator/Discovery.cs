@@ -51,6 +51,7 @@ internal static class Discovery
         HashSet<string> experimental = [];
 
         LocationModel? location = fromSource ? ToLocationModel(symbol) : null;
+        DeclarationOrder order = fromSource ? OrderOf(symbol, compilation) : DeclarationOrder.Metadata;
         bool concrete = !symbol.IsAbstract;
         bool accessible = IsAccessible(symbol, compilation);
 
@@ -70,6 +71,12 @@ internal static class Discovery
                         break;
                     case "IRequestPostProcessor`2":
                         AddHandler(HandlerKind.PostProcessor, contract.TypeArguments[0], contract.TypeArguments[1], contract);
+                        break;
+                    case "IRequestExceptionHandler`3":
+                        AddHandler(HandlerKind.ExceptionHandler, contract.TypeArguments[0], contract.TypeArguments[1], contract, contract.TypeArguments[2]);
+                        break;
+                    case "IRequestExceptionAction`2":
+                        AddHandler(HandlerKind.ExceptionAction, contract.TypeArguments[0], null, contract, contract.TypeArguments[1]);
                         break;
                     default:
                         break;
@@ -120,7 +127,7 @@ internal static class Discovery
                 open.Distinct().ToEquatableArray(),
                 experimental.OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
 
-        void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response, INamedTypeSymbol contract)
+        void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response, INamedTypeSymbol contract, ITypeSymbol? exception = null)
         {
             if (!concrete || symbol.TypeKind != TypeKind.Class)
             {
@@ -132,7 +139,7 @@ internal static class Discovery
             // and the container closes it, as MediatR's scan does. A generic handler has no such reading: it
             // would have to be closed over requests the generator cannot enumerate.
             if (symbol.IsGenericType
-                && kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor
+                && kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor or HandlerKind.ExceptionHandler or HandlerKind.ExceptionAction
                 && accessible
                 && contract.TypeArguments.Length == symbol.TypeParameters.Length
                 && contract.TypeArguments.Select((argument, index) => SymbolEqualityComparer.Default.Equals(argument, symbol.TypeParameters[index])).All(static same => same))
@@ -153,7 +160,7 @@ internal static class Discovery
                 return;
             }
 
-            ITypeSymbol[] named = response is null ? [symbol, message] : [symbol, message, response];
+            ITypeSymbol[] named = [symbol, message, .. response is null ? [] : new[] { response }, .. exception is null ? [] : new[] { exception }];
 
             if (!accessible || named.Any(type => !IsAccessible(type, compilation)))
             {
@@ -181,7 +188,9 @@ internal static class Discovery
                 Shape(message),
                 response is null ? null : Plain(response),
                 response is null ? null : AnnotatedName(response),
+                exception is null ? EquatableArray<string>.Empty : Chain(exception),
                 symbol.DeclaredAccessibility == Accessibility.Public,
+                order,
                 location));
 
             // A notification handler for a closed generic type, such as INotificationHandler<Created<Order>>,
@@ -434,6 +443,39 @@ internal static class Discovery
 
         names.AddRange(symbol.AllInterfaces.Select(static contract => Plain(contract)));
         return names.Distinct().ToEquatableArray();
+    }
+
+    private static DeclarationOrder OrderOf(ISymbol symbol, Compilation compilation)
+    {
+        Location? location = symbol.Locations.FirstOrDefault(static candidate => candidate.IsInSource);
+        if (location?.SourceTree is not { } tree)
+        {
+            return DeclarationOrder.Metadata;
+        }
+
+        int index = 0;
+        foreach (SyntaxTree candidate in compilation.SyntaxTrees)
+        {
+            if (candidate == tree)
+            {
+                return new DeclarationOrder(index, location.SourceSpan.Start);
+            }
+
+            index++;
+        }
+
+        return new DeclarationOrder(int.MaxValue - 1, location.SourceSpan.Start);
+    }
+
+    private static EquatableArray<string> Chain(ITypeSymbol type)
+    {
+        List<string> names = [];
+        for (ITypeSymbol? current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            names.Add(Plain(current));
+        }
+
+        return names.ToEquatableArray();
     }
 
     private static SkippedModel Skip(string rule, LocationModel? location, params string[] arguments) =>

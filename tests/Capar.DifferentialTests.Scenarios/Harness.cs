@@ -60,22 +60,9 @@ public enum Profile
     /// the container afterwards.
     /// </summary>
     Pipeline,
-}
 
-/// <summary>How a scenario's trace is compared.</summary>
-public enum TraceOrder
-{
-    /// <summary>Order matters and must match exactly.</summary>
-    Exact,
-
-    /// <summary>
-    /// Only the set matters. Used for notifications: MediatR runs handlers in container registration order,
-    /// which follows its assembly scan and is documented as unspecified.
-    /// </summary>
-    Unordered,
-
-    /// <summary>The trace is not compared, because it depends on handler order the libraries do not promise.</summary>
-    Ignored,
+    /// <summary>Handlers, with exception actions applied to every exception rather than unhandled ones.</summary>
+    AllExceptions,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>
@@ -83,7 +70,6 @@ public static class Run
 {
     public static async Task<string> Scenario(
         Func<IServiceProvider, Task<object?>> body,
-        TraceOrder order = TraceOrder.Exact,
         ServiceLifetime lifetime = ServiceLifetime.Transient,
         Profile profile = Profile.Plain)
     {
@@ -103,12 +89,9 @@ public static class Run
             error = exception.GetType().FullName ?? exception.GetType().Name;
         }
 
-        IEnumerable<string> events = order switch
-        {
-            TraceOrder.Unordered => trace.Events.Order(StringComparer.Ordinal),
-            TraceOrder.Ignored => ["(not compared)"],
-            _ => trace.Events,
-        };
+        // Every trace is compared in order. Notification handlers, processors and exception handlers all run
+        // in declaration order in both libraries, so there is nothing order-insensitive left.
+        IReadOnlyList<string> events = trace.Events;
 
         return $"result={result} | trace=[{string.Join(", ", events)}] | error={error}";
     }

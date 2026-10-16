@@ -11,6 +11,11 @@ public static partial class Library
             configuration.RegisterServicesFromAssembly(typeof(Library).Assembly);
             configuration.Lifetime = lifetime;
 
+            if (profile == Profile.AllExceptions)
+            {
+                configuration.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
+            }
+
             if (profile == Profile.Pipeline)
             {
                 configuration.AutoRegisterRequestProcessors = true;

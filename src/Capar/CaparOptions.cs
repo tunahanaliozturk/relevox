@@ -99,6 +99,9 @@ public sealed class CaparOptions
     /// </remarks>
     public bool AutoRegisterRequestProcessors { get; set; }
 
+    /// <summary>Whether exception actions see every exception or only unhandled ones.</summary>
+    public RequestExceptionActionProcessorStrategy RequestExceptionActionProcessorStrategy { get; set; }
+
     /// <summary>Pre-processors to register, in addition to the ones found at build time.</summary>
     public IList<ServiceDescriptor> RequestPreProcessorsToRegister { get; } = [];
 

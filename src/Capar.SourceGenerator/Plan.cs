@@ -16,6 +16,19 @@ internal sealed record RequestEntry(MessageShape Request, string? ResponseType, 
 /// <summary>A closed service registration, such as a pre-processor under its <c>IRequestPreProcessor&lt;T&gt;</c>.</summary>
 internal sealed record ServiceRegistration(string ServiceType, string ImplementationType);
 
+/// <summary>
+/// The exception types one request has handlers or actions for, which its generated catalog walks.
+/// </summary>
+/// <param name="Request">The request type.</param>
+/// <param name="ResponseType">Plain response type; <c>global::Capar.Unit</c> for a request without one.</param>
+/// <param name="HandledExceptions">Exception types with handlers, plain names.</param>
+/// <param name="ActionExceptions">Exception types with actions, plain names.</param>
+internal sealed record ExceptionCatalogEntry(
+    MessageShape Request,
+    string ResponseType,
+    EquatableArray<string> HandledExceptions,
+    EquatableArray<string> ActionExceptions);
+
 /// <summary>A stream request with exactly one handler, ready to emit.</summary>
 internal sealed record StreamEntry(MessageShape Request, string ResponseSyntax, string HandlerType);
 
@@ -39,6 +52,8 @@ internal sealed record EmitPlan(
     EquatableArray<string> HandlerTypes,
     EquatableArray<ServiceRegistration> Processors,
     EquatableArray<OpenRegistration> OpenProcessors,
+    EquatableArray<ServiceRegistration> ExceptionRegistrations,
+    EquatableArray<ExceptionCatalogEntry> ExceptionCatalogs,
     EquatableArray<string> SuppressedWarnings,
     EquatableArray<DiagnosticEntry> Diagnostics);
 
@@ -102,7 +117,8 @@ internal static class Planner
         [
             .. discovery.Handlers
                 .Where(static handler => handler.Kind == HandlerKind.Notification)
-                .OrderBy(static handler => handler.HandlerType, StringComparer.Ordinal)
+                .OrderBy(static handler => handler.Order)
+                .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal)
                 .ThenBy(static handler => handler.Message.Type, StringComparer.Ordinal),
         ];
 
@@ -159,7 +175,10 @@ internal static class Planner
         // names exactly gets none of the base-type ones. The differential tests established both halves.
         HandlerModel[] processorHandlers =
         [
-            .. discovery.Handlers.Where(static handler => handler.Kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor),
+            .. discovery.Handlers
+                .Where(static handler => handler.Kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor)
+                .OrderBy(static handler => handler.Order)
+                .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal),
         ];
 
         List<ServiceRegistration> processors = [];
@@ -186,9 +205,17 @@ internal static class Planner
             }
         }
 
+        // Registration order within one service is the order processors run in, so it follows declaration order;
+        // the order across services does not matter.
+        Dictionary<string, int> declared = processorHandlers
+            .Select(static (handler, index) => (handler.HandlerType, index))
+            .GroupBy(static pair => pair.HandlerType, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Min(static pair => pair.index), StringComparer.Ordinal);
         processors = [.. processors.Distinct()
             .OrderBy(static registration => registration.ServiceType, StringComparer.Ordinal)
-            .ThenBy(static registration => registration.ImplementationType, StringComparer.Ordinal)];
+            .ThenBy(registration => declared[registration.ImplementationType])];
+
+        (ServiceRegistration[] exceptionRegistrations, ExceptionCatalogEntry[] catalogs) = PlanExceptions(discovery, messages, requests);
 
         foreach (SkippedModel skipped in discovery.Skipped
             .OrderBy(static skipped => skipped.Rule, StringComparer.Ordinal)
@@ -208,6 +235,8 @@ internal static class Planner
                 .OrderBy(static registration => registration.ServiceType, StringComparer.Ordinal)
                 .ThenBy(static registration => registration.ImplementationType, StringComparer.Ordinal)
                 .ToEquatableArray(),
+            exceptionRegistrations.ToEquatableArray(),
+            catalogs.ToEquatableArray(),
             discovery.Experimental,
             diagnostics.ToEquatableArray());
 
@@ -234,6 +263,128 @@ internal static class Planner
     }
 
     private static string Key(string type, MessageKind kind) => type + "|" + kind;
+
+    /// <summary>
+    /// Registrations and per-request catalogs for exception handlers and actions.
+    /// </summary>
+    /// <remarks>
+    /// The rule matches MediatR's scan, established against it: each handler is registered under the closed
+    /// interface it implements, and also under every closing that some other handler names exactly, when the
+    /// request and exception there derive from its own. A handler for <c>Exception</c> is therefore reached
+    /// through <c>InvalidOperationException</c> as soon as any handler names that, and runs at that step.
+    /// </remarks>
+    private static (ServiceRegistration[] Registrations, ExceptionCatalogEntry[] Catalogs) PlanExceptions(
+        DiscoveryModel discovery,
+        Dictionary<string, MessageModel> messages,
+        List<RequestEntry> requests)
+    {
+        HandlerModel[] handlers =
+        [
+            .. discovery.Handlers
+                .Where(static handler => handler.Kind == HandlerKind.ExceptionHandler)
+                .OrderBy(static handler => handler.Order)
+                .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal),
+        ];
+        HandlerModel[] actions =
+        [
+            .. discovery.Handlers
+                .Where(static handler => handler.Kind == HandlerKind.ExceptionAction)
+                .OrderBy(static handler => handler.Order)
+                .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal),
+        ];
+        Dictionary<string, int> declared = handlers.Concat(actions)
+            .Select(static (handler, index) => (handler.HandlerType, index))
+            .GroupBy(static pair => pair.HandlerType, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Min(static pair => pair.index), StringComparer.Ordinal);
+
+        // (request, response, exception) for handlers; response is null for actions. Extra marks a registration
+        // reached through a base type rather than named by the handler itself.
+        List<(string Request, string? Response, string Exception, string Implementation, bool Extra)> closings = [];
+        foreach (HandlerModel[] group in new[] { handlers, actions })
+        {
+            foreach (HandlerModel handler in group)
+            {
+                closings.Add((handler.Message.Type, handler.ResponseType, handler.ExceptionChain[0], handler.HandlerType, false));
+            }
+
+            var named = group
+                .Select(static handler => (Request: handler.Message.Type, Response: handler.ResponseType, Exception: handler.ExceptionChain[0], Chain: handler.ExceptionChain))
+                .Distinct()
+                .ToArray();
+
+            foreach (var closing in named)
+            {
+                if (!messages.TryGetValue(Key(closing.Request, MessageKind.Request), out MessageModel? request))
+                {
+                    continue;
+                }
+
+                foreach (HandlerModel candidate in group)
+                {
+                    bool sameShape = candidate.Message.Type == closing.Request && candidate.ExceptionChain[0] == closing.Exception;
+                    if (!sameShape
+                        && candidate.ResponseType == closing.Response
+                        && request.AssignableTo.Contains(candidate.Message.Type)
+                        && closing.Chain.Contains(candidate.ExceptionChain[0]))
+                    {
+                        closings.Add((closing.Request, closing.Response, closing.Exception, candidate.HandlerType, true));
+                    }
+                }
+            }
+        }
+
+        // Within one closing the container returns registrations in order, and that is the order handlers run
+        // in. MediatR's scan registers in declaration order, so that is the order here too, whether a handler
+        // names the closing itself or reaches it through a base type.
+        ServiceRegistration[] registrations =
+        [
+            .. closings
+                .OrderBy(closing => declared[closing.Implementation])
+                .Select(static closing => new ServiceRegistration(
+                    closing.Response is null
+                        ? $"global::Capar.Pipeline.IRequestExceptionAction<{closing.Request}, {closing.Exception}>"
+                        : $"global::Capar.Pipeline.IRequestExceptionHandler<{closing.Request}, {closing.Response}, {closing.Exception}>",
+                    closing.Implementation))
+                .Distinct(),
+        ];
+
+        // Open generic handlers and actions are closed by the container, but only over exception types the
+        // catalog asks about. Adding Exception for every request when one exists means they at least run.
+        bool openHandlers = discovery.Open.Any(static open => open.ServiceType.EndsWith("IRequestExceptionHandler<,,>", StringComparison.Ordinal));
+        bool openActions = discovery.Open.Any(static open => open.ServiceType.EndsWith("IRequestExceptionAction<,>", StringComparison.Ordinal));
+        const string AnyException = "global::System.Exception";
+
+        List<ExceptionCatalogEntry> catalogs = [];
+        foreach (RequestEntry request in requests.Where(static request => !request.Request.IsAbstract).OrderBy(static request => request.Request.Type, StringComparer.Ordinal))
+        {
+            string response = request.ResponseType ?? "global::Capar.Unit";
+            string[] handled =
+            [
+                .. closings
+                    .Where(closing => closing.Request == request.Request.Type && closing.Response == response)
+                    .Select(static closing => closing.Exception)
+                    .Concat(openHandlers ? [AnyException] : [])
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(static type => type, StringComparer.Ordinal),
+            ];
+            string[] acted =
+            [
+                .. closings
+                    .Where(closing => closing.Request == request.Request.Type && closing.Response is null)
+                    .Select(static closing => closing.Exception)
+                    .Concat(openActions ? [AnyException] : [])
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(static type => type, StringComparer.Ordinal),
+            ];
+
+            if (handled.Length > 0 || acted.Length > 0)
+            {
+                catalogs.Add(new ExceptionCatalogEntry(request.Request, response, handled.ToEquatableArray(), acted.ToEquatableArray()));
+            }
+        }
+
+        return (registrations, [.. catalogs]);
+    }
 
     private static string ProcessorService(HandlerModel processor, string requestType) =>
         processor.Kind == HandlerKind.PreProcessor
