@@ -68,6 +68,28 @@ jobs:
       - name: Audit
         run: dotnet run --project tools/Capar.LicenseAudit --configuration Release -- .
 
+  nativeaot:
+    name: NativeAOT sample
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Native toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      # Publishing with NativeAOT runs the trim and AOT analysis over Capar's runtime and the code the generator
+      # wrote for the sample. Warnings are errors, so any reflection left on a dispatch path fails here.
+      - name: Publish
+        run: dotnet publish samples/Capar.Samples.Aot --configuration Release --runtime linux-x64 --output aot
+
+      # The binary checks every kind of dispatch and exits non-zero on a wrong answer.
+      - name: Run
+        run: ./aot/Capar.Samples.Aot
+
   benchmarks:
     name: benchmark sanity
     runs-on: ubuntu-latest
