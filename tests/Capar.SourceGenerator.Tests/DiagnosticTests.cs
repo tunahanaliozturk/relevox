@@ -27,6 +27,30 @@ public sealed class DiagnosticTests
     }
 
     [Fact]
+    public void Diagnostics_point_into_source_so_a_pragma_suppresses_them()
+    {
+        // The reason the rules moved from the generator to an analyzer: a location the generator builds from a
+        // path is outside the compilation, and a pragma around the declaration never reached it.
+        GeneratorRun run = GeneratorHarness.Run(Usings + Environment.NewLine + """
+            #pragma warning disable CPR0001 // Handled in another service, sent over the wire.
+            public sealed record Lonely : IRequest<int>;
+            #pragma warning restore CPR0001
+            """);
+
+        run.Diagnostics.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_diagnostic_is_reported_in_the_syntax_tree_it_is_about()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + "public sealed record Lonely : IRequest<int>;");
+
+        Diagnostic diagnostic = run.Diagnostics.ShouldHaveSingleItem();
+        diagnostic.Location.IsInSource.ShouldBeTrue();
+        diagnostic.Location.SourceTree!.GetText().ToString(diagnostic.Location.SourceSpan).ShouldBe("Lonely");
+    }
+
+    [Fact]
     public void Two_handlers_for_one_request_is_an_error_and_neither_is_dispatched()
     {
         GeneratorRun run = GeneratorHarness.Run(Usings + """

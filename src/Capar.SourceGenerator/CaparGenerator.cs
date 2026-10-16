@@ -56,29 +56,13 @@ public sealed class CaparGenerator : IIncrementalGenerator
                 Discovery.Merge([pair.Left, pair.Right.Discovery])))
             .WithTrackingName(TrackingNames.Plan);
 
+        // Diagnostics are reported by CaparAnalyzer, which has the syntax trees to put them in source.
         context.RegisterSourceOutput(plan, static (output, plan) =>
         {
-            foreach (DiagnosticEntry entry in plan.Diagnostics)
-            {
-                output.ReportDiagnostic(Diagnostic.Create(
-                    Descriptor(entry.Rule),
-                    SourceGenerator.Diagnostics.ToLocation(entry.Location),
-                    [.. entry.Arguments]));
-            }
-
             output.AddSource("CaparMediator.g.cs", SourceText.From(Emitter.Mediator(plan), Encoding.UTF8));
             output.AddSource("CaparServiceCollectionExtensions.g.cs", SourceText.From(Emitter.Registration(plan), Encoding.UTF8));
         });
     }
-
-    private static DiagnosticDescriptor Descriptor(string rule) => rule switch
-    {
-        "CPR0001" => SourceGenerator.Diagnostics.NoHandler,
-        "CPR0002" => SourceGenerator.Diagnostics.AmbiguousHandler,
-        "CPR0003" => SourceGenerator.Diagnostics.Inaccessible,
-        "CPR0005" => SourceGenerator.Diagnostics.OwnMediator,
-        _ => SourceGenerator.Diagnostics.GenericHandler,
-    };
 }
 
 /// <summary>Names of the pipeline steps, so tests can ask whether each one was served from cache.</summary>
