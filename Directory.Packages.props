@@ -10,6 +10,16 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
   </ItemGroup>
 
+  <ItemGroup Label="Roslyn">
+    <!--
+      5.0.0 rather than the newest on purpose. A generator runs inside the consumer's compiler, so this is the
+      floor of what can load it: 5.0.0 shipped with the first .NET 10 SDK, so every .NET 10 SDK can run it.
+      Referencing 5.9 would refuse to load on the earlier 10.0 SDK bands. See ADR 0003.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Testing and measurement">
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />

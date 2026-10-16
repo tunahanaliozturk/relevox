@@ -1,4 +1,15 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Capar.Contracts/Capar.Contracts.csproj" />
+    <Project Path="src/Capar.SourceGenerator/Capar.SourceGenerator.csproj" />
+    <Project Path="src/Capar/Capar.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Capar.SourceGenerator.Tests/Capar.SourceGenerator.Tests.csproj" />
+    <Project Path="tests/Capar.DifferentialTests.OnCapar/Capar.DifferentialTests.OnCapar.csproj" />
+    <Project Path="tests/Capar.DifferentialTests.OnMediatR/Capar.DifferentialTests.OnMediatR.csproj" />
+    <Project Path="tests/Capar.DifferentialTests/Capar.DifferentialTests.csproj" />
+  </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Capar.Benchmarks/Capar.Benchmarks.csproj" />
   </Folder>
