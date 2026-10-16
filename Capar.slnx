@@ -15,6 +15,7 @@
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Capar.Benchmarks/Capar.Benchmarks.csproj" />
+    <Project Path="benchmarks/Capar.Benchmarks.Scale/Capar.Benchmarks.Scale.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Capar.LicenseAudit/Capar.LicenseAudit.csproj" />
