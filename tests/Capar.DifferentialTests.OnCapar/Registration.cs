@@ -29,6 +29,9 @@ public static partial class Library
                 options.AddBehavior<IPipelineBehavior<Flaky, int>, RetryBehavior>();
                 options.AddBehavior<IPipelineBehavior<Retoken, bool>, RetokenBehavior>();
                 options.AddBehavior<IPipelineBehavior<Ring, Unit>, RingAudit>();
+                options.AddOpenStreamBehavior(typeof(StreamOuter<,>));
+                options.AddStreamBehavior<IStreamPipelineBehavior<Countdown, int>, CountdownTimesTen>();
+                options.AddStreamBehavior<IStreamPipelineBehavior<Ticker, int>, TickerReplay>();
             }
         });
 

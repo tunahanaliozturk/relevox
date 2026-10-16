@@ -38,6 +38,15 @@ public static partial class Scenarios
             lifetime: ServiceLifetime.Scoped,
             profile: Profile.Pipeline);
 
+    public static Task<string> StreamPipelineRunsInRegistrationOrder() =>
+        Pipeline(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream(new Countdown(2))));
+
+    public static Task<string> StreamPipelineCanShortCircuit() =>
+        Pipeline(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream(new Ticker(3))));
+
+    public static Task<string> StreamPipelineThroughCreateStreamObject() =>
+        Pipeline(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream((object)new Countdown(1))));
+
     private static Task<string> Pipeline(Func<IServiceProvider, Task<object?>> body) =>
         Run.Scenario(body, profile: Profile.Pipeline);
 }

@@ -242,7 +242,7 @@ internal static class Emitter
 
         code.Line("// Behaviours are resolved from the container on every send, as in MediatR, so these are simply registered.");
         code.Line("// TryAddEnumerable keeps a behaviour added twice from running twice.");
-        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor behavior in options.BehaviorsToRegister)");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor behavior in global::System.Linq.Enumerable.Concat(options.BehaviorsToRegister, options.StreamBehaviorsToRegister))");
         code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, behavior);");
         code.Close();
         code.Line();
@@ -445,6 +445,7 @@ internal static class Emitter
 
     private static void EmitStreams(CodeWriter code, EmitPlan plan, Dictionary<string, int> handlerIndex)
     {
+        int position = -1;
         for (int index = 0; index < plan.Streams.Length; index++)
         {
             StreamEntry stream = plan.Streams[index];
@@ -452,6 +453,8 @@ internal static class Emitter
             {
                 continue;
             }
+
+            position++;
 
             int handler = handlerIndex[stream.HandlerType];
             code.Line();
@@ -471,7 +474,11 @@ internal static class Emitter
             // does not declare [EnumeratorCancellation] itself.
             code.Line();
             code.Open($"private async {AsyncEnumerable}<{stream.ResponseSyntax}> Stream{index}({stream.Request.Syntax} request, [global::System.Runtime.CompilerServices.EnumeratorCancellation] {Token} cancellationToken)");
-            code.Line($"{AsyncEnumerable}<{stream.ResponseSyntax}> items = ((global::Capar.IStreamRequestHandler<{stream.Request.Syntax}, {stream.ResponseSyntax}>)Handler{handler}()).Handle(request, cancellationToken);");
+            string contract = $"global::Capar.IStreamRequestHandler<{stream.Request.Syntax}, {stream.ResponseSyntax}>";
+            code.Line($"global::Capar.IStreamPipelineBehavior<{stream.Request.Syntax}, {stream.ResponseSyntax}>[]? behaviors = _pipelines.StreamBehaviors<{stream.Request.Syntax}, {stream.ResponseSyntax}>({position}, _services);");
+            code.Line($"{AsyncEnumerable}<{stream.ResponseSyntax}> items = behaviors is null");
+            code.Line($"    ? (({contract})Handler{handler}()).Handle(request, cancellationToken)");
+            code.Line($"    : global::Capar.Internal.StreamPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);");
             code.Open($"await foreach ({stream.ResponseSyntax} item in global::System.Threading.Tasks.TaskAsyncEnumerableExtensions.WithCancellation(items, cancellationToken).ConfigureAwait(false))");
             code.Line("yield return item;");
             code.Close();
