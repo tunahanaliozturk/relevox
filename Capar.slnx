@@ -10,6 +10,9 @@
     <Project Path="tests/Capar.DifferentialTests.OnMediatR/Capar.DifferentialTests.OnMediatR.csproj" />
     <Project Path="tests/Capar.DifferentialTests/Capar.DifferentialTests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Capar.Samples.Aot/Capar.Samples.Aot.csproj" />
+  </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Capar.Benchmarks/Capar.Benchmarks.csproj" />
   </Folder>
