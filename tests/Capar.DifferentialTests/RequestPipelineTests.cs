@@ -64,9 +64,13 @@ public sealed class RequestPipelineTests
         }
     }
 
+    /// <summary>
+    /// Forwards the token it was given. Calling next() with no token instead would hand the handler the token
+    /// Send was given, not the replacement, which is how MediatR behaves too.
+    /// </summary>
     private sealed class PassThrough : IPipelineBehavior<string, bool>
     {
-        public Task<bool> Handle(string request, RequestHandlerDelegate<bool> next, CancellationToken cancellationToken) => next(CancellationToken.None);
+        public Task<bool> Handle(string request, RequestHandlerDelegate<bool> next, CancellationToken cancellationToken) => next(cancellationToken);
     }
 
     private sealed class Retoken(CancellationToken token) : IPipelineBehavior<string, bool>
