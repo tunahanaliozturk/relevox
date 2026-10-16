@@ -1,0 +1,34 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Runtime">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing and measurement">
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Baselines">
+    <!--
+      MediatR 12.5.0 is the last Apache-2.0 release; 13 and later are RPL-1.5 or commercial and would fail
+      the licence gate. It is the library people are migrating away from, so it is the first baseline and,
+      later, the test oracle for behaviour.
+    -->
+    <PackageVersion Include="MediatR" Version="12.5.0" />
+    <!--
+      Mediator (martinothamar/Mediator, MIT) is the other source-generated option. Latest stable rather than
+      the 3.1 release candidate, so the comparison is against what people actually ship.
+    -->
+    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
+    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.sln text eol=crlf
+*.slnx text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.cs text eol=lf diff=csharp
+*.md text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+Dockerfile text eol=lf

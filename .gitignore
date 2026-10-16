@@ -1,0 +1,39 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+artifacts/
+BenchmarkDotNet.Artifacts/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test / tooling
+TestResults/
+coverage/
+*.coverage
+*.trx
+.aspire/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local secrets & env
+*.env
+appsettings.Local.json
+
+# BenchmarkDotNet writes here; committed results live under docs/benchmark-results.
+BenchmarkDotNet.Artifacts/
+
+# Local agent configuration and generated knowledge graphs. Machine-local, never shared.
+.claude/
+graphify-out/
+.remember/
