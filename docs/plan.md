@@ -76,6 +76,38 @@ dispatch.** If Çapar is not faster than Mediator, we say so in the README and t
 still stands on its own. If a benchmark shows our `Task` decision costs more than it is worth, that is
 a finding and ADR 0002 gets revisited.
 
+### 2.4 Prior work: fastcast
+
+`fastcast` (in this portfolio, MIT, same owner) is a compile-time mediator built as an experiment and
+measured against MediatR 12.5.0 on an Intel Core Ultra 7 255H, .NET 10.0.11:
+
+| | 1 handler | 500 handlers |
+|---|---|---|
+| MediatR 12.5.0 | 52.0 ns, 272 B | 57.3 ns, 272 B |
+| fastcast, typed call site | 31.3 ns, 72 B | 32.4 ns, 72 B |
+| fastcast, through `ISender` | 54.0 ns, 72 B | 122.1 ns, 72 B |
+
+What Çapar takes from it:
+
+- **MediatR is already cheap.** 52 ns per call, not the 150 to 250 ns people tend to assume. A "10x
+  faster" headline is not available; the honest target is the typed path at roughly half of MediatR's
+  time and a fraction of its allocation, flat with handler count.
+- **A type switch on the interface path does not scale.** One routing method that grows with every
+  request type was twice as slow as MediatR at 500 handlers. Çapar uses one small generated dispatcher
+  per request type, held in a `FrozenDictionary<Type, ...>` built once, so the interface path stays
+  constant-size (section 4.2).
+- **Resolve handlers by concrete type**, never as `IRequestHandler<,>`, so the container never does
+  open-generic resolution on the send path.
+- **A missing handler is a warning, not an error**: a request can legitimately exist before its
+  handler does. Two handlers for one request is an error.
+- **Incrementality is asserted, not assumed**: a model holding an `ISymbol` or `Compilation` silently
+  defeats the generator cache. fastcast's step-tracking tests come across as they are.
+- The generator, its test harness and the licence audit tool are the starting code. fastcast is the
+  owner's own MIT code, so this is reuse, not the clean-room problem in 2.2.
+
+The 72 B fastcast allocates comes from its async plumbing. Çapar's no-behaviour path returns the
+handler's own `Task` without awaiting it, so the library itself should allocate nothing there.
+
 ## 3. Scope of v1.0.0
 
 ### In
@@ -129,16 +161,19 @@ The generator emits, per compilation that calls `AddCapar`:
 
 1. A sealed `Mediator` implementation with one strongly typed `Send` overload per discovered request
    type. A call site that knows the static type binds to that overload directly: no lookup at all.
-2. A `Send<TResponse>(IRequest<TResponse>)` fallback that switches on the runtime type with a generated
-   `switch` over sealed type checks, for callers holding the interface.
-3. `Send(object)` with the same switch, returning `Task<object?>`.
+2. A `Send<TResponse>(IRequest<TResponse>)` fallback for callers holding the interface. It looks up
+   the request's runtime type in a `FrozenDictionary<Type, RequestDispatcher>` built once at startup
+   and calls that request's small generated dispatcher. Constant size however many requests exist,
+   which is the fix fastcast's measurements pointed to (2.4).
+3. `Send(object)` through the same dictionary, returning `Task<object?>`.
 4. Per request, a pipeline method. With no behaviours registered for that request it calls the handler
    directly: no delegate, no closure, no array. With behaviours, it builds the chain once per call from
    the behaviours resolved out of the current scope, so scoped behaviours keep their meaning.
 5. A registration method that adds every handler, processor and behaviour to the `IServiceCollection`.
    No assembly scanning at startup.
 
-Handlers are resolved from `IServiceProvider` on each call, as in MediatR, so lifetimes behave the same.
+Handlers are registered and resolved by their concrete type, from `IServiceProvider` on each call, as
+in MediatR, so lifetimes behave the same.
 Caching a handler instance would be faster and would also be a bug for every scoped handler.
 
 ### 4.3 Publish
@@ -159,7 +194,7 @@ diagnostic, not a silent skip.
 
 | ID | Severity | When |
 |---|---|---|
-| CPR0001 | Error | a request type sent somewhere has no handler |
+| CPR0001 | Warning | a request type sent somewhere has no handler |
 | CPR0002 | Error | two handlers for the same request type |
 | CPR0003 | Error | handler not accessible from the generated code |
 | CPR0004 | Warning | open generic handler that the generator cannot close |
@@ -187,9 +222,11 @@ the same scenarios. These are the numbers we have to beat.
 
 Hypotheses to confirm or disprove (not claims):
 
-- `Send` with no behaviours allocates nothing beyond what the handler itself returns.
-- `Send` is at least 5x faster than MediatR 12.5.0.
-- `Send` is within 10% of Mediator 3.x despite returning `Task`.
+- Typed `Send` with no behaviours allocates nothing beyond what the handler itself returns.
+- Typed `Send` takes at most half of MediatR 12.5.0's time (fastcast reached 0.60 with async plumbing
+  Çapar does not have).
+- Interface `Send` is no slower than MediatR at 1 and at 500 request types.
+- Typed `Send` is within 10% of Mediator 3.x despite returning `Task`.
 - Cold start is faster than MediatR's because nothing is scanned.
 
 Results go under `docs/benchmark-results/`. A hypothesis the numbers reject is reported as rejected.
