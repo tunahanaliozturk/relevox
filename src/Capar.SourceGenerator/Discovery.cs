@@ -51,7 +51,6 @@ internal static class Discovery
         HashSet<string> experimental = [];
 
         LocationModel? location = fromSource ? ToLocationModel(symbol) : null;
-        DeclarationOrder order = fromSource ? OrderOf(symbol, compilation) : DeclarationOrder.Metadata;
         bool concrete = !symbol.IsAbstract;
         bool accessible = IsAccessible(symbol, compilation);
 
@@ -189,8 +188,10 @@ internal static class Discovery
                 response is null ? null : Plain(response),
                 response is null ? null : AnnotatedName(response),
                 exception is null ? EquatableArray<string>.Empty : Chain(exception),
+                kind == HandlerKind.PostProcessor && response is not null ? AssignableTo(response) : EquatableArray<string>.Empty,
                 symbol.DeclaredAccessibility == Accessibility.Public,
-                order,
+                // Worked out here rather than for every type with a base list: it walks the syntax trees.
+                OrderOf(symbol, compilation, fromSource),
                 location));
 
             // A notification handler for a closed generic type, such as INotificationHandler<Created<Order>>,
@@ -428,7 +429,7 @@ internal static class Discovery
         }
     }
 
-    private static EquatableArray<string> AssignableTo(INamedTypeSymbol symbol)
+    private static EquatableArray<string> AssignableTo(ITypeSymbol symbol)
     {
         if (symbol.IsValueType)
         {
@@ -436,7 +437,7 @@ internal static class Discovery
         }
 
         List<string> names = [];
-        for (INamedTypeSymbol? current = symbol; current is not null; current = current.BaseType)
+        for (ITypeSymbol? current = symbol; current is not null; current = current.BaseType)
         {
             names.Add(Plain(current));
         }
@@ -445,26 +446,53 @@ internal static class Discovery
         return names.Distinct().ToEquatableArray();
     }
 
-    private static DeclarationOrder OrderOf(ISymbol symbol, Compilation compilation)
+    private static DeclarationOrder OrderOf(INamedTypeSymbol symbol, Compilation compilation, bool fromSource)
     {
-        Location? location = symbol.Locations.FirstOrDefault(static candidate => candidate.IsInSource);
-        if (location?.SourceTree is not { } tree)
+        if (!fromSource)
         {
-            return DeclarationOrder.Metadata;
-        }
-
-        int index = 0;
-        foreach (SyntaxTree candidate in compilation.SyntaxTrees)
-        {
-            if (candidate == tree)
+            int assembly = 1;
+            foreach (IAssemblySymbol referenced in compilation.SourceModule.ReferencedAssemblySymbols)
             {
-                return new DeclarationOrder(index, location.SourceSpan.Start);
+                if (SymbolEqualityComparer.Default.Equals(referenced, symbol.ContainingAssembly))
+                {
+                    break;
+                }
+
+                assembly++;
             }
 
-            index++;
+            return new DeclarationOrder(assembly, string.Empty, 0, symbol.MetadataToken);
         }
 
-        return new DeclarationOrder(int.MaxValue - 1, location.SourceSpan.Start);
+        // A nested type is ordered by the top-level type it is declared in.
+        INamedTypeSymbol outer = symbol;
+        while (outer.ContainingType is { } containing)
+        {
+            outer = containing;
+        }
+
+        string ns = outer.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace
+            ? containingNamespace.ToDisplayString()
+            : string.Empty;
+
+        Location? location = symbol.Locations.FirstOrDefault(static candidate => candidate.IsInSource);
+        int tree = int.MaxValue;
+        if (location?.SourceTree is { } declared)
+        {
+            int index = 0;
+            foreach (SyntaxTree candidate in compilation.SyntaxTrees)
+            {
+                if (candidate == declared)
+                {
+                    tree = index;
+                    break;
+                }
+
+                index++;
+            }
+        }
+
+        return new DeclarationOrder(0, ns, tree, location?.SourceSpan.Start ?? 0);
     }
 
     private static EquatableArray<string> Chain(ITypeSymbol type)

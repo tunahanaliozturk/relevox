@@ -54,12 +54,7 @@ internal static class Emitter
 
         code.Line("private readonly global::System.IServiceProvider _services;");
         code.Line("private readonly global::Capar.Internal.PipelineState<CaparMediator> _pipelines;");
-        if (plan.Notifications.Any(static notification => notification.Targets.Length > 0))
-        {
-            // Only when some notification has handlers: an unused private field is CS0169, which breaks the
-            // user's build when warnings are errors. The strict generator tests exist to catch exactly this.
-            code.Line("private global::Capar.INotificationPublisher? _publisher;");
-        }
+        code.Line("private global::Capar.INotificationPublisher? _publisher;");
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"private readonly bool _keep{handler.Value};");
@@ -140,26 +135,44 @@ internal static class Emitter
         code.Line($"{DependencyInjection}.ServiceLifetime handlerLifetime = options.HandlerLifetime;");
         code.Line();
 
+        // Handlers are added only when the application has not registered them already, as TryAdd would, but
+        // against a set built once: TryAdd scans the whole collection on every call, which made startup
+        // quadratic in the number of handlers.
+        code.Line("global::System.Collections.Generic.HashSet<global::System.Type> registered = new();");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor existing in services)");
+        code.Line("registered.Add(existing.ServiceType);");
+        code.Close();
+        code.Line();
+
         // Each registration names its type with typeof at the call, rather than passing a Type through a
         // helper. The ServiceDescriptor constructor is annotated for trimming, and a literal typeof is what
         // lets the trimmer keep the constructor without a warning in the user's NativeAOT build.
         foreach (string handler in plan.HandlerTypes)
         {
-            code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof({handler}), typeof({handler}), handlerLifetime));");
+            code.Line($"if (registered.Add(typeof({handler})))");
+            code.Line("{");
+            code.Line($"    services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({handler}), typeof({handler}), handlerLifetime));");
+            code.Line("}");
         }
 
         code.Line();
         code.Line("// Whether each handler can be kept is read from the registration actually in force, which may be one the");
-        code.Line("// application made before this call and TryAdd left alone. A transient handler is never kept.");
+        code.Line("// application made before this call. A transient handler is never kept.");
+        code.Line($"global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> lifetimes = new();");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
+        code.Line("lifetimes[descriptor.ServiceType] = descriptor.Lifetime;");
+        code.Close();
+        code.Line();
         code.Line($"bool[] keep = new bool[{plan.HandlerTypes.Length}];");
         for (int index = 0; index < plan.HandlerTypes.Length; index++)
         {
-            code.Line($"keep[{index}] = IsShared(services, typeof({plan.HandlerTypes[index]}));");
+            code.Line($"keep[{index}] = lifetimes.TryGetValue(typeof({plan.HandlerTypes[index]}), out {DependencyInjection}.ServiceLifetime lifetime{index}) && lifetime{index} != {DependencyInjection}.ServiceLifetime.Transient;");
         }
 
         code.Line();
         int requestCount = plan.Requests.Count(static request => !request.Request.IsAbstract);
         int streamCount = plan.Streams.Count(static stream => !stream.Request.IsAbstract);
+        RequestEntry[] dispatched = [.. plan.Requests.Where(static request => !request.Request.IsAbstract)];
 
         code.Line("if (options.AutoRegisterRequestProcessors)");
         code.Line("{");
@@ -181,32 +194,8 @@ internal static class Emitter
         code.Close();
         code.Line();
 
-        // The processor behaviours sit ahead of every user behaviour, pre before post, as MediatR registers them.
-        // They are registered closed per request rather than as an open generic, so nothing has to be closed at
-        // run time.
-        //
-        // MediatR 12 adds a processor behaviour only when a processor of that kind was added through its
-        // configuration. Processors it found by scanning, or that the application registered with the container
-        // itself, are registered but never run unless one was also added explicitly. That is surprising, and it
-        // is matched on purpose: code moving from MediatR must not find processors running that never ran.
-        RequestEntry[] dispatched = [.. plan.Requests.Where(static request => !request.Request.IsAbstract)];
-        foreach ((string list, string behavior) in new[] { ("RequestPreProcessorsToRegister", "RequestPreProcessorBehavior"), ("RequestPostProcessorsToRegister", "RequestPostProcessorBehavior") })
-        {
-            code.Line($"if (options.{list}.Count > 0)");
-            code.Line("{");
-            foreach (RequestEntry request in dispatched)
-            {
-                string response = request.ResponseType ?? "global::Capar.Unit";
-                code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.IPipelineBehavior<{request.Request.Type}, {response}>), typeof(global::Capar.Pipeline.{behavior}<{request.Request.Type}, {response}>), {DependencyInjection}.ServiceLifetime.Transient));");
-            }
-
-            code.Line("}");
-            code.Line();
-        }
-
         // Exception handlers and actions are registered whatever AutoRegisterRequestProcessors says, as MediatR's
-        // scan registers them. The two behaviours are added when any are registered, in an order that decides
-        // whether actions see handled exceptions too.
+        // scan registers them.
         foreach (ServiceRegistration registration in plan.ExceptionRegistrations)
         {
             code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({registration.ServiceType}), typeof({registration.ImplementationType}), handlerLifetime));");
@@ -220,18 +209,33 @@ internal static class Emitter
         for (int index = 0; index < plan.ExceptionCatalogs.Length; index++)
         {
             ExceptionCatalogEntry catalog = plan.ExceptionCatalogs[index];
-            code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.ExceptionCatalog<{catalog.Request.Type}, {catalog.ResponseType}>), new ExceptionCatalog{index}()));");
+            code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.ExceptionCatalog<{catalog.Request.Type}, {catalog.ResponseType}>), new ExceptionCatalog{index}()));");
         }
 
         code.Line();
+
+        // The built-in behaviours, in MediatR's order: the two exception behaviours first, so they sit outside
+        // everything else and catch what a pre-processor throws, then the pre and post processor behaviours,
+        // then whatever the options add. They are registered closed per request rather than open generic, so
+        // nothing is closed at run time, with Add rather than TryAddEnumerable because each pair is new and
+        // TryAddEnumerable scans the whole collection every time.
+        //
+        // MediatR 12 adds a processor behaviour only when a processor of that kind was added through its
+        // configuration. Processors it found by scanning, or that the application registered with the container
+        // itself, are registered but never run unless one was also added explicitly. That is surprising, and it
+        // is matched on purpose: code moving from MediatR must not find processors running that never ran.
         code.Line("bool actionsOutside = options.RequestExceptionActionProcessorStrategy == global::Capar.RequestExceptionActionProcessorStrategy.ApplyForUnhandledExceptions;");
         code.Line("bool exceptionHandlers = Has(services, typeof(global::Capar.Pipeline.IRequestExceptionHandler<,,>));");
         code.Line("bool exceptionActions = Has(services, typeof(global::Capar.Pipeline.IRequestExceptionAction<,>));");
+        code.Line("bool preProcessors = options.RequestPreProcessorsToRegister.Count > 0;");
+        code.Line("bool postProcessors = options.RequestPostProcessorsToRegister.Count > 0;");
         foreach ((string condition, string behavior) in new[]
         {
             ("actionsOutside && exceptionActions", "RequestExceptionActionProcessorBehavior"),
             ("exceptionHandlers", "RequestExceptionProcessorBehavior"),
             ("!actionsOutside && exceptionActions", "RequestExceptionActionProcessorBehavior"),
+            ("preProcessors", "RequestPreProcessorBehavior"),
+            ("postProcessors", "RequestPostProcessorBehavior"),
         })
         {
             code.Line($"if ({condition})");
@@ -239,7 +243,7 @@ internal static class Emitter
             foreach (RequestEntry request in dispatched)
             {
                 string response = request.ResponseType ?? "global::Capar.Unit";
-                code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.IPipelineBehavior<{request.Request.Type}, {response}>), typeof(global::Capar.Pipeline.{behavior}<{request.Request.Type}, {response}>), {DependencyInjection}.ServiceLifetime.Transient));");
+                code.Line($"    services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.IPipelineBehavior<{request.Request.Type}, {response}>), typeof(global::Capar.Pipeline.{behavior}<{request.Request.Type}, {response}>), {DependencyInjection}.ServiceLifetime.Transient));");
             }
 
             code.Line("}");
@@ -252,12 +256,6 @@ internal static class Emitter
         code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, behavior);");
         code.Close();
         code.Line();
-        code.Line("bool everyRequestHasBehaviours = options.RequestPreProcessorsToRegister.Count > 0");
-        code.Line("    || options.RequestPostProcessorsToRegister.Count > 0");
-        code.Line("    || exceptionHandlers");
-        code.Line("    || exceptionActions");
-        code.Line("    || HasOpenBehavior(services);");
-        code.Line();
         code.Line("if (options.NotificationPublisherType is not null)");
         code.Line("{");
         code.Line($"    {TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.INotificationPublisher), options.NotificationPublisherType, lifetime));");
@@ -267,13 +265,15 @@ internal static class Emitter
         code.Line($"    {TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.INotificationPublisher), options.NotificationPublisher));");
         code.Line("}");
         code.Line();
-        code.Line("bool sequentialPublish = IsSequentialPublisher(services);");
-        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}, everyRequestHasBehaviours, sequentialPublish), {DependencyInjection}.ServiceLifetime.Singleton));");
+        code.Line("// Whether the publisher in force is the default, and whether some behaviour applies to every request, are");
+        code.Line("// both settled on first use rather than here, so registrations made after this call still count.");
+        code.Line("bool builtInsForEveryRequest = exceptionHandlers || exceptionActions || preProcessors || postProcessors;");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}, builtInsForEveryRequest), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
-        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<CaparMediator>>(provider)), lifetime));");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<CaparMediator>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Capar.IMediator", "global::Capar.ISender", "global::Capar.IPublisher" })
         {
-            code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<CaparMediator>(provider), lifetime));");
+            code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<CaparMediator>(provider), lifetime));");
         }
 
         code.Line("return services;");
@@ -292,50 +292,10 @@ internal static class Emitter
         code.Line("return false;");
         code.Close();
 
-        code.Line();
-        code.Open($"private static bool HasOpenBehavior({DependencyInjection}.IServiceCollection services)");
-        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
-        code.Line("if (descriptor.ServiceType == typeof(global::Capar.IPipelineBehavior<,>))");
-        code.Line("{");
-        code.Line("    return true;");
-        code.Line("}");
-        code.Close();
-        code.Line();
-        code.Line("return false;");
-        code.Close();
 
-        code.Line();
-        code.Line("// The default publisher is inlined by the generated mediator. Anything else, including a publisher the");
-        code.Line("// application registered itself before calling AddCapar, is called the way MediatR calls it.");
-        code.Open($"private static bool IsSequentialPublisher({DependencyInjection}.IServiceCollection services)");
-        code.Line($"{DependencyInjection}.ServiceDescriptor? last = null;");
-        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
-        code.Line("if (descriptor.ServiceType == typeof(global::Capar.INotificationPublisher))");
-        code.Line("{");
-        code.Line("    last = descriptor;");
-        code.Line("}");
-        code.Close();
-        code.Line();
-        code.Line("return last is not null");
-        code.Line("    && !last.IsKeyedService");
-        code.Line("    && (last.ImplementationInstance is global::Capar.NotificationPublishers.ForeachAwaitPublisher");
-        code.Line("        || last.ImplementationType == typeof(global::Capar.NotificationPublishers.ForeachAwaitPublisher));");
-        code.Close();
 
         EmitExceptionCatalogs(code, plan);
 
-        code.Line();
-        code.Open($"private static bool IsShared({DependencyInjection}.IServiceCollection services, {Type} type)");
-        code.Line($"{DependencyInjection}.ServiceDescriptor? last = null;");
-        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
-        code.Line("if (descriptor.ServiceType == type)");
-        code.Line("{");
-        code.Line("    last = descriptor;");
-        code.Line("}");
-        code.Close();
-        code.Line();
-        code.Line($"return last is not null && last.Lifetime != {DependencyInjection}.ServiceLifetime.Transient;");
-        code.Close();
 
         code.Close();
         code.Close();
@@ -367,10 +327,10 @@ internal static class Emitter
         {
             ExceptionCatalogEntry catalog = plan.ExceptionCatalogs[index];
             string request = catalog.Request.Syntax;
-            string response = catalog.ResponseType;
+            string response = catalog.ResponseSyntax;
 
             code.Line();
-            code.Open($"private sealed class ExceptionCatalog{index} : global::Capar.Internal.ExceptionCatalog<{catalog.Request.Type}, {response}>");
+            code.Open($"private sealed class ExceptionCatalog{index} : global::Capar.Internal.ExceptionCatalog<{request}, {response}>");
             code.Line($"public override bool HasHandlers => {(catalog.HandledExceptions.Length > 0 ? "true" : "false")};");
             code.Line();
             code.Line($"public override bool HasActions => {(catalog.ActionExceptions.Length > 0 ? "true" : "false")};");
@@ -447,33 +407,36 @@ internal static class Emitter
                     ? $"Send<{request.ResponseSyntax}>((global::Capar.IRequest<{request.ResponseSyntax}>)request, cancellationToken)"
                     : "Send<global::Capar.IRequest>(request, cancellationToken)");
             string response = request.ResponseSyntax ?? "global::Capar.Unit";
-            code.Line($"global::Capar.IPipelineBehavior<{request.Request.Syntax}, {response}>[]? behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services, out bool asynchronous);");
-            code.Line("if (behaviors is null)");
-            code.Line("{");
-            code.Line("    if (!asynchronous)");
-            code.Line("    {");
-            code.Line($"        return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
-            code.Line("    }");
-            code.Line();
-            code.Line("    try");
-            code.Line("    {");
-            code.Line($"        return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
-            code.Line("    }");
-            code.Line("    catch (global::System.Exception exception)");
-            code.Line("    {");
-            code.Line(hasResponse
-                ? $"        return {Task}.FromException<{request.ResponseSyntax}>(exception);"
-                : $"        return {Task}.FromException(exception);");
-            code.Line("    }");
-            code.Line("}");
-            code.Line();
+            string direct = $"(({contract})Handler{handler}()).Handle(request, cancellationToken)";
+            string faulted = hasResponse ? $"{Task}.FromException<{request.ResponseSyntax}>(exception)" : $"{Task}.FromException(exception)";
 
             // The handler is resolved inside the innermost step, so a behaviour that short-circuits never causes
             // it to be constructed, as in MediatR. A request without a response runs through behaviours typed
             // over Unit, which is how MediatR 12 models it too.
-            code.Line(hasResponse
-                ? $"return global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);"
-                : $"return global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken);");
+            string pipeline = hasResponse
+                ? $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken)"
+                : $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken)";
+
+            code.Line($"global::Capar.IPipelineBehavior<{request.Request.Syntax}, {response}>[]? behaviors = null;");
+            code.Line($"if (!_pipelines.TryDirect({position}, out bool asynchronous))");
+            code.Line("{");
+            code.Line($"    behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services, out asynchronous);");
+            code.Line("}");
+            code.Line();
+            code.Line("if (!asynchronous)");
+            code.Line("{");
+            code.Line($"    return behaviors is null ? {direct} : {pipeline};");
+            code.Line("}");
+            code.Line();
+            code.Line("// MediatR's built-in behaviours would be outermost here, and async, so a throw becomes a faulted task.");
+            code.Line("try");
+            code.Line("{");
+            code.Line($"    return behaviors is null ? {direct} : {pipeline};");
+            code.Line("}");
+            code.Line("catch (global::System.Exception exception)");
+            code.Line("{");
+            code.Line($"    return {faulted};");
+            code.Line("}");
             code.Close();
         }
     }
@@ -539,7 +502,8 @@ internal static class Emitter
 
             if (notification.Targets.Length == 0)
             {
-                code.Line($"return {Task}.CompletedTask;");
+                // A configured publisher is still called with no handlers, as MediatR calls it.
+                code.Line($"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(notification, cancellationToken);");
                 code.Close();
                 continue;
             }
@@ -555,7 +519,7 @@ internal static class Emitter
             }
 
             arguments.Add("cancellationToken");
-            code.Line("return _pipelines.SequentialPublish");
+            code.Line("return _pipelines.SequentialPublish(_services)");
             code.Line($"    ? PublishSequentially{index}({string.Join(", ", arguments)})");
             code.Line($"    : PublishThrough{index}({string.Join(", ", arguments)});");
             code.Close();
@@ -578,8 +542,7 @@ internal static class Emitter
             }
 
             code.Line("];");
-            code.Line("_publisher ??= Resolve<global::Capar.INotificationPublisher>();");
-            code.Line("return _publisher.Publish(executors, notification, cancellationToken);");
+            code.Line("return Publisher().Publish(executors, notification, cancellationToken);");
             code.Close();
 
             // Async even for one handler, so an exception a handler throws before its first await ends up in
@@ -617,7 +580,7 @@ internal static class Emitter
         code.Line();
         code.Line("// With a behaviour that applies to every request, MediatR runs a pipeline before finding no handler,");
         code.Line("// so the task faults rather than Send throwing.");
-        code.Line("return _pipelines.EveryRequestHasBehaviours");
+        code.Line("return _pipelines.EveryRequestHasBehaviours(_services)");
         code.Line($"    ? {Task}.FromException<TResponse>(NoHandler(type))");
         code.Line("    : throw NoHandler(type);");
         code.Close();
@@ -637,7 +600,7 @@ internal static class Emitter
         code.Line("    return typed.Send(this, request, cancellationToken);");
         code.Line("}");
         code.Line();
-        code.Line("return _pipelines.EveryRequestHasBehaviours");
+        code.Line("return _pipelines.EveryRequestHasBehaviours(_services)");
         code.Line($"    ? {Task}.FromException(NoHandler(type))");
         code.Line("    : throw NoHandler(type);");
         code.Close();
@@ -710,9 +673,12 @@ internal static class Emitter
         code.Line("    return dispatcher.Publish(this, notification, cancellationToken);");
         code.Line("}");
         code.Line();
-        code.Line("return notification is global::Capar.INotification");
-        code.Line($"    ? {Task}.CompletedTask");
-        code.Line("    : throw new global::System.ArgumentException($\"'{notification.GetType()}' does not implement INotification.\", nameof(notification));");
+        code.Line("if (notification is not global::Capar.INotification known)");
+        code.Line("{");
+        code.Line("    throw new global::System.ArgumentException($\"'{notification.GetType()}' does not implement INotification.\", nameof(notification));");
+        code.Line("}");
+        code.Line();
+        code.Line($"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(known, cancellationToken);");
         code.Close();
 
         code.Line();
@@ -724,9 +690,12 @@ internal static class Emitter
         code.Line("    throw new global::System.ArgumentNullException(nameof(notification));");
         code.Line("}");
         code.Line();
-        code.Line("return Notifications.TryGetValue(notification.GetType(), out NotificationDispatcher? dispatcher)");
-        code.Line("    ? dispatcher.Publish(this, notification, cancellationToken)");
-        code.Line($"    : {Task}.CompletedTask;");
+        code.Line("if (Notifications.TryGetValue(notification.GetType(), out NotificationDispatcher? dispatcher))");
+        code.Line("{");
+        code.Line("    return dispatcher.Publish(this, notification, cancellationToken);");
+        code.Line("}");
+        code.Line();
+        code.Line($"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(notification, cancellationToken);");
         code.Close();
     }
 
@@ -740,6 +709,11 @@ internal static class Emitter
             code.Line($"    _keep{handler.Value} ? (_handler{handler.Value} ??= Resolve<{handler.Key}>()) : Resolve<{handler.Key}>();");
         }
 
+        code.Line();
+        code.Line("private global::Capar.INotificationPublisher Publisher() => _publisher ??= Resolve<global::Capar.INotificationPublisher>();");
+        code.Line();
+        code.Line($"private {Task} PublishEmpty(global::Capar.INotification notification, {Token} cancellationToken) =>");
+        code.Line("    Publisher().Publish(global::System.Array.Empty<global::Capar.NotificationHandlerExecutor>(), notification, cancellationToken);");
         code.Line();
         code.Line("private T Resolve<T>() where T : notnull =>");
         code.Line($"    {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<T>(_services);");

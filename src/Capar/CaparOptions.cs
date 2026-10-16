@@ -52,6 +52,57 @@ public sealed class CaparOptions
         ServiceLifetime serviceLifetime = ServiceLifetime.Transient) =>
         AddBehavior(typeof(TServiceType), typeof(TImplementationType), serviceLifetime);
 
+    /// <summary>Registers a behaviour class under every closed <c>IPipelineBehavior&lt;,&gt;</c> it implements.</summary>
+    /// <typeparam name="TImplementationType">The behaviour class.</typeparam>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddBehavior<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] TImplementationType>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) =>
+        AddBehavior(typeof(TImplementationType), serviceLifetime);
+
+    /// <summary>Registers a behaviour class under every closed <c>IPipelineBehavior&lt;,&gt;</c> it implements.</summary>
+    /// <param name="implementationType">The behaviour class.</param>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddBehavior([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        AddClosed(BehaviorsToRegister, implementationType, typeof(IPipelineBehavior<,>), serviceLifetime);
+        return this;
+    }
+
+    /// <summary>Registers several open generic behaviours, in order, with one lifetime.</summary>
+    /// <remarks>
+    /// The types arrive as plain <see cref="Type"/> values, so the trimmer cannot see what to keep. Under
+    /// NativeAOT, register closed behaviours instead.
+    /// </remarks>
+    /// <param name="openBehaviorTypes">Open generic types implementing <c>IPipelineBehavior&lt;,&gt;</c>.</param>
+    /// <param name="serviceLifetime">Their lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    [RequiresUnreferencedCode("The behaviour types are not visible to the trimmer. Register closed behaviours under NativeAOT.")]
+    public CaparOptions AddOpenBehaviors(IEnumerable<Type> openBehaviorTypes, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        ArgumentNullException.ThrowIfNull(openBehaviorTypes);
+        foreach (Type openBehaviorType in openBehaviorTypes)
+        {
+            AddOpenBehavior(openBehaviorType, serviceLifetime);
+        }
+
+        return this;
+    }
+
+    /// <summary>Registers several open generic behaviours, in order, each with its own lifetime.</summary>
+    /// <param name="openBehaviors">The behaviours.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddOpenBehaviors(IEnumerable<Entities.OpenBehavior> openBehaviors)
+    {
+        ArgumentNullException.ThrowIfNull(openBehaviors);
+        foreach (Entities.OpenBehavior openBehavior in openBehaviors)
+        {
+            AddOpenBehavior(openBehavior.OpenBehaviorType, openBehavior.ServiceLifetime);
+        }
+
+        return this;
+    }
+
     /// <summary>Registers a closed pipeline behaviour for one request type.</summary>
     /// <param name="serviceType">The behaviour interface, such as <c>IPipelineBehavior&lt;Ping, Pong&gt;</c>.</param>
     /// <param name="implementationType">The behaviour class.</param>
@@ -127,6 +178,23 @@ public sealed class CaparOptions
         return this;
     }
 
+    /// <summary>Registers a stream behaviour class under every closed <c>IStreamPipelineBehavior&lt;,&gt;</c> it implements.</summary>
+    /// <typeparam name="TImplementationType">The behaviour class.</typeparam>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddStreamBehavior<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] TImplementationType>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) =>
+        AddStreamBehavior(typeof(TImplementationType), serviceLifetime);
+
+    /// <summary>Registers a stream behaviour class under every closed <c>IStreamPipelineBehavior&lt;,&gt;</c> it implements.</summary>
+    /// <param name="implementationType">The behaviour class.</param>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddStreamBehavior([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        AddClosed(StreamBehaviorsToRegister, implementationType, typeof(IStreamPipelineBehavior<,>), serviceLifetime);
+        return this;
+    }
+
     /// <summary>Registers an open generic stream behaviour for every stream request.</summary>
     /// <param name="openBehaviorType">An open generic type implementing <c>IStreamPipelineBehavior&lt;,&gt;</c>.</param>
     /// <param name="serviceLifetime">The behaviour's lifetime.</param>
@@ -177,6 +245,39 @@ public sealed class CaparOptions
         return this;
     }
 
+    /// <summary>Registers a pre-processor class under every closed <c>IRequestPreProcessor&lt;&gt;</c> it implements.</summary>
+    /// <typeparam name="TImplementationType">The processor class.</typeparam>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPreProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] TImplementationType>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) =>
+        AddRequestPreProcessor(typeof(TImplementationType), serviceLifetime);
+
+    /// <summary>Registers a pre-processor class under every closed <c>IRequestPreProcessor&lt;&gt;</c> it implements.</summary>
+    /// <param name="implementationType">The processor class.</param>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPreProcessor([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        AddClosed(RequestPreProcessorsToRegister, implementationType, typeof(Pipeline.IRequestPreProcessor<>), serviceLifetime);
+        return this;
+    }
+
+    /// <summary>Registers a closed pre-processor.</summary>
+    /// <param name="serviceType">The processor interface.</param>
+    /// <param name="implementationType">The processor class.</param>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPreProcessor(
+        Type serviceType,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType,
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        ArgumentNullException.ThrowIfNull(implementationType);
+        RequestPreProcessorsToRegister.Add(new ServiceDescriptor(serviceType, implementationType, serviceLifetime));
+        return this;
+    }
+
     /// <summary>Registers an open generic pre-processor that applies to every request.</summary>
     /// <param name="openBehaviorType">An open generic type implementing <c>IRequestPreProcessor&lt;&gt;</c>.</param>
     /// <param name="serviceLifetime">The processor's lifetime.</param>
@@ -201,6 +302,39 @@ public sealed class CaparOptions
         return this;
     }
 
+    /// <summary>Registers a post-processor class under every closed <c>IRequestPostProcessor&lt;,&gt;</c> it implements.</summary>
+    /// <typeparam name="TImplementationType">The processor class.</typeparam>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPostProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] TImplementationType>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) =>
+        AddRequestPostProcessor(typeof(TImplementationType), serviceLifetime);
+
+    /// <summary>Registers a post-processor class under every closed <c>IRequestPostProcessor&lt;,&gt;</c> it implements.</summary>
+    /// <param name="implementationType">The processor class.</param>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPostProcessor([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        AddClosed(RequestPostProcessorsToRegister, implementationType, typeof(Pipeline.IRequestPostProcessor<,>), serviceLifetime);
+        return this;
+    }
+
+    /// <summary>Registers a closed post-processor.</summary>
+    /// <param name="serviceType">The processor interface.</param>
+    /// <param name="implementationType">The processor class.</param>
+    /// <param name="serviceLifetime">The processor's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddRequestPostProcessor(
+        Type serviceType,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType,
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        ArgumentNullException.ThrowIfNull(implementationType);
+        RequestPostProcessorsToRegister.Add(new ServiceDescriptor(serviceType, implementationType, serviceLifetime));
+        return this;
+    }
+
     /// <summary>Registers an open generic post-processor that applies to every request.</summary>
     /// <param name="openBehaviorType">An open generic type implementing <c>IRequestPostProcessor&lt;,&gt;</c>.</param>
     /// <param name="serviceLifetime">The processor's lifetime.</param>
@@ -211,6 +345,31 @@ public sealed class CaparOptions
     {
         RequestPostProcessorsToRegister.Add(new ServiceDescriptor(typeof(Pipeline.IRequestPostProcessor<,>), RequireOpen(openBehaviorType, typeof(Pipeline.IRequestPostProcessor<,>)), serviceLifetime));
         return this;
+    }
+
+    private static void AddClosed(
+        IList<ServiceDescriptor> list,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType,
+        Type openContract,
+        ServiceLifetime serviceLifetime)
+    {
+        ArgumentNullException.ThrowIfNull(implementationType);
+
+        Type[] contracts =
+        [
+            .. implementationType
+                .GetInterfaces()
+                .Where(candidate => candidate.IsGenericType && candidate.GetGenericTypeDefinition() == openContract),
+        ];
+        if (contracts.Length == 0)
+        {
+            throw new InvalidOperationException($"{implementationType.Name} must implement {openContract.FullName}.");
+        }
+
+        foreach (Type contract in contracts)
+        {
+            list.Add(new ServiceDescriptor(contract, implementationType, serviceLifetime));
+        }
     }
 
     [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)]
