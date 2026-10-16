@@ -99,6 +99,46 @@ public sealed class CaparOptions
     /// </remarks>
     public bool AutoRegisterRequestProcessors { get; set; }
 
+    /// <summary>Stream pipeline behaviours to register, in order. The first one registered runs outermost.</summary>
+    public IList<ServiceDescriptor> StreamBehaviorsToRegister { get; } = [];
+
+    /// <summary>Registers a closed stream behaviour for one stream request type.</summary>
+    /// <typeparam name="TServiceType">The behaviour interface, such as <c>IStreamPipelineBehavior&lt;Feed, Item&gt;</c>.</typeparam>
+    /// <typeparam name="TImplementationType">The behaviour class.</typeparam>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddStreamBehavior<TServiceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementationType>(
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient) =>
+        AddStreamBehavior(typeof(TServiceType), typeof(TImplementationType), serviceLifetime);
+
+    /// <summary>Registers a closed stream behaviour for one stream request type.</summary>
+    /// <param name="serviceType">The behaviour interface.</param>
+    /// <param name="implementationType">The behaviour class.</param>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddStreamBehavior(
+        Type serviceType,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType,
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        ArgumentNullException.ThrowIfNull(implementationType);
+        StreamBehaviorsToRegister.Add(new ServiceDescriptor(serviceType, implementationType, serviceLifetime));
+        return this;
+    }
+
+    /// <summary>Registers an open generic stream behaviour for every stream request.</summary>
+    /// <param name="openBehaviorType">An open generic type implementing <c>IStreamPipelineBehavior&lt;,&gt;</c>.</param>
+    /// <param name="serviceLifetime">The behaviour's lifetime.</param>
+    /// <returns>These options, for chaining.</returns>
+    public CaparOptions AddOpenStreamBehavior(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type openBehaviorType,
+        ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        StreamBehaviorsToRegister.Add(new ServiceDescriptor(typeof(IStreamPipelineBehavior<,>), RequireOpen(openBehaviorType, typeof(IStreamPipelineBehavior<,>)), serviceLifetime));
+        return this;
+    }
+
     /// <summary>Whether exception actions see every exception or only unhandled ones.</summary>
     public RequestExceptionActionProcessorStrategy RequestExceptionActionProcessorStrategy { get; set; }
 
