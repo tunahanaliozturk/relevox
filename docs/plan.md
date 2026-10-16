@@ -1,8 +1,8 @@
-# Menzil: plan
+# Çapar: plan
 
-Working name: **Menzil**. A menzil was a relay station on the Ottoman courier road; a message travelled
-from one station to the next until it reached the person it was meant for. That is what a mediator
-pipeline does, which is why the name stuck.
+Name: **Çapar**, written `Capar` in package IDs and namespaces. A çapar was a mounted courier who
+carried orders and news across the Ottoman roads at a gallop; the word comes from the Turkish verb
+*çapmak*, to ride hard. A courier that is fast is the whole pitch of this library, so the name stuck.
 
 Status: plan, before any code. The repository stays private until v1.0.0.
 
@@ -51,7 +51,7 @@ surface, and that surface is what existing code is written against.
 - No code is copied or translated from MediatR 13+ (RPL-1.5). Its binary was read for public type names
   only, to confirm the API had not moved.
 - MediatR 12.5.0 is Apache-2.0. We read its documentation and observable behaviour, and use the package
-  itself as a test oracle (section 6). We do not port its source. Menzil is written from the behaviour
+  itself as a test oracle (section 6). We do not port its source. Çapar is written from the behaviour
   spec in this document.
 - The interface shapes (`IRequest<T>`, `IRequestHandler<,>.Handle(request, ct)`, and so on) are kept
   because matching them is the whole point of a migration path. API shape is not code.
@@ -59,9 +59,9 @@ surface, and that surface is what existing code is written against.
 ### 2.3 The other open-source option
 
 `Mediator` by Martin Othamar (MIT, source-generated, 3.1 in release candidate) already exists and is
-fast. Menzil has to justify itself against it, not only against MediatR:
+fast. Çapar has to justify itself against it, not only against MediatR:
 
-| | MediatR 12.5 | Mediator 3.x | Menzil target |
+| | MediatR 12.5 | Mediator 3.x | Çapar target |
 |---|---|---|---|
 | Licence | Apache-2.0, frozen | MIT | MIT |
 | Dispatch | reflection + dictionary | source-generated | source-generated |
@@ -72,7 +72,7 @@ fast. Menzil has to justify itself against it, not only against MediatR:
 | Pre/post processors, exception handlers | yes | partly | yes, same ordering as MediatR |
 
 The niche is the third row: **swap the package and the namespace, keep every handler, get generated
-dispatch.** If Menzil is not faster than Mediator, we say so in the README and the migration story
+dispatch.** If Çapar is not faster than Mediator, we say so in the README and the migration story
 still stands on its own. If a benchmark shows our `Task` decision costs more than it is worth, that is
 a finding and ADR 0002 gets revisited.
 
@@ -92,7 +92,7 @@ Feature parity with the MediatR 12.5.0 public surface:
 - Pipeline: `IPipelineBehavior<,>`, open generic behaviours, `IRequestPreProcessor<>`,
   `IRequestPostProcessor<,>`, `IRequestExceptionHandler<,,>`, `IRequestExceptionAction<,>`, with the
   same ordering and exception semantics as MediatR 12.5.0.
-- Registration: `services.AddMenzil(cfg => ...)` with the familiar knobs (lifetime, publisher strategy,
+- Registration: `services.AddCapar(cfg => ...)` with the familiar knobs (lifetime, publisher strategy,
   behaviours, open behaviours). Handler discovery is done by the generator at compile time, including
   handlers in referenced projects.
 - Compile-time diagnostics: no handler, more than one handler for a request, handler type not
@@ -117,15 +117,15 @@ Feature parity with the MediatR 12.5.0 public surface:
 
 | Package | Contents | Dependencies |
 |---|---|---|
-| `Menzil.Contracts` | marker and handler interfaces only, for domain projects | none |
-| `Menzil` | runtime, DI extension, source generator and analyzers in `analyzers/dotnet/cs` | `Menzil.Contracts`, `Microsoft.Extensions.DependencyInjection.Abstractions` |
+| `Capar.Contracts` | marker and handler interfaces only, for domain projects | none |
+| `Capar` | runtime, DI extension, source generator and analyzers in `analyzers/dotnet/cs` | `Capar.Contracts`, `Microsoft.Extensions.DependencyInjection.Abstractions` |
 
-One install line for the user (`dotnet add package Menzil`). The generator ships inside the runtime
+One install line for the user (`dotnet add package Capar`). The generator ships inside the runtime
 package, so the two can never be out of step.
 
 ### 4.2 How a `Send` works
 
-The generator emits, per compilation that calls `AddMenzil`:
+The generator emits, per compilation that calls `AddCapar`:
 
 1. A sealed `Mediator` implementation with one strongly typed `Send` overload per discovered request
    type. A call site that knows the static type binds to that overload directly: no lookup at all.
@@ -149,9 +149,9 @@ the first exception, matching MediatR. The parallel publisher is opt-in.
 
 ### 4.4 Cross-project discovery
 
-Handlers often live in an `Application` project while `AddMenzil` is called in the host. The generator
+Handlers often live in an `Application` project while `AddCapar` is called in the host. The generator
 in the host walks referenced assemblies' symbols (`Compilation.References`) for types implementing the
-handler interfaces, limited to assemblies that reference `Menzil.Contracts`, so it does not walk the
+handler interfaces, limited to assemblies that reference `Capar.Contracts`, so it does not walk the
 whole BCL. Handlers must be `public` or `internal` with `InternalsVisibleTo`; anything else gets a
 diagnostic, not a silent skip.
 
@@ -159,20 +159,20 @@ diagnostic, not a silent skip.
 
 | ID | Severity | When |
 |---|---|---|
-| MZ0001 | Error | a request type sent somewhere has no handler |
-| MZ0002 | Error | two handlers for the same request type |
-| MZ0003 | Error | handler not accessible from the generated code |
-| MZ0004 | Warning | open generic handler that the generator cannot close |
-| MZ0005 | Warning | `Send(object)` or `Publish(object)` used where the static type is known |
+| CPR0001 | Error | a request type sent somewhere has no handler |
+| CPR0002 | Error | two handlers for the same request type |
+| CPR0003 | Error | handler not accessible from the generated code |
+| CPR0004 | Warning | open generic handler that the generator cannot close |
+| CPR0005 | Warning | `Send(object)` or `Publish(object)` used where the static type is known |
 
-MZ0001 only fires for request types the generator can see being sent. A request built by reflection
+CPR0001 only fires for request types the generator can see being sent. A request built by reflection
 still fails at runtime, with an exception that names the type.
 
 ## 5. Performance plan
 
 Rule: no number in the README that a committed benchmark did not produce, with hardware named.
 
-Baselines are measured **first**, in M0, before Menzil has any code: MediatR 12.5.0 and Mediator 3.x on
+Baselines are measured **first**, in M0, before Çapar has any code: MediatR 12.5.0 and Mediator 3.x on
 the same scenarios. These are the numbers we have to beat.
 
 | Scenario | What it shows |
@@ -213,17 +213,17 @@ Results go under `docs/benchmark-results/`. A hypothesis the numbers reject is r
 ## 7. Repository layout
 
 ```
-menzil/
-├── src/Menzil.Contracts/
-├── src/Menzil/
-├── src/Menzil.SourceGenerator/        # packed into Menzil, not shipped alone
-├── tests/Menzil.UnitTests/
-├── tests/Menzil.SourceGenerator.Tests/
-├── tests/Menzil.DifferentialTests/    # MediatR 12.5.0 as oracle
-├── samples/Menzil.Samples.Aot/
-├── samples/Menzil.Samples.Migration/
-├── benchmarks/Menzil.Benchmarks/
-├── tools/Menzil.LicenseAudit/         # copied forward from an existing repo
+capar/
+├── src/Capar.Contracts/
+├── src/Capar/
+├── src/Capar.SourceGenerator/        # packed into Capar, not shipped alone
+├── tests/Capar.UnitTests/
+├── tests/Capar.SourceGenerator.Tests/
+├── tests/Capar.DifferentialTests/    # MediatR 12.5.0 as oracle
+├── samples/Capar.Samples.Aot/
+├── samples/Capar.Samples.Migration/
+├── benchmarks/Capar.Benchmarks/
+├── tools/Capar.LicenseAudit/         # copied forward from an existing repo
 ├── docs/adr/  docs/benchmark-results/  docs/migrating-from-mediatr.md
 └── the usual root files (house standard)
 ```
@@ -237,9 +237,9 @@ Each milestone is a branch and a PR with green CI. Commits land as each unit pas
 | | Deliverable | Done when |
 |---|---|---|
 | M0 | Scaffold, quality gates, CI, licence audit, **baseline benchmarks of MediatR 12.5.0 and Mediator 3.x** | baseline numbers committed |
-| M1 | Contracts, generator discovers handlers (same and referenced projects), `Send`/`Publish`/`CreateStream`, `AddMenzil` | differential tests pass for request, notification, stream |
+| M1 | Contracts, generator discovers handlers (same and referenced projects), `Send`/`Publish`/`CreateStream`, `AddCapar` | differential tests pass for request, notification, stream |
 | M2 | Behaviours, open behaviours, pre/post processors, exception handlers and actions, stream behaviours, publishers | differential pipeline-order tests pass |
-| M3 | Diagnostics MZ0001-MZ0005, NativeAOT sample in CI | AOT job green with zero warnings |
+| M3 | Diagnostics CPR0001-CPR0005, NativeAOT sample in CI | AOT job green with zero warnings |
 | M4 | Performance pass against the M0 baselines | every hypothesis in section 5 marked confirmed or rejected |
 | M5 | Migration guide and migrated sample, README, ADRs, operations notes, CHANGELOG | a reader can migrate the sample from the guide alone |
 | M6 | v1.0.0: NuGet publish, repository made public | only with the owner's go-ahead |
@@ -256,6 +256,5 @@ Each milestone is a branch and a PR with green CI. Commits land as each unit pas
 
 ## 10. Open questions
 
-- Name. Menzil is free on NuGet and GitHub. Alternatives checked: Elci (free), Switchboard (free);
-  Ulak, Herald, Envoy, Courier, Relay are taken on NuGet.
+- Logo. Four concepts are drafted under `docs/brand/logo-canvas/`; one gets picked before M5.
 - NuGet ID prefix reservation, which needs the package owner account; only relevant at M6.
