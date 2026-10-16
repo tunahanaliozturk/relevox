@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Capar.slnx
+
+      # Warnings are errors, and EnforceCodeStyleInBuild puts analyzer style into this step too.
+      - name: Build
+        run: dotnet build Capar.slnx --configuration Release --no-restore
+
+      # Whitespace and style only. The analyzer pass of dotnet format builds its own workspace without
+      # running source generators, so it reports generated types as missing; the build above already
+      # enforces analyzer style.
+      - name: Verify formatting
+        run: |
+          dotnet format whitespace Capar.slnx --verify-no-changes --no-restore
+          dotnet format style Capar.slnx --verify-no-changes --no-restore
+
+  licences:
+    name: dependency licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Capar.slnx
+
+      # Reads the licence terms of every package in the tree, at every depth, from the restored packages on
+      # disk. MediatR 13 and later would fail here, which is the point: the 12.5.0 baseline is pinned on
+      # purpose and this keeps it that way.
+      - name: Audit
+        run: dotnet run --project tools/Capar.LicenseAudit --configuration Release -- .
+
+  benchmarks:
+    name: benchmark sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Proves every scenario reaches its handler, behaviours and listeners, then runs each benchmark once.
+      # Shared runners are far too noisy for nanosecond claims; real numbers come from named hardware and
+      # are committed under docs/benchmark-results.
+      - name: Sanity
+        run: dotnet run -c Release --project benchmarks/Capar.Benchmarks -- --sanity
+
+      - name: Dry run
+        run: dotnet run -c Release --project benchmarks/Capar.Benchmarks -- --filter '*' --job Dry

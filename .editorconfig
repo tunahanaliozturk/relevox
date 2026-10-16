@@ -1,0 +1,43 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,md,csproj,props,targets}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:error
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_prefer_braces = when_multiline:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# Nullable / async correctness must not be silently ignored
+dotnet_diagnostic.CS8600.severity = error
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1515.severity = none
+
+# Test projects. Underscored method names read as sentences in a test report, which is worth more
+# than the naming rule, and a test asserting on a fixed value is not a security-relevant use of Random.
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+
+# The harness owns the lifetime of everything a test touches and disposes it deterministically, so
+# threading the ambient test token through every helper buys nothing.
+dotnet_diagnostic.xUnit1051.severity = none
+dotnet_diagnostic.CA5394.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA2201.severity = none
+
+
+# BenchmarkDotNet only runs instance methods, so a benchmark that touches no state still cannot be static.
+[benchmarks/**/*.cs]
+dotnet_diagnostic.CA1822.severity = none
