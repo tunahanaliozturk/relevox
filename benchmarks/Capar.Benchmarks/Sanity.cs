@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Capar.Benchmarks;
+namespace Benchmarks;
 
 /// <summary>
 /// Proves every benchmark does the work its name claims before any number is trusted.
@@ -33,6 +33,11 @@ internal static class Sanity
         Expect(await send.MediatorTyped(), 42, "Mediator typed send");
         Expect(await send.MediatorInterface(), 42, "Mediator ISender send");
         Expect(await send.MediatorObject(), 42, "Mediator send(object)");
+        Expect(await send.CaparTyped(), 42, "Capar typed send");
+        Expect(await send.CaparInterface(), 42, "Capar ISender send");
+        Expect(await send.CaparObject(), 42, "Capar send(object)");
+        Expect(await send.CaparSingletonTyped(), 42, "Capar singleton typed send");
+        Expect(await send.CaparSingletonInterface(), 42, "Capar singleton ISender send");
         send.Cleanup();
 
         PipelineBenchmarks pipeline = new();
@@ -47,19 +52,23 @@ internal static class Sanity
         await publish.MediatRFive();
         await publish.MediatorOne();
         await publish.MediatorFive();
+        await publish.CaparOne();
+        await publish.CaparFive();
         publish.Cleanup();
 
         StreamBenchmarks stream = new();
         stream.Setup();
         Expect(await stream.MediatR(), 4950, "MediatR stream");
         Expect(await stream.MediatorTyped(), 4950, "Mediator stream");
+        Expect(await stream.CaparTyped(), 4950, "Capar stream");
         stream.Cleanup();
 
         StartupBenchmarks startup = new();
         Expect(await startup.MediatR(), 42, "MediatR startup");
         Expect(await startup.Mediator(), 42, "Mediator startup");
+        Expect(await startup.Capar(), 42, "Capar startup");
 
-        foreach (string expected in new[] { "MediatR behaviour", "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener" })
+        foreach (string expected in new[] { "MediatR behaviour", "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Capar fifth listener" })
         {
             Expect(Counts.GetValueOrDefault(expected), 1, expected);
         }

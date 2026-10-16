@@ -1,6 +1,6 @@
 using MediatR;
 
-namespace Capar.Benchmarks.MediatRPeer;
+namespace Benchmarks.MediatRPeer;
 
 // Every handler here is as cheap as MediatR's idiom allows. A cached completed task rather than
 // Task.FromResult, because Task.FromResult(42) allocates and that allocation would be charged to the

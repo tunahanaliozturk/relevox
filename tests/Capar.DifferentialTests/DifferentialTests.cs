@@ -48,6 +48,26 @@ public sealed class DifferentialTests
         Names(OnMediatR).Length.ShouldBeGreaterThan(20);
     }
 
+    /// <summary>
+    /// Pins down the notification rules the differential test found, so agreement cannot mean "both empty".
+    /// </summary>
+    /// <remarks>
+    /// A handler for a base type or for INotification receives a notification that some handler names
+    /// exactly, and receives nothing for a notification no handler names. That second half is MediatR's
+    /// registration doing it, not a design anyone would pick, and Capar matches it on purpose.
+    /// </remarks>
+    [Fact]
+    public async Task Base_type_handlers_see_only_directly_handled_notifications()
+    {
+        string alarm = await Invoke(OnCapar, "PublishToSeveralHandlers");
+        alarm.ShouldContain("AlarmLogger(north)");
+        alarm.ShouldContain("SignalAuditor(Alarm)");
+        alarm.ShouldContain("EverythingWatcher(Alarm)");
+
+        string quiet = await Invoke(OnCapar, "PublishWithOnlyCatchAllHandler");
+        quiet.ShouldContain("trace=[]");
+    }
+
     private static Task<string> Invoke(Type scenarios, string name) =>
         (Task<string>)scenarios.GetMethod(name, BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!;
 }

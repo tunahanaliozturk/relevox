@@ -40,6 +40,15 @@ jobs:
           dotnet format whitespace Capar.slnx --verify-no-changes --no-restore
           dotnet format style Capar.slnx --verify-no-changes --no-restore
 
+      # Drives the generator through CSharpGeneratorDriver: diagnostics, emitted code that has to compile,
+      # determinism, discovery across project references, and whether the incremental cache is really hit.
+      - name: Generator tests
+        run: dotnet run --project tests/Capar.SourceGenerator.Tests --configuration Release --no-build
+
+      # The same scenario source compiled against MediatR 12.5.0 and against Capar, outcomes compared.
+      - name: Differential tests against MediatR 12.5.0
+        run: dotnet run --project tests/Capar.DifferentialTests --configuration Release --no-build
+
   licences:
     name: dependency licences
     runs-on: ubuntu-latest

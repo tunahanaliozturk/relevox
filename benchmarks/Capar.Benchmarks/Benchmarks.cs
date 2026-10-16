@@ -1,14 +1,16 @@
 using BenchmarkDotNet.Attributes;
+using Capar.Benchmarks;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Capar.Benchmarks;
+namespace Benchmarks;
 
 // Benchmarks return the library's own Task or ValueTask instead of awaiting it in an async method. An
 // async wrapper would add a state machine to every row and measure that instead of the mediator.
 //
-// Mediator has two send paths, like Capar will: the generated concrete class, whose overloads the compiler
+// Mediator and Capar both have two send paths: the generated concrete class, whose overloads the compiler
 // binds by request type, and ISender, for callers that only hold the interface. Both are measured because
-// real code uses both.
+// real code uses both. Capar is measured with its default transient handlers and with singletons, because
+// Mediator's default is singletons and that choice, more than dispatch, decides its numbers.
 
 /// <summary>Request/response with no behaviours: the cost of getting a call to its handler.</summary>
 [MemoryDiagnoser]
@@ -24,12 +26,27 @@ public class SendBenchmarks
     private global::MediatR.ISender _mediatrSender = null!;
     private global::Mediator.Mediator _mediatorTyped = null!;
     private global::Mediator.ISender _mediatorSender = null!;
+    private readonly CaparPeer.Ping _caparPing = new(1);
+    private ServiceProvider _capar = null!;
+    private ServiceProvider _caparSingleton = null!;
+    private IServiceScope _caparScope = null!;
+    private CaparMediator _caparTyped = null!;
+    private global::Capar.ISender _caparSender = null!;
+    private CaparMediator _caparSingletonTyped = null!;
+    private global::Capar.ISender _caparSingletonSender = null!;
 
     [GlobalSetup]
     public void Setup()
     {
         _mediatr = Containers.MediatR(withPipeline: false);
         _mediator = Containers.Mediator(withPipeline: false);
+        _capar = Containers.Capar(ServiceLifetime.Transient);
+        _caparSingleton = Containers.Capar(ServiceLifetime.Singleton);
+        _caparScope = _capar.CreateScope();
+        _caparTyped = _caparScope.ServiceProvider.GetRequiredService<CaparMediator>();
+        _caparSender = _caparScope.ServiceProvider.GetRequiredService<global::Capar.ISender>();
+        _caparSingletonTyped = _caparSingleton.GetRequiredService<CaparMediator>();
+        _caparSingletonSender = _caparSingleton.GetRequiredService<global::Capar.ISender>();
 
         // One scope for the whole run. Creating a scope per call would put the container's own allocation
         // into every row and drown the difference being measured.
@@ -47,10 +64,28 @@ public class SendBenchmarks
         _mediatorScope.Dispose();
         _mediatr.Dispose();
         _mediator.Dispose();
+        _caparScope.Dispose();
+        _capar.Dispose();
+        _caparSingleton.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "MediatR 12.5")]
     public Task<int> MediatR() => _mediatrSender.Send(_mediatrPing);
+
+    [Benchmark(Description = "Capar, typed")]
+    public Task<int> CaparTyped() => _caparTyped.Send(_caparPing);
+
+    [Benchmark(Description = "Capar, ISender")]
+    public Task<int> CaparInterface() => _caparSender.Send(_caparPing);
+
+    [Benchmark(Description = "Capar, object")]
+    public Task<object?> CaparObject() => _caparSender.Send((object)_caparPing);
+
+    [Benchmark(Description = "Capar singletons, typed")]
+    public Task<int> CaparSingletonTyped() => _caparSingletonTyped.Send(_caparPing);
+
+    [Benchmark(Description = "Capar singletons, ISender")]
+    public Task<int> CaparSingletonInterface() => _caparSingletonSender.Send(_caparPing);
 
     [Benchmark(Description = "MediatR 12.5, object")]
     public Task<object?> MediatRObject() => _mediatrSender.Send((object)_mediatrPing);
@@ -121,12 +156,20 @@ public class PublishBenchmarks
     private IServiceScope _mediatorScope = null!;
     private global::MediatR.IPublisher _mediatrPublisher = null!;
     private global::Mediator.Mediator _mediatorTyped = null!;
+    private readonly CaparPeer.OneListener _caparOne = new();
+    private readonly CaparPeer.FiveListeners _caparFive = new();
+    private ServiceProvider _capar = null!;
+    private IServiceScope _caparScope = null!;
+    private CaparMediator _caparTyped = null!;
 
     [GlobalSetup]
     public void Setup()
     {
         _mediatr = Containers.MediatR(withPipeline: false);
         _mediator = Containers.Mediator(withPipeline: false);
+        _capar = Containers.Capar(ServiceLifetime.Transient);
+        _caparScope = _capar.CreateScope();
+        _caparTyped = _caparScope.ServiceProvider.GetRequiredService<CaparMediator>();
         _mediatrScope = _mediatr.CreateScope();
         _mediatorScope = _mediator.CreateScope();
         _mediatrPublisher = _mediatrScope.ServiceProvider.GetRequiredService<global::MediatR.IPublisher>();
@@ -140,16 +183,24 @@ public class PublishBenchmarks
         _mediatorScope.Dispose();
         _mediatr.Dispose();
         _mediator.Dispose();
+        _caparScope.Dispose();
+        _capar.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "MediatR 12.5, 1 handler")]
     public Task MediatROne() => _mediatrPublisher.Publish(_mediatrOne);
+
+    [Benchmark(Description = "Capar, 1 handler")]
+    public Task CaparOne() => _caparTyped.Publish(_caparOne);
 
     [Benchmark(Description = "Mediator 3.0, 1 handler")]
     public ValueTask MediatorOne() => _mediatorTyped.Publish(_mediatorOne);
 
     [Benchmark(Description = "MediatR 12.5, 5 handlers")]
     public Task MediatRFive() => _mediatrPublisher.Publish(_mediatrFive);
+
+    [Benchmark(Description = "Capar, 5 handlers")]
+    public Task CaparFive() => _caparTyped.Publish(_caparFive);
 
     [Benchmark(Description = "Mediator 3.0, 5 handlers")]
     public ValueTask MediatorFive() => _mediatorTyped.Publish(_mediatorFive);
@@ -162,6 +213,10 @@ public class StreamBenchmarks
 {
     private readonly MediatRPeer.Count _mediatrCount = new(100);
     private readonly MediatorPeer.Count _mediatorCount = new(100);
+    private readonly CaparPeer.Count _caparCount = new(100);
+    private ServiceProvider _capar = null!;
+    private IServiceScope _caparScope = null!;
+    private CaparMediator _caparTyped = null!;
     private ServiceProvider _mediatr = null!;
     private ServiceProvider _mediator = null!;
     private IServiceScope _mediatrScope = null!;
@@ -174,6 +229,9 @@ public class StreamBenchmarks
     {
         _mediatr = Containers.MediatR(withPipeline: false);
         _mediator = Containers.Mediator(withPipeline: false);
+        _capar = Containers.Capar(ServiceLifetime.Transient);
+        _caparScope = _capar.CreateScope();
+        _caparTyped = _caparScope.ServiceProvider.GetRequiredService<CaparMediator>();
         _mediatrScope = _mediatr.CreateScope();
         _mediatorScope = _mediator.CreateScope();
         _mediatrSender = _mediatrScope.ServiceProvider.GetRequiredService<global::MediatR.ISender>();
@@ -187,6 +245,8 @@ public class StreamBenchmarks
         _mediatorScope.Dispose();
         _mediatr.Dispose();
         _mediator.Dispose();
+        _caparScope.Dispose();
+        _capar.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "MediatR 12.5")]
@@ -194,6 +254,18 @@ public class StreamBenchmarks
     {
         int sum = 0;
         await foreach (int item in _mediatrSender.CreateStream(_mediatrCount))
+        {
+            sum += item;
+        }
+
+        return sum;
+    }
+
+    [Benchmark(Description = "Capar, typed")]
+    public async Task<int> CaparTyped()
+    {
+        int sum = 0;
+        await foreach (int item in _caparTyped.CreateStream(_caparCount))
         {
             sum += item;
         }
@@ -231,6 +303,13 @@ public class StartupBenchmarks
     {
         await using ServiceProvider provider = Containers.MediatR(withPipeline: false);
         return await provider.GetRequiredService<global::MediatR.ISender>().Send(new MediatRPeer.Ping(1));
+    }
+
+    [Benchmark(Description = "Capar")]
+    public async Task<int> Capar()
+    {
+        await using ServiceProvider provider = Containers.Capar(ServiceLifetime.Transient);
+        return await provider.GetRequiredService<global::Capar.ISender>().Send(new CaparPeer.Ping(1));
     }
 
     [Benchmark(Description = "Mediator 3.0")]
