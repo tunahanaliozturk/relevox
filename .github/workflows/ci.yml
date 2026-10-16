@@ -90,6 +90,9 @@ jobs:
       - name: Run
         run: ./aot/Capar.Samples.Aot
 
+      - name: Binary size
+        run: ls -l aot/Capar.Samples.Aot
+
   benchmarks:
     name: benchmark sanity
     runs-on: ubuntu-latest

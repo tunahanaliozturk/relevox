@@ -30,3 +30,6 @@ All notable changes to this project are written down here. The format follows
 - Stream pipeline behaviours.
 - `INotificationPublisher`, `ForeachAwaitPublisher` and `TaskWhenAllPublisher`.
 - Handlers, processors and exception handlers run in declaration order, as MediatR's scan registers them.
+- Diagnostics CPR0001 to CPR0005 are reported by an analyzer, in the user's source, so `#pragma warning
+  disable` reaches them and the IDE underlines the declaration.
+- A NativeAOT sample, published and run in CI, that checks every kind of dispatch.
