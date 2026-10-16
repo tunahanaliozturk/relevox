@@ -5,7 +5,7 @@ namespace Scenarios;
 
 public static partial class Library
 {
-    static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile)
+    static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile, Trace trace)
     {
         services.AddCapar(options =>
         {
@@ -18,7 +18,12 @@ public static partial class Library
 
             if (profile == Profile.ReversePublisher)
             {
-                options.NotificationPublisher = new ReversePublisher();
+                options.NotificationPublisher = new ReversePublisher(trace);
+            }
+
+            if (profile == Profile.SyncBehavior)
+            {
+                options.AddBehavior<IPipelineBehavior<Brittle, int>, BrittlePassThrough>();
             }
 
             if (profile == Profile.AllExceptions)
@@ -42,12 +47,18 @@ public static partial class Library
                 options.AddOpenStreamBehavior(typeof(StreamOuter<,>));
                 options.AddStreamBehavior<IStreamPipelineBehavior<Countdown, int>, CountdownTimesTen>();
                 options.AddStreamBehavior<IStreamPipelineBehavior<Ticker, int>, TickerReplay>();
+                options.AddRequestPostProcessor<IRequestPostProcessor<Guarded, string>, GuardedPost>();
             }
         });
 
         if (profile == Profile.Pipeline)
         {
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LateBehavior<,>));
+        }
+
+        if (profile == Profile.LatePublisher)
+        {
+            services.AddSingleton<INotificationPublisher>(new ReversePublisher(trace));
         }
     }
 }

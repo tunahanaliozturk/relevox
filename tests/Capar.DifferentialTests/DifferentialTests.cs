@@ -107,20 +107,28 @@ public sealed class DifferentialTests
         cached.ShouldContain("AuditedPre(Cached), CachedPre");
     }
 
-    /// <summary>A configured publisher is really used: the reversing one runs the same handlers backwards.</summary>
+    /// <summary>
+    /// A configured publisher is really used: the reversing one runs the same handlers backwards, and it is
+    /// called even for a notification nothing handles.
+    /// </summary>
     [Fact]
     public async Task A_configured_publisher_gets_the_handlers()
     {
         static string[] Handlers(string outcome) =>
             [.. outcome[(outcome.IndexOf('[', StringComparison.Ordinal) + 1)..outcome.IndexOf(']', StringComparison.Ordinal)]
                 .Split(", ")
-                .Select(entry => entry[..entry.IndexOf('(', StringComparison.Ordinal)])];
+                .Select(entry => entry.Contains('(', StringComparison.Ordinal) ? entry[..entry.IndexOf('(', StringComparison.Ordinal)] : entry)
+                .Where(name => name.EndsWith("Logger", StringComparison.Ordinal)
+                    || name.EndsWith("Pager", StringComparison.Ordinal)
+                    || name.EndsWith("Auditor", StringComparison.Ordinal)
+                    || name.EndsWith("Watcher", StringComparison.Ordinal))];
 
         string[] normal = Handlers(await Invoke(OnCapar, "PublishToSeveralHandlers"));
         string[] reversed = Handlers(await Invoke(OnCapar, "PublishWithACustomPublisher"));
 
         normal.Length.ShouldBeGreaterThan(1);
         reversed.ShouldBe([.. normal.Reverse()]);
+        (await Invoke(OnCapar, "PublishWithACustomPublisherAndNoHandlers")).ShouldContain("ReversePublisher(Quiet, 0)");
     }
 
     private static Task<string> Invoke(Type scenarios, string name) =>

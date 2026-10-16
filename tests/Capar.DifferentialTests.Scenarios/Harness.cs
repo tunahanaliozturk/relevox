@@ -39,12 +39,13 @@ public static partial class Library
     public static ServiceProvider Build(ServiceLifetime lifetime = ServiceLifetime.Transient, Profile profile = Profile.Plain)
     {
         ServiceCollection services = new();
-        services.AddSingleton<Trace>();
-        Register(services, lifetime, profile);
+        Trace trace = new();
+        services.AddSingleton(trace);
+        Register(services, lifetime, profile, trace);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
-    static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile);
+    static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile, Trace trace);
 }
 
 /// <summary>Which optional parts of each library a scenario registers.</summary>
@@ -69,6 +70,12 @@ public enum Profile
 
     /// <summary>Handlers, with notifications published through ReversePublisher, set as an instance.</summary>
     ReversePublisher,
+
+    /// <summary>Handlers, with ReversePublisher registered with the container after the library's call.</summary>
+    LatePublisher,
+
+    /// <summary>Handlers plus one closed behaviour that is not async, and nothing else.</summary>
+    SyncBehavior,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>

@@ -60,11 +60,12 @@ internal sealed record MessageShape(string Type, string Syntax, bool IsValueType
 /// Empty for everything else.
 /// </param>
 /// <param name="IsPublic">Visible outside its own assembly, which matters for CPR0005.</param>
+/// <param name="ResponseChain">
+/// For post-processors: the response type, its base types and its interfaces, plain names. Empty otherwise.
+/// </param>
 /// <param name="Order">
-/// Where the handler is declared: the syntax tree's index in the compilation, then the position in it.
-/// MediatR registers what its scan finds in metadata order, which is declaration order, and that registration
-/// order is the order notification handlers, processors and exception handlers run in. Types from referenced
-/// assemblies sort after source, by name.
+/// Where the handler is declared. MediatR registers what its scan finds in metadata order, and that
+/// registration order is the order notification handlers, processors and exception handlers run in.
 /// </param>
 /// <param name="Location">Where the handler is declared, when it is in source.</param>
 internal sealed record HandlerModel(
@@ -74,20 +75,24 @@ internal sealed record HandlerModel(
     string? ResponseType,
     string? ResponseSyntax,
     EquatableArray<string> ExceptionChain,
+    EquatableArray<string> ResponseChain,
     bool IsPublic,
     DeclarationOrder Order,
     LocationModel? Location);
 
-/// <summary>Where a type is declared, as a sort key.</summary>
-/// <param name="Tree">The syntax tree's index in the compilation, or int.MaxValue for metadata.</param>
-/// <param name="Position">The declaration's start within that tree.</param>
-internal sealed record DeclarationOrder(int Tree, int Position) : System.IComparable<DeclarationOrder>
-{
-    public static DeclarationOrder Metadata { get; } = new(int.MaxValue, 0);
-
-    public int CompareTo(DeclarationOrder? other) =>
-        other is null ? 1 : Tree != other.Tree ? Tree.CompareTo(other.Tree) : Position.CompareTo(other.Position);
-}
+/// <summary>Where a type is declared, as the parts of a sort key that reproduces metadata order.</summary>
+/// <param name="Assembly">0 for this compilation; for a reference, one more than its position among the references.</param>
+/// <param name="Namespace">For source, the containing namespace, empty for the global one.</param>
+/// <param name="Tree">For source, the syntax tree's index in the compilation.</param>
+/// <param name="Position">For source, the declaration's start in its tree; for metadata, its TypeDef token.</param>
+/// <remarks>
+/// Metadata order for a referenced assembly is simply its TypeDef table, which the token gives. For this
+/// compilation it has to be reconstructed: the compiler emits a namespace's own types, in declaration order,
+/// before the types of its child namespaces. The differential tests established that with a handler in a
+/// nested namespace declared in the first file, which still runs last. The planner does the reconstruction,
+/// because it needs every handler's namespace to order sibling namespaces.
+/// </remarks>
+internal sealed record DeclarationOrder(int Assembly, string Namespace, int Tree, int Position);
 
 /// <summary>Which contract a message implements.</summary>
 internal enum MessageKind

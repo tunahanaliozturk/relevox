@@ -170,6 +170,56 @@ public sealed class EdgeCaseTests
         registration.ShouldContain("ExceptionCatalog<global::Refund, global::Capar.Unit>");
     }
 
+    [Fact]
+    public void A_generic_request_with_a_nullable_argument_and_an_exception_handler_compiles_strictly()
+    {
+        GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
+            using Capar.Pipeline;
+
+            public sealed record Lookup<T>(T Key) : IRequest<string?>;
+            public sealed class LookupHandler : IRequestHandler<Lookup<string?>, string?>
+            {
+                public Task<string?> Handle(Lookup<string?> request, CancellationToken cancellationToken) => Task.FromResult(request.Key);
+            }
+
+            public sealed class LookupFailed : IRequestExceptionHandler<Lookup<string?>, string?, Exception>
+            {
+                public Task Handle(Lookup<string?> request, Exception exception, RequestExceptionHandlerState<string?> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Handlers_from_a_referenced_project_run_in_its_metadata_order()
+    {
+        // Declared Z first and A second, so name order and metadata order disagree.
+        MetadataReference orders = GeneratorHarness.Library("Shop.Orders", Usings + """
+            namespace Shop.Orders;
+            public sealed record Placed : INotification;
+            public sealed class ZAudit : INotificationHandler<Placed>
+            {
+                public Task Handle(Placed notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class AMail : INotificationHandler<Placed>
+            {
+                public Task Handle(Placed notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        GeneratorRun host = GeneratorHarness.Run("Shop.Api", [orders], "public static class Program;");
+
+        // Handler fields are numbered by name, AMail 0 and ZAudit 1; the publish order is what matters.
+        string mediator = host.Mediator;
+        string publish = mediator[mediator.IndexOf("Publish(global::Shop.Orders.Placed notification", StringComparison.Ordinal)..];
+        publish = publish[..publish.IndexOf("return ", StringComparison.Ordinal)];
+
+        publish.ShouldContain("handler0 = Handler1();");
+        publish.ShouldContain("handler1 = Handler0();");
+        host.CompilationErrors.ShouldBeEmpty();
+    }
+
     [Theory]
     [InlineData("public static class Nothing;")]
     [InlineData("public sealed record Lonely : INotification;")]

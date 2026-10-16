@@ -40,12 +40,13 @@ public sealed class RequestExceptionProcessorBehavior<TRequest, TResponse> : IPi
             RequestExceptionHandlerState<TResponse> state = new();
             await _catalog.Handle(_services, request, exception, state, cancellationToken).ConfigureAwait(false);
 
-            if (!state.Handled)
+            // Handled with no response is not handled, as in MediatR: SetHandled(null) rethrows.
+            if (!state.Handled || state.Response is null)
             {
                 throw;
             }
 
-            return state.Response!;
+            return state.Response;
         }
     }
 }

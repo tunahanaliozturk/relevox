@@ -61,10 +61,12 @@ returned task instead.
 **A request whose only handler is for its base type has no handler.** Sending a `DerivedQuery` when only
 `IRequestHandler<BaseQuery, T>` exists throws `InvalidOperationException`, in both.
 
-**Handlers run in declaration order.** MediatR registers what its scan finds in metadata order, which is the
-order types are declared in, and that is the order notification handlers, processors and exception handlers
-run in. Çapar records where each handler is declared and registers in the same order, so every trace in the
-differential tests is compared in order, not as a set.
+**Handlers run in metadata order.** MediatR registers what its scan finds in metadata order, and that is the
+order notification handlers, processors and exception handlers run in. For a referenced project that is its
+TypeDef table, which Çapar reads directly. For the project being built it is what the compiler will emit: a
+namespace's own types in declaration order, then its child namespaces, each in the order it was first
+declared. A handler in a nested namespace therefore runs after the handlers of its parent namespace even when
+its file comes first. Every trace in the differential tests is compared in order, not as a set.
 
 ## The pipeline
 
@@ -83,17 +85,21 @@ found by scanning, or registered with the container directly, therefore never ru
 exactly the same, so no processor starts running on the day you migrate. If yours never ran under MediatR,
 this is why.
 
-**Pre-processors run before every behaviour, post-processors after all of them**, because the processor
-behaviours are registered ahead of anything from the options.
+**The built-in behaviours sit outside everything else, exception behaviours outermost.** The order is the
+exception behaviours (actions and handlers, in the order the strategy gives), then the pre-processor
+behaviour, then the post-processor behaviour, then whatever the options and the container add. So an exception
+handler catches what a pre-processor throws, and when a handler's exception is handled the post-processors do
+not run.
 
 **A processor, exception handler or exception action written for a base type or interface reaches a request
 only when something else names that request exactly.** The same rule as catch-all notification handlers,
 for the same reason.
 
-**Exception handlers are tried from the thrown type up to `Exception`**, in declaration order at each step,
+**Exception handlers are tried from the thrown type up to `Exception`**, in metadata order at each step,
 until one calls `SetHandled`. A handler for `Exception` also runs at the step of any more specific exception
 type that some other handler names. A handler is tried once, at the most specific step that reaches it.
-Unhandled exceptions are rethrown with their original stack.
+Unhandled exceptions are rethrown with their original stack, and so is one "handled" with a null response:
+`SetHandled(null)` does not count.
 
 **Exception actions see only unhandled exceptions by default**, and every exception with
 `RequestExceptionActionProcessorStrategy.ApplyForAllExceptions`.
@@ -103,13 +109,20 @@ In MediatR those behaviours apply to every request, and they are `async`, so a h
 its first `await` faults the returned task instead of throwing out of `Send`, for every request in the
 application. Çapar leaves a behaviour with nothing to do out of the pipeline, for speed, and turns a
 synchronous throw into a faulted task in its place, which costs a try block and nothing on the success
-path. A request with no handler faults the task in that case too.
+path, whether or not other behaviours are left. A request with no handler faults the task in that case too,
+and when an open generic behaviour is registered, at any point.
 
 **Stream behaviours are resolved when enumeration starts**, and their `next` takes no token.
 
-**`TaskWhenAllPublisher` and custom publishers receive one executor per handler**, in declaration order.
-With the default `ForeachAwaitPublisher`, Çapar awaits the handlers itself without building executors;
-the behaviour is the same.
+**`TaskWhenAllPublisher` and custom publishers receive one executor per handler**, in metadata order, and
+are called for a notification with no handlers too, with an empty list. With the default
+`ForeachAwaitPublisher`, Çapar awaits the handlers itself without building executors; the behaviour is the
+same. Which publisher is in force is read from the container on first use, so one registered after
+`AddCapar` wins, as in MediatR.
+
+**The configuration has every member of MediatR's** that still means something without assembly scanning, so
+the lambda passed to `AddMediatR` compiles against `AddCapar` once the scanning calls are removed. A test
+compares the two types member by member.
 
 ## Different on purpose
 

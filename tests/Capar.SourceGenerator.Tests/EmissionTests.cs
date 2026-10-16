@@ -77,9 +77,11 @@ public sealed class EmissionTests
     public void The_typed_path_returns_the_handler_task_without_awaiting_it()
     {
         string mediator = GeneratorHarness.Run(Everything).Mediator;
-        string send = Between(mediator, "Send(global::Shop.Orders.PlaceOrder request", "}");
+        string send = Between(mediator, "Send(global::Shop.Orders.PlaceOrder request", "catch");
 
-        send.ShouldContain("return ((global::Capar.IRequestHandler<global::Shop.Orders.PlaceOrder, int>)Handler");
+        // A byte read decides the direct path, and the direct path hands back the handler's own task.
+        send.ShouldContain("_pipelines.TryDirect(");
+        send.ShouldContain("behaviors is null ? ((global::Capar.IRequestHandler<global::Shop.Orders.PlaceOrder, int>)Handler");
         send.ShouldNotContain("await");
     }
 

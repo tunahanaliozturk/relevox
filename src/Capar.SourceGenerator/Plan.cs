@@ -21,11 +21,13 @@ internal sealed record ServiceRegistration(string ServiceType, string Implementa
 /// </summary>
 /// <param name="Request">The request type.</param>
 /// <param name="ResponseType">Plain response type; <c>global::Capar.Unit</c> for a request without one.</param>
+/// <param name="ResponseSyntax">The same, with nullable annotations, for the generated class.</param>
 /// <param name="HandledExceptions">Exception types with handlers, plain names.</param>
 /// <param name="ActionExceptions">Exception types with actions, plain names.</param>
 internal sealed record ExceptionCatalogEntry(
     MessageShape Request,
     string ResponseType,
+    string ResponseSyntax,
     EquatableArray<string> HandledExceptions,
     EquatableArray<string> ActionExceptions);
 
@@ -67,6 +69,7 @@ internal static class Planner
     public static EmitPlan Build(string assemblyName, DiscoveryModel discovery)
     {
         List<DiagnosticEntry> diagnostics = [];
+        MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order));
 
         // The same message can arrive more than once: from a partial declaration, from a notification handler
         // naming a closed generic, or from source and a reference at once. The source copy wins because it
@@ -117,7 +120,7 @@ internal static class Planner
         [
             .. discovery.Handlers
                 .Where(static handler => handler.Kind == HandlerKind.Notification)
-                .OrderBy(static handler => handler.Order)
+                .OrderBy(static handler => handler.Order, order)
                 .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal)
                 .ThenBy(static handler => handler.Message.Type, StringComparer.Ordinal),
         ];
@@ -177,7 +180,7 @@ internal static class Planner
         [
             .. discovery.Handlers
                 .Where(static handler => handler.Kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor)
-                .OrderBy(static handler => handler.Order)
+                .OrderBy(static handler => handler.Order, order)
                 .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal),
         ];
 
@@ -197,10 +200,18 @@ internal static class Planner
             HashSet<string> bases = new(request.AssignableTo.Where(type => type != named), StringComparer.Ordinal);
             foreach (HandlerModel processor in processorHandlers.Where(processor => bases.Contains(processor.Message.Type)))
             {
-                bool namesThisKind = processorHandlers.Any(other => other.Kind == processor.Kind && other.Message.Type == named);
-                if (namesThisKind)
+                // A post-processor is contravariant in the response as well: one for object reaches a request
+                // whose named closing has a string response, registered under that closing.
+                foreach (HandlerModel naming in processorHandlers.Where(other => other.Kind == processor.Kind && other.Message.Type == named))
                 {
-                    processors.Add(new ServiceRegistration(ProcessorService(processor, named), processor.HandlerType));
+                    if (processor.Kind == HandlerKind.PreProcessor)
+                    {
+                        processors.Add(new ServiceRegistration(ProcessorService(processor, named), processor.HandlerType));
+                    }
+                    else if (naming.ResponseChain.Contains(processor.ResponseType!))
+                    {
+                        processors.Add(new ServiceRegistration(ProcessorService(naming, named), processor.HandlerType));
+                    }
                 }
             }
         }
@@ -215,7 +226,7 @@ internal static class Planner
             .OrderBy(static registration => registration.ServiceType, StringComparer.Ordinal)
             .ThenBy(registration => declared[registration.ImplementationType])];
 
-        (ServiceRegistration[] exceptionRegistrations, ExceptionCatalogEntry[] catalogs) = PlanExceptions(discovery, messages, requests);
+        (ServiceRegistration[] exceptionRegistrations, ExceptionCatalogEntry[] catalogs) = PlanExceptions(discovery, messages, requests, order);
 
         foreach (SkippedModel skipped in discovery.Skipped
             .OrderBy(static skipped => skipped.Rule, StringComparer.Ordinal)
@@ -276,20 +287,21 @@ internal static class Planner
     private static (ServiceRegistration[] Registrations, ExceptionCatalogEntry[] Catalogs) PlanExceptions(
         DiscoveryModel discovery,
         Dictionary<string, MessageModel> messages,
-        List<RequestEntry> requests)
+        List<RequestEntry> requests,
+        MetadataOrder order)
     {
         HandlerModel[] handlers =
         [
             .. discovery.Handlers
                 .Where(static handler => handler.Kind == HandlerKind.ExceptionHandler)
-                .OrderBy(static handler => handler.Order)
+                .OrderBy(static handler => handler.Order, order)
                 .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal),
         ];
         HandlerModel[] actions =
         [
             .. discovery.Handlers
                 .Where(static handler => handler.Kind == HandlerKind.ExceptionAction)
-                .OrderBy(static handler => handler.Order)
+                .OrderBy(static handler => handler.Order, order)
                 .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal),
         ];
         Dictionary<string, int> declared = handlers.Concat(actions)
@@ -379,11 +391,99 @@ internal static class Planner
 
             if (handled.Length > 0 || acted.Length > 0)
             {
-                catalogs.Add(new ExceptionCatalogEntry(request.Request, response, handled.ToEquatableArray(), acted.ToEquatableArray()));
+                catalogs.Add(new ExceptionCatalogEntry(request.Request, response, request.ResponseSyntax ?? "global::Capar.Unit", handled.ToEquatableArray(), acted.ToEquatableArray()));
             }
         }
 
         return (registrations, [.. catalogs]);
+    }
+
+    /// <summary>
+    /// Orders handlers the way they appear in metadata, which is the order MediatR's scan registers them in.
+    /// </summary>
+    /// <remarks>
+    /// A referenced assembly's order is its TypeDef table, carried in <see cref="DeclarationOrder.Position"/>.
+    /// For this compilation the compiler emits a namespace's own types, in declaration order, before any of its
+    /// child namespaces, and child namespaces in the order they were first declared. Without the declarations of
+    /// namespaces that hold no handler, "first declared" is approximated by the earliest handler inside each one.
+    /// </remarks>
+    private sealed class MetadataOrder : IComparer<DeclarationOrder>
+    {
+        private readonly Dictionary<string, (int Tree, int Position)> _firstInNamespace = new(StringComparer.Ordinal);
+
+        public MetadataOrder(IEnumerable<DeclarationOrder> orders)
+        {
+            foreach (DeclarationOrder order in orders.Where(static order => order.Assembly == 0))
+            {
+                // Every enclosing namespace is "first declared" no later than anything inside it.
+                string ns = order.Namespace;
+                while (true)
+                {
+                    (int, int) here = (order.Tree, order.Position);
+                    if (!_firstInNamespace.TryGetValue(ns, out (int Tree, int Position) known) || Compare(here, known) < 0)
+                    {
+                        _firstInNamespace[ns] = here;
+                    }
+
+                    if (ns.Length == 0)
+                    {
+                        break;
+                    }
+
+                    int dot = ns.LastIndexOf('.');
+                    ns = dot < 0 ? string.Empty : ns.Substring(0, dot);
+                }
+            }
+        }
+
+        public int Compare(DeclarationOrder? x, DeclarationOrder? y)
+        {
+            if (x is null || y is null)
+            {
+                return x is null ? (y is null ? 0 : -1) : 1;
+            }
+
+            if (x.Assembly != y.Assembly)
+            {
+                return x.Assembly.CompareTo(y.Assembly);
+            }
+
+            if (x.Assembly != 0)
+            {
+                return x.Position.CompareTo(y.Position);
+            }
+
+            if (x.Namespace == y.Namespace)
+            {
+                return Compare((x.Tree, x.Position), (y.Tree, y.Position));
+            }
+
+            string[] left = x.Namespace.Length == 0 ? [] : x.Namespace.Split('.');
+            string[] right = y.Namespace.Length == 0 ? [] : y.Namespace.Split('.');
+            int common = 0;
+            while (common < left.Length && common < right.Length && left[common] == right[common])
+            {
+                common++;
+            }
+
+            // A namespace's own types come before anything in its child namespaces.
+            if (common == left.Length)
+            {
+                return -1;
+            }
+
+            if (common == right.Length)
+            {
+                return 1;
+            }
+
+            string leftChild = string.Join(".", left, 0, common + 1);
+            string rightChild = string.Join(".", right, 0, common + 1);
+            return Compare(_firstInNamespace[leftChild], _firstInNamespace[rightChild]);
+        }
+
+        private static int Compare((int Tree, int Position) x, (int Tree, int Position) y) =>
+            x.Tree != y.Tree ? x.Tree.CompareTo(y.Tree) : x.Position.CompareTo(y.Position);
     }
 
     private static string ProcessorService(HandlerModel processor, string requestType) =>
