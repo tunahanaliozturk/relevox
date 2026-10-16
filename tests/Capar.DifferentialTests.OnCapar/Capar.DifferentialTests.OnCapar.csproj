@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lets the tests reach the generated mediator, which is internal, to check the typed overloads directly. -->
+    <InternalsVisibleTo Include="Capar.DifferentialTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 

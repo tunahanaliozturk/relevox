@@ -4,6 +4,11 @@ namespace Capar.SourceGenerator;
 // important property these types have. A model holding an ISymbol, a Compilation or a Location keeps the
 // whole compilation alive and never compares equal across runs, so the incremental cache silently stops
 // working. There is a test that asserts the cache is actually hit.
+//
+// Type names come in two spellings. The plain one (`global::Ns.Wrapper<string>`) identifies a type and is
+// what typeof accepts. The annotated one (`global::Ns.Wrapper<string?>`) keeps nullable annotations and is
+// what goes into signatures and casts, so a handler returning `Task<string?>` is not reported to callers as
+// returning `Task<string>`.
 
 /// <summary>Which contract a handler implements.</summary>
 internal enum HandlerKind
@@ -21,19 +26,30 @@ internal enum HandlerKind
     Stream,
 }
 
+/// <summary>Facts about a message type that decide how it can be dispatched.</summary>
+/// <param name="Type">Plain fully qualified name, for typeof and identity.</param>
+/// <param name="Syntax">Annotated fully qualified name, for signatures and casts.</param>
+/// <param name="IsValueType">A struct cannot be null and must not be boxed to check.</param>
+/// <param name="IsSealed">
+/// A sealed type, or a struct. Anything else can arrive as a derived type at run time, and a typed overload
+/// has to check before it trusts the static type.
+/// </param>
+/// <param name="IsAbstract">An abstract class or an interface, which can never be the runtime type.</param>
+internal sealed record MessageShape(string Type, string Syntax, bool IsValueType, bool IsSealed, bool IsAbstract);
+
 /// <summary>One handler contract one class implements. A class handling two messages yields two.</summary>
 /// <param name="Kind">The contract.</param>
 /// <param name="HandlerType">Fully qualified handler class.</param>
-/// <param name="MessageType">Fully qualified request or notification type it handles.</param>
-/// <param name="ResponseType">Fully qualified response or stream item type, or null when there is none.</param>
-/// <param name="MessageIsValueType">True when the message is a struct, so a null check would box it.</param>
+/// <param name="Message">The request or notification type it handles.</param>
+/// <param name="ResponseSyntax">Annotated response or stream item type, or null when there is none.</param>
+/// <param name="IsPublic">Visible outside its own assembly, which matters for CPR0005.</param>
 /// <param name="Location">Where the handler is declared, when it is in source.</param>
 internal sealed record HandlerModel(
     HandlerKind Kind,
     string HandlerType,
-    string MessageType,
-    string? ResponseType,
-    bool MessageIsValueType,
+    MessageShape Message,
+    string? ResponseSyntax,
+    bool IsPublic,
     LocationModel? Location);
 
 /// <summary>Which contract a message implements.</summary>
@@ -51,44 +67,46 @@ internal enum MessageKind
 
 /// <summary>A concrete message type: something that can actually be sent or published.</summary>
 /// <param name="Kind">What kind of message.</param>
-/// <param name="MessageType">Fully qualified type.</param>
-/// <param name="IsValueType">True for a struct.</param>
+/// <param name="Shape">Its name and dispatch facts.</param>
 /// <param name="AssignableTo">
-/// The type itself, every base class and every interface, fully qualified. A notification handler for any of
-/// these receives this notification, which is how a handler for a base type or for <c>INotification</c> sees
-/// everything derived from it.
+/// The type itself, every base class and every interface, plain names. A notification handler for any of
+/// these receives this notification, which is how a handler for a base type sees what derives from it. For
+/// a struct it is the struct alone: variance does not apply to value types, so the container would not hand
+/// an <c>INotificationHandler&lt;INotification&gt;</c> to a struct notification either.
 /// </param>
 /// <param name="FromSource">Declared in this compilation, so a missing handler is worth reporting.</param>
 /// <param name="Location">Where it is declared, when it is in source.</param>
 internal sealed record MessageModel(
     MessageKind Kind,
-    string MessageType,
-    bool IsValueType,
+    MessageShape Shape,
     EquatableArray<string> AssignableTo,
     bool FromSource,
     LocationModel? Location);
 
 /// <summary>A type that looked like a handler and was left out, with the reason.</summary>
 /// <param name="Rule">The diagnostic to report.</param>
-/// <param name="TypeName">The type left out.</param>
-/// <param name="Detail">Extra text for the message, such as the assembly it lives in.</param>
+/// <param name="Arguments">The message arguments.</param>
 /// <param name="Location">Where it is declared, when it is in source.</param>
 internal sealed record SkippedModel(
     string Rule,
-    string TypeName,
-    string Detail,
+    EquatableArray<string> Arguments,
     LocationModel? Location);
 
 /// <summary>What one declaration or one referenced assembly contributed.</summary>
 /// <param name="Handlers">Handler contracts found.</param>
 /// <param name="Messages">Concrete messages found.</param>
 /// <param name="Skipped">Types left out, with reasons.</param>
+/// <param name="Experimental">
+/// Diagnostic ids from <c>[Experimental]</c> on any type the generated code names. The generated files
+/// suppress exactly these, so using an experimental handler does not break a build that already opted in.
+/// </param>
 internal sealed record DiscoveryModel(
     EquatableArray<HandlerModel> Handlers,
     EquatableArray<MessageModel> Messages,
-    EquatableArray<SkippedModel> Skipped)
+    EquatableArray<SkippedModel> Skipped,
+    EquatableArray<string> Experimental)
 {
-    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0;
+    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Experimental.Length == 0;
 }
 
 /// <summary>What the referenced assemblies contributed, plus the facts taken from the compilation.</summary>

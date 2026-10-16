@@ -16,6 +16,18 @@ namespace Capar.SourceGenerator;
 internal static class Discovery
 {
     private const string ContractsNamespace = "Capar";
+    private const string ContractsAssembly = "Capar.Contracts";
+
+    private static readonly SymbolDisplayFormat PlainFormat = SymbolDisplayFormat.FullyQualifiedFormat;
+
+    private static readonly SymbolDisplayFormat AnnotatedFormat = SymbolDisplayFormat.FullyQualifiedFormat
+        .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+    public static DiscoveryModel Empty { get; } = new(
+        EquatableArray<HandlerModel>.Empty,
+        EquatableArray<MessageModel>.Empty,
+        EquatableArray<SkippedModel>.Empty,
+        EquatableArray<string>.Empty);
 
     public static DiscoveryModel Classify(
         INamedTypeSymbol symbol,
@@ -25,23 +37,24 @@ internal static class Discovery
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        List<HandlerModel> handlers = [];
-        List<MessageModel> messages = [];
-        List<SkippedModel> skipped = [];
-
         if (symbol.IsStatic || symbol.TypeKind is not (TypeKind.Class or TypeKind.Struct))
         {
             return Empty;
         }
 
+        List<HandlerModel> handlers = [];
+        List<MessageModel> messages = [];
+        List<SkippedModel> skipped = [];
+        HashSet<string> experimental = [];
+
         LocationModel? location = fromSource ? ToLocationModel(symbol) : null;
         bool concrete = !symbol.IsAbstract;
-        bool generic = symbol.IsGenericType;
         bool accessible = IsAccessible(symbol, compilation);
 
         foreach (INamedTypeSymbol contract in symbol.AllInterfaces)
         {
-            if (contract.ContainingNamespace?.ToDisplayString() != ContractsNamespace)
+            if (contract.ContainingNamespace?.ToDisplayString() != ContractsNamespace
+                || contract.ContainingAssembly?.Name != ContractsAssembly)
             {
                 continue;
             }
@@ -61,13 +74,13 @@ internal static class Discovery
                     AddHandler(HandlerKind.Stream, contract.TypeArguments[0], contract.TypeArguments[1]);
                     break;
                 case "IRequest`1" or "IRequest":
-                    AddMessage(MessageKind.Request);
+                    AddMessage(symbol, MessageKind.Request, location, fromSource);
                     break;
                 case "INotification":
-                    AddMessage(MessageKind.Notification);
+                    AddMessage(symbol, MessageKind.Notification, location, fromSource);
                     break;
                 case "IStreamRequest`1":
-                    AddMessage(MessageKind.Stream);
+                    AddMessage(symbol, MessageKind.Stream, location, fromSource);
                     break;
                 default:
                     break;
@@ -79,7 +92,8 @@ internal static class Discovery
             : new DiscoveryModel(
                 handlers.Distinct().ToEquatableArray(),
                 messages.Distinct().ToEquatableArray(),
-                skipped.Distinct().ToEquatableArray());
+                skipped.Distinct().ToEquatableArray(),
+                experimental.OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
 
         void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response)
         {
@@ -88,89 +102,134 @@ internal static class Discovery
                 return;
             }
 
-            if (generic)
+            if (symbol.IsGenericType)
             {
                 if (fromSource)
                 {
-                    skipped.Add(new SkippedModel(Diagnostics.GenericHandler.Id, Display(symbol), string.Empty, location));
+                    skipped.Add(Skip(Diagnostics.GenericHandler.Id, location, Display(symbol)));
                 }
 
                 return;
             }
 
-            if (!accessible
-                || !IsAccessible(message, compilation)
-                || (response is not null && !IsAccessible(response, compilation)))
+            ITypeSymbol[] named = response is null ? [symbol, message] : [symbol, message, response];
+
+            if (!accessible || named.Any(type => !IsAccessible(type, compilation)))
             {
                 string reason = fromSource
                     ? "is not accessible from the rest of this assembly"
-                    : $"is not accessible outside '{symbol.ContainingAssembly?.Name}'";
-                skipped.Add(new SkippedModel(Diagnostics.Inaccessible.Id, Display(symbol), reason, location));
+                    : $"is internal to '{symbol.ContainingAssembly?.Name}'";
+                skipped.Add(Skip(Diagnostics.Inaccessible.Id, location, Display(symbol), reason));
                 return;
+            }
+
+            if (named.Any(IsObsoleteAsError))
+            {
+                skipped.Add(Skip(Diagnostics.Inaccessible.Id, location, Display(symbol), "or a type it handles is marked [Obsolete] as an error"));
+                return;
+            }
+
+            foreach (ITypeSymbol type in named)
+            {
+                CollectExperimental(type, experimental);
             }
 
             handlers.Add(new HandlerModel(
                 kind,
-                FullName(symbol),
-                FullName(message),
-                response is null ? null : FullName(response),
-                message.IsValueType,
+                Plain(symbol),
+                Shape(message),
+                response is null ? null : AnnotatedName(response),
+                symbol.DeclaredAccessibility == Accessibility.Public,
                 location));
+
+            // A notification handler for a closed generic type, such as INotificationHandler<Created<Order>>,
+            // names a message no declaration produces: Created<T> itself is generic and skipped below. Without
+            // this, Created<Order> would get no dispatch entry and publishing it would silently reach nothing.
+            if (kind == HandlerKind.Notification
+                && message is INamedTypeSymbol { IsGenericType: true, IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } constructed)
+            {
+                AddMessage(constructed, MessageKind.Notification, null, declaredHere: false);
+            }
         }
 
-        void AddMessage(MessageKind kind)
+        void AddMessage(INamedTypeSymbol message, MessageKind kind, LocationModel? at, bool declaredHere)
         {
             // Only types that can actually be instantiated and sent get a dispatch entry. An abstract base or
-            // an interface still matters for notifications, through the AssignableTo list of each concrete
-            // type that derives from it.
-            if (!concrete || generic || !accessible)
+            // an interface still matters for notifications, through the AssignableTo list of each concrete type
+            // that derives from it. An open generic is reached through its closed forms, which handlers name.
+            if (message.IsAbstract || message.IsUnboundGenericType || ContainsTypeParameters(message) || !IsAccessible(message, compilation))
             {
                 return;
             }
 
-            messages.Add(new MessageModel(
-                kind,
-                FullName(symbol),
-                symbol.IsValueType,
-                AssignableTo(symbol),
-                fromSource,
-                location));
+            CollectExperimental(message, experimental);
+            messages.Add(new MessageModel(kind, Shape(message), AssignableTo(message), declaredHere, at));
         }
     }
-
-    public static DiscoveryModel Empty { get; } = new(
-        EquatableArray<HandlerModel>.Empty,
-        EquatableArray<MessageModel>.Empty,
-        EquatableArray<SkippedModel>.Empty);
 
     /// <summary>
     /// Walks the referenced assemblies that can contain handlers.
     /// </summary>
     /// <remarks>
-    /// Only assemblies that reference Capar.Contracts can declare a handler or a message, so everything else,
-    /// the framework included, is skipped without being opened. That keeps the walk proportional to the
-    /// user's own projects rather than to the whole dependency graph.
+    /// <para>
+    /// Only assemblies that can see Capar.Contracts, directly or through another reference, can declare a
+    /// handler, so everything else, the framework included, is skipped without being opened. The check is
+    /// transitive because the compiler only records a reference to an assembly whose tokens are used: a
+    /// handler deriving from a base handler in another project may carry no reference to the contracts at all.
+    /// </para>
+    /// <para>
+    /// An assembly with its own generated mediator owns its handlers, so they are left to it. That is what lets
+    /// a library use Çapar internally without its handlers leaking into every application that references it.
+    /// Projects whose handlers belong to the application should reference Capar.Contracts, not Capar.
+    /// </para>
     /// </remarks>
     public static DiscoveryModel ScanReferences(Compilation compilation, CancellationToken cancellationToken)
     {
         List<DiscoveryModel> found = [];
+        Dictionary<IAssemblySymbol, bool> reachesContracts = new(SymbolEqualityComparer.Default);
 
         foreach (IAssemblySymbol assembly in compilation.SourceModule.ReferencedAssemblySymbols)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (assembly.Name == "Capar.Contracts" || !ReferencesContracts(assembly))
+            if (assembly.Name is ContractsAssembly or "Capar" || !ReachesContracts(assembly, reachesContracts))
             {
                 continue;
             }
 
+            List<DiscoveryModel> parts = [];
+            bool ownsMediator = false;
             foreach (INamedTypeSymbol type in AllTypes(assembly.GlobalNamespace))
             {
+                ownsMediator |= IsGeneratedMediator(type);
                 DiscoveryModel model = Classify(type, compilation, fromSource: false, cancellationToken);
                 if (!model.IsEmpty)
                 {
-                    found.Add(model);
+                    parts.Add(model);
                 }
+            }
+
+            if (!ownsMediator)
+            {
+                found.AddRange(parts);
+                continue;
+            }
+
+            string[] shared =
+            [
+                .. parts.SelectMany(static part => part.Handlers)
+                    .Where(static handler => handler.IsPublic)
+                    .Select(static handler => Planner.Trim(handler.HandlerType))
+                    .Distinct()
+                    .OrderBy(static name => name, System.StringComparer.Ordinal),
+            ];
+
+            if (shared.Length > 0)
+            {
+                found.Add(Empty with
+                {
+                    Skipped = new[] { Skip(Diagnostics.OwnMediator.Id, null, assembly.Name, string.Join(", ", shared.Take(3)) + (shared.Length > 3 ? ", ..." : string.Empty)) }.ToEquatableArray(),
+                });
             }
         }
 
@@ -183,12 +242,32 @@ internal static class Discovery
         return new DiscoveryModel(
             list.SelectMany(static part => part.Handlers).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Messages).Distinct().ToEquatableArray(),
-            list.SelectMany(static part => part.Skipped).Distinct().ToEquatableArray());
+            list.SelectMany(static part => part.Skipped).Distinct().ToEquatableArray(),
+            list.SelectMany(static part => part.Experimental).Distinct().OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
     }
 
-    private static bool ReferencesContracts(IAssemblySymbol assembly) =>
-        assembly.Modules.Any(static module =>
-            module.ReferencedAssemblies.Any(static identity => identity.Name == "Capar.Contracts"));
+    private static bool ReachesContracts(IAssemblySymbol assembly, Dictionary<IAssemblySymbol, bool> memo)
+    {
+        if (memo.TryGetValue(assembly, out bool known))
+        {
+            return known;
+        }
+
+        // Guards against reference cycles, which metadata allows: a cycle that has not found the contracts
+        // yet is treated as not reaching them, and the real answer is filled in on the way back out.
+        memo[assembly] = false;
+        bool reaches = assembly.Name == ContractsAssembly
+            || assembly.Modules.Any(module => module.ReferencedAssemblySymbols.Any(referenced => ReachesContracts(referenced, memo)));
+        memo[assembly] = reaches;
+        return reaches;
+    }
+
+    private static bool IsGeneratedMediator(INamedTypeSymbol type) =>
+        type.Name == "CaparMediator"
+        && type.GetAttributes().Any(static attribute =>
+            attribute.AttributeClass?.ToDisplayString() == "System.CodeDom.Compiler.GeneratedCodeAttribute"
+            && attribute.ConstructorArguments.Length > 0
+            && attribute.ConstructorArguments[0].Value is "Capar");
 
     private static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol root)
     {
@@ -214,25 +293,112 @@ internal static class Discovery
         }
     }
 
-    private static bool IsAccessible(ITypeSymbol type, Compilation compilation) =>
-        type is not INamedTypeSymbol { IsFileLocal: true }
-        && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly);
+    private static MessageShape Shape(ITypeSymbol type) => new(
+        Plain(type),
+        AnnotatedName(type),
+        type.IsValueType,
+        type.IsValueType || type.IsSealed,
+        type.IsAbstract || type.TypeKind == TypeKind.Interface);
+
+    /// <summary>
+    /// Whether generated code in this compilation can name the type: the type itself, every type it is nested
+    /// in, and every type argument.
+    /// </summary>
+    private static bool IsAccessible(ITypeSymbol type, Compilation compilation)
+    {
+        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        {
+            if (current is INamedTypeSymbol { IsFileLocal: true })
+            {
+                return false;
+            }
+
+            if (current is INamedTypeSymbol named && named.TypeArguments.Any(argument => argument.TypeKind != TypeKind.TypeParameter && !IsAccessible(argument, compilation)))
+            {
+                return false;
+            }
+        }
+
+        return type is IArrayTypeSymbol array
+            ? IsAccessible(array.ElementType, compilation)
+            : compilation.IsSymbolAccessibleWithin(type, compilation.Assembly);
+    }
+
+    private static bool ContainsTypeParameters(ITypeSymbol type) =>
+        type.TypeKind == TypeKind.TypeParameter
+        || (type is INamedTypeSymbol named && named.TypeArguments.Any(ContainsTypeParameters));
+
+    private static bool IsObsoleteAsError(ITypeSymbol type)
+    {
+        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        {
+            foreach (AttributeData attribute in current.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString() == "System.ObsoleteAttribute"
+                    && attribute.ConstructorArguments.Length == 2
+                    && attribute.ConstructorArguments[1].Value is true)
+                {
+                    return true;
+                }
+            }
+
+            if (current is INamedTypeSymbol named && named.TypeArguments.Any(IsObsoleteAsError))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void CollectExperimental(ITypeSymbol type, HashSet<string> ids)
+    {
+        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        {
+            foreach (AttributeData attribute in current.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString() == "System.Diagnostics.CodeAnalysis.ExperimentalAttribute"
+                    && attribute.ConstructorArguments.Length > 0
+                    && attribute.ConstructorArguments[0].Value is string id
+                    && id.Length > 0)
+                {
+                    ids.Add(id);
+                }
+            }
+
+            if (current is INamedTypeSymbol named)
+            {
+                foreach (ITypeSymbol argument in named.TypeArguments)
+                {
+                    CollectExperimental(argument, ids);
+                }
+            }
+        }
+    }
 
     private static EquatableArray<string> AssignableTo(INamedTypeSymbol symbol)
     {
-        List<string> names = [];
-
-        for (INamedTypeSymbol? current = symbol; current is not null; current = current.BaseType)
+        if (symbol.IsValueType)
         {
-            names.Add(FullName(current));
+            return new[] { Plain(symbol) }.ToEquatableArray();
         }
 
-        names.AddRange(symbol.AllInterfaces.Select(FullName));
+        List<string> names = [];
+        for (INamedTypeSymbol? current = symbol; current is not null; current = current.BaseType)
+        {
+            names.Add(Plain(current));
+        }
+
+        names.AddRange(symbol.AllInterfaces.Select(static contract => Plain(contract)));
         return names.Distinct().ToEquatableArray();
     }
 
-    private static string FullName(ITypeSymbol symbol) =>
-        symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+    private static SkippedModel Skip(string rule, LocationModel? location, params string[] arguments) =>
+        new(rule, arguments.ToEquatableArray(), location);
+
+    private static string Plain(ITypeSymbol symbol) => symbol.ToDisplayString(PlainFormat);
+
+    private static string AnnotatedName(ITypeSymbol symbol) => symbol.ToDisplayString(AnnotatedFormat);
 
     private static string Display(ITypeSymbol symbol) =>
         symbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);

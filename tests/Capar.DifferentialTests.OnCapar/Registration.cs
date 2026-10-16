@@ -5,5 +5,6 @@ namespace Scenarios;
 
 public static partial class Library
 {
-    static partial void Register(IServiceCollection services) => services.AddCapar();
+    static partial void Register(IServiceCollection services, ServiceLifetime lifetime) =>
+        services.AddCapar(options => options.Lifetime = lifetime);
 }

@@ -33,7 +33,10 @@ public static class Scenarios
         Run.Scenario(async services => await services.GetRequiredService<ISender>().Send((object)new Ring(1)));
 
     public static Task<string> SendObjectThatIsNotARequest() =>
-        Run.Scenario(async services => await services.GetRequiredService<ISender>().Send((object)"not a request"));
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send((object)"not a request")));
+
+    public static Task<string> SendObjectWithoutHandler() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send((object)new Orphan())));
 
     public static Task<string> SendNull() =>
         Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send((IRequest<string>)null!)));
@@ -58,6 +61,24 @@ public static class Scenarios
             int second = await sender.Send(new Stamp());
             return first == second ? "same instance" : "new instance per call";
         });
+
+    public static Task<string> ScopedHandlerIsSharedWithinAScope() =>
+        Run.Scenario(
+            async services =>
+            {
+                ISender sender = services.GetRequiredService<ISender>();
+                return await sender.Send(new Stamp()) == await sender.Send(new Stamp()) ? "same instance" : "new instance per call";
+            },
+            lifetime: ServiceLifetime.Scoped);
+
+    public static Task<string> SingletonHandlerIsShared() =>
+        Run.Scenario(
+            async services =>
+            {
+                ISender sender = services.GetRequiredService<ISender>();
+                return await sender.Send(new Stamp()) == await sender.Send(new Stamp()) ? "same instance" : "new instance per call";
+            },
+            lifetime: ServiceLifetime.Singleton);
 
     public static Task<string> CancellationTokenReachesHandler() =>
         Run.Scenario(async services =>
@@ -95,6 +116,36 @@ public static class Scenarios
             },
             TraceOrder.Unordered);
 
+    public static Task<string> PublishThroughBaseTypeUsesRuntimeType() =>
+        Run.Scenario(
+            async services =>
+            {
+                await services.GetRequiredService<IPublisher>().Publish<Signal>(new Alarm("east"));
+                return "done";
+            },
+            TraceOrder.Unordered);
+
+    public static Task<string> PublishClosedGenericNotification() =>
+        Run.Scenario(
+            async services =>
+            {
+                await services.GetRequiredService<IPublisher>().Publish(new EntityCreated<Order>(new Order(7)));
+                return "done";
+            },
+            TraceOrder.Unordered);
+
+    public static Task<string> PublishStructNotification() =>
+        Run.Scenario(
+            async services =>
+            {
+                await services.GetRequiredService<IPublisher>().Publish(new Beep(3));
+                return "done";
+            },
+            TraceOrder.Unordered);
+
+    public static Task<string> PublishWhenAHandlerCannotBeBuilt() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Fragile())));
+
     public static Task<string> PublishObjectThatIsNotANotification() =>
         Run.Scenario(services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish((object)"not a notification")));
 
@@ -116,6 +167,40 @@ public static class Scenarios
 
     public static Task<string> StreamWithoutHandler() =>
         Run.Scenario(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream(new Silence())));
+
+    public static Task<string> StreamObjectThatIsNotAStream() =>
+        Run.Scenario(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream((object)"not a stream")));
+
+    public static Task<string> StreamTokenFromWithCancellationReachesHandler() =>
+        Run.Scenario(async services =>
+        {
+            using CancellationTokenSource source = new();
+            List<int> items = [];
+            await foreach (int item in services.GetRequiredService<ISender>().CreateStream(new Ticker(2)).WithCancellation(source.Token))
+            {
+                items.Add(item);
+            }
+
+            return items.Count;
+        });
+
+    public static Task<string> StreamEnumeratedTwiceResolvesTheHandlerTwice() =>
+        Run.Scenario(async services =>
+        {
+            IAsyncEnumerable<int> stream = services.GetRequiredService<ISender>().CreateStream(new Ticker(1));
+            List<int> instances = [];
+            await foreach (int instance in stream)
+            {
+                instances.Add(instance);
+            }
+
+            await foreach (int instance in stream)
+            {
+                instances.Add(instance);
+            }
+
+            return instances[0] == instances[1] ? "same handler" : "new handler per enumeration";
+        });
 
     public static Task<string> StreamNull() =>
         Run.Scenario(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream((IStreamRequest<int>)null!)));

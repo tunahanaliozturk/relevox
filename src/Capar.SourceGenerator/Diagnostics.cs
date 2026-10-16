@@ -41,14 +41,18 @@ internal static class Diagnostics
         isEnabledByDefault: true,
         description: "A request or stream request is handled by exactly one handler. Use a notification when several handlers should all run.");
 
+    /// <summary>
+    /// An error: the handler exists, the user wrote it to be called, and without this it would silently not
+    /// be, which is exactly the run-time surprise compile-time dispatch is meant to remove.
+    /// </summary>
     public static readonly DiagnosticDescriptor Inaccessible = new(
         id: "CPR0003",
-        title: "Handler cannot be reached from generated code",
-        messageFormat: "'{0}' {1}, so the generated mediator cannot call it and it will not be registered",
+        title: "Handler cannot be called from generated code",
+        messageFormat: "'{0}' {1}, so the generated mediator cannot call it and it is not registered",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The generated mediator is ordinary C# in this assembly, so it can only call handlers this assembly can see. Make the handler public or internal, or add InternalsVisibleTo for this assembly.");
+        description: "The generated mediator is ordinary C# in this assembly, so it can only call handlers this assembly can see. Make the handler public, or add InternalsVisibleTo for this assembly.");
 
     public static readonly DiagnosticDescriptor GenericHandler = new(
         id: "CPR0004",
@@ -58,6 +62,19 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "MediatR can close a generic handler at run time. The generator cannot, because it writes dispatch for types it can see. Declare a closed handler per request instead.");
+
+    /// <summary>
+    /// A warning, raised only when the other assembly exposes public handlers. A library that uses Çapar
+    /// privately keeps its handlers internal and is not reported.
+    /// </summary>
+    public static readonly DiagnosticDescriptor OwnMediator = new(
+        id: "CPR0005",
+        title: "Referenced project has its own mediator",
+        messageFormat: "'{0}' references Capar and has its own generated mediator, so its handlers ({1}) are not part of this one. If they belong to this application, reference Capar.Contracts from '{0}' instead of Capar.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Projects whose handlers belong to the application should reference Capar.Contracts. Only the project that calls AddCapar, usually the host, references Capar itself.");
 
     public static Location ToLocation(LocationModel? model) =>
         model is null

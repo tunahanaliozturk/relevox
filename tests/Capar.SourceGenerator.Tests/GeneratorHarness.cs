@@ -34,12 +34,23 @@ public static class GeneratorHarness
 
     public static GeneratorRun Run(params string[] sources) => Run("Subject", [], sources);
 
-    public static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, params string[] sources)
+    public static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, params string[] sources) =>
+        Run(assemblyName, extra, strict: false, sources);
+
+    /// <summary>
+    /// Runs the generator the way a strict consumer builds: every warning an error, documentation comments
+    /// checked. Generated code that is fine by default but warns in such a build would break that build.
+    /// </summary>
+    public static GeneratorRun RunStrict(params string[] sources) => Run("Subject", [], strict: true, sources);
+
+    public static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, params string[] sources)
     {
-        CSharpCompilation compilation = Compile(assemblyName, extra, sources);
+        CSharpCompilation compilation = Compile(assemblyName, extra, sources, strict);
 
         GeneratorDriver driver = CSharpGeneratorDriver
-            .Create([new CaparGenerator().AsSourceGenerator()], parseOptions: ParseOptions)
+            .Create(
+                [new CaparGenerator().AsSourceGenerator()],
+                parseOptions: strict ? ParseOptions.WithDocumentationMode(DocumentationMode.Diagnose) : ParseOptions)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
 
         GeneratorDriverRunResult result = driver.GetRunResult();
@@ -55,9 +66,20 @@ public static class GeneratorHarness
 
     /// <summary>Compiles sources into an in-memory assembly another compilation can reference.</summary>
     /// <remarks>Used to put handlers in "another project" without a second project on disk.</remarks>
-    public static MetadataReference Library(string assemblyName, params string[] sources)
+    public static MetadataReference Library(string assemblyName, params string[] sources) =>
+        Library(assemblyName, [], withGenerator: false, sources);
+
+    /// <summary>Like <see cref="Library(string, string[])"/>, optionally with the generator run over it first.</summary>
+    public static MetadataReference Library(string assemblyName, IEnumerable<MetadataReference> extra, bool withGenerator, params string[] sources)
     {
-        CSharpCompilation compilation = Compile(assemblyName, [], sources);
+        Compilation compilation = Compile(assemblyName, extra, sources);
+        if (withGenerator)
+        {
+            CSharpGeneratorDriver
+                .Create([new CaparGenerator().AsSourceGenerator()], parseOptions: ParseOptions)
+                .RunGeneratorsAndUpdateCompilation(compilation, out compilation, out _);
+        }
+
         using MemoryStream image = new();
         Microsoft.CodeAnalysis.Emit.EmitResult emitted = compilation.Emit(image);
         emitted.Success.ShouldBeTrue(string.Join(Environment.NewLine, emitted.Diagnostics));
@@ -93,15 +115,26 @@ public static class GeneratorHarness
             StringComparer.Ordinal);
     }
 
-    private static CSharpCompilation Compile(string assemblyName, IEnumerable<MetadataReference> extra, string[] sources) =>
+    private static CSharpCompilation Compile(string assemblyName, IEnumerable<MetadataReference> extra, string[] sources, bool strict = false) =>
         CSharpCompilation.Create(
             assemblyName,
-            sources.Select(Parse),
+            sources.Select((source, index) => Parse(source, index, strict)),
             References.Concat(extra),
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable,
+                generalDiagnosticOption: strict ? ReportDiagnostic.Error : ReportDiagnostic.Default,
+                // Test sources carry no documentation of their own; the point of the strict run is the
+                // generated code's comments, which are on internal members CS1591 never asks about anyway.
+                specificDiagnosticOptions: strict ? [new("CS1591", ReportDiagnostic.Suppress)] : null));
 
-    private static SyntaxTree Parse(string source, int index) =>
-        CSharpSyntaxTree.ParseText(source, ParseOptions, path: $"File{index}.cs");
+    private static SyntaxTree Parse(string source, int index) => Parse(source, index, strict: false);
+
+    private static SyntaxTree Parse(string source, int index, bool strict) =>
+        CSharpSyntaxTree.ParseText(
+            source,
+            strict ? ParseOptions.WithDocumentationMode(DocumentationMode.Diagnose) : ParseOptions,
+            path: $"File{index}.cs");
 
     private static ImmutableArray<MetadataReference> BuildReferences()
     {
