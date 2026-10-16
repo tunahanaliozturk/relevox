@@ -24,6 +24,12 @@ internal enum HandlerKind
 
     /// <summary><c>IStreamRequestHandler&lt;TRequest, TResponse&gt;</c>.</summary>
     Stream,
+
+    /// <summary><c>IRequestPreProcessor&lt;TRequest&gt;</c>.</summary>
+    PreProcessor,
+
+    /// <summary><c>IRequestPostProcessor&lt;TRequest, TResponse&gt;</c>.</summary>
+    PostProcessor,
 }
 
 /// <summary>Facts about a message type that decide how it can be dispatched.</summary>
@@ -41,6 +47,7 @@ internal sealed record MessageShape(string Type, string Syntax, bool IsValueType
 /// <param name="Kind">The contract.</param>
 /// <param name="HandlerType">Fully qualified handler class.</param>
 /// <param name="Message">The request or notification type it handles.</param>
+/// <param name="ResponseType">Plain response or stream item type, for typeof, or null when there is none.</param>
 /// <param name="ResponseSyntax">Annotated response or stream item type, or null when there is none.</param>
 /// <param name="IsPublic">Visible outside its own assembly, which matters for CPR0005.</param>
 /// <param name="Location">Where the handler is declared, when it is in source.</param>
@@ -48,6 +55,7 @@ internal sealed record HandlerModel(
     HandlerKind Kind,
     string HandlerType,
     MessageShape Message,
+    string? ResponseType,
     string? ResponseSyntax,
     bool IsPublic,
     LocationModel? Location);
@@ -92,10 +100,18 @@ internal sealed record SkippedModel(
     EquatableArray<string> Arguments,
     LocationModel? Location);
 
+/// <summary>
+/// An open generic registration, such as a <c>LoggingPreProcessor&lt;T&gt;</c> that applies to every request.
+/// </summary>
+/// <param name="ServiceType">The unbound service type, such as <c>global::Capar.Pipeline.IRequestPreProcessor&lt;&gt;</c>.</param>
+/// <param name="ImplementationType">The unbound implementation type.</param>
+internal sealed record OpenRegistration(string ServiceType, string ImplementationType);
+
 /// <summary>What one declaration or one referenced assembly contributed.</summary>
 /// <param name="Handlers">Handler contracts found.</param>
 /// <param name="Messages">Concrete messages found.</param>
 /// <param name="Skipped">Types left out, with reasons.</param>
+/// <param name="Open">Open generic processors, registered as they are.</param>
 /// <param name="Experimental">
 /// Diagnostic ids from <c>[Experimental]</c> on any type the generated code names. The generated files
 /// suppress exactly these, so using an experimental handler does not break a build that already opted in.
@@ -104,9 +120,10 @@ internal sealed record DiscoveryModel(
     EquatableArray<HandlerModel> Handlers,
     EquatableArray<MessageModel> Messages,
     EquatableArray<SkippedModel> Skipped,
+    EquatableArray<OpenRegistration> Open,
     EquatableArray<string> Experimental)
 {
-    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Experimental.Length == 0;
+    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0;
 }
 
 /// <summary>What the referenced assemblies contributed, plus the facts taken from the compilation.</summary>
