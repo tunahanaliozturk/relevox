@@ -33,3 +33,7 @@ All notable changes to this project are written down here. The format follows
 - Diagnostics CPR0001 to CPR0005 are reported by an analyzer, in the user's source, so `#pragma warning
   disable` reaches them and the IDE underlines the declaration.
 - A NativeAOT sample, published and run in CI, that checks every kind of dispatch.
+- Streams forward each item to the handler's enumerator directly: 0.57 of MediatR's time, from 1.12.
+- Pipeline steps bound to the chain itself: three behaviours at 0.47 of MediatR's time, from 0.61.
+- The reference scan is cached per referenced assembly.
+- A 500-request-type benchmark, with Mediator built with transient handlers for a like-for-like comparison.

@@ -295,9 +295,9 @@ milestones:
 
 - ~~**M3:** report CPR0001-CPR0004 from a `DiagnosticAnalyzer` with real symbol locations.~~ Done in M3.
 - ~~**M3:** the NativeAOT publish smoke test in CI that this plan promises.~~ Done in M3.
-- **M4:** the pipeline row (0.61 of MediatR with three behaviours) and streams (about even with MediatR).
-  See [the M2 numbers](benchmark-results/2026-10-16-m2.md) for why each costs what it does.
-- **M4:** cache the reference scan per referenced assembly. It is correct today, and its output is
+- ~~**M4:** the pipeline row and streams.~~ Done: 0.47 and 0.57 of MediatR, see
+  [the M4 numbers](benchmark-results/2026-10-17-m4.md).
+- ~~**M4:** cache the reference scan per referenced assembly.~~ Done. It is correct today, and its output is
   value-equal, so downstream stages stay cached, but the walk itself repeats on every compilation.
 
 ## 9. ADRs to write
