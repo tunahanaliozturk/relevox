@@ -113,12 +113,19 @@ public class PipelineBenchmarks
     private IServiceScope _mediatorScope = null!;
     private global::MediatR.ISender _mediatrSender = null!;
     private global::Mediator.Mediator _mediatorTyped = null!;
+    private readonly CaparPeer.Piped _caparPiped = new(1);
+    private ServiceProvider _capar = null!;
+    private IServiceScope _caparScope = null!;
+    private CaparMediator _caparTyped = null!;
 
     [GlobalSetup]
     public void Setup()
     {
         _mediatr = Containers.MediatR(withPipeline: true);
         _mediator = Containers.Mediator(withPipeline: true);
+        _capar = Containers.Capar(ServiceLifetime.Transient, withPipeline: true);
+        _caparScope = _capar.CreateScope();
+        _caparTyped = _caparScope.ServiceProvider.GetRequiredService<CaparMediator>();
         _mediatrScope = _mediatr.CreateScope();
         _mediatorScope = _mediator.CreateScope();
         _mediatrSender = _mediatrScope.ServiceProvider.GetRequiredService<global::MediatR.ISender>();
@@ -132,10 +139,15 @@ public class PipelineBenchmarks
         _mediatorScope.Dispose();
         _mediatr.Dispose();
         _mediator.Dispose();
+        _caparScope.Dispose();
+        _capar.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "MediatR 12.5")]
     public Task<int> MediatR() => _mediatrSender.Send(_mediatrPiped);
+
+    [Benchmark(Description = "Capar, typed")]
+    public Task<int> CaparTyped() => _caparTyped.Send(_caparPiped);
 
     [Benchmark(Description = "Mediator 3.0, typed")]
     public ValueTask<int> MediatorTyped() => _mediatorTyped.Send(_mediatorPiped);

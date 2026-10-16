@@ -111,6 +111,77 @@ public sealed class EdgeCaseTests
     }
 
     [Fact]
+    public void Processors_and_exception_handlers_produce_code_that_compiles_strictly()
+    {
+        GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
+            using Capar.Pipeline;
+
+            public sealed record Pay(decimal Amount) : IRequest<string>;
+            public sealed class PayHandler : IRequestHandler<Pay, string>
+            {
+                public Task<string> Handle(Pay request, CancellationToken cancellationToken) => Task.FromResult("paid");
+            }
+
+            public sealed record Refund : IRequest;
+            public sealed class RefundHandler : IRequestHandler<Refund>
+            {
+                public Task Handle(Refund request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class PayCheck : IRequestPreProcessor<Pay>
+            {
+                public Task Process(Pay request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class Audit<TRequest> : IRequestPreProcessor<TRequest> where TRequest : notnull
+            {
+                public Task Process(TRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class RefundDone : IRequestPostProcessor<Refund, Unit>
+            {
+                public Task Process(Refund request, Unit response, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class Declined : IRequestExceptionHandler<Pay, string, InvalidOperationException>
+            {
+                public Task Handle(Pay request, InvalidOperationException exception, RequestExceptionHandlerState<string> state, CancellationToken cancellationToken)
+                {
+                    state.SetHandled("declined");
+                    return Task.CompletedTask;
+                }
+            }
+
+            public sealed class Anything : IRequestExceptionHandler<Pay, string, Exception>
+            {
+                public Task Handle(Pay request, Exception exception, RequestExceptionHandlerState<string> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class Log : IRequestExceptionAction<Refund, Exception>
+            {
+                public Task Execute(Refund request, Exception exception, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string registration = run.Sources["CaparServiceCollectionExtensions.g.cs"];
+        registration.ShouldContain("typeof(global::Capar.Pipeline.IRequestExceptionHandler<global::Pay, string, global::System.InvalidOperationException>), typeof(global::Anything)");
+        registration.ShouldContain("typeof(global::Capar.Pipeline.IRequestPreProcessor<>), typeof(global::Audit<>)");
+        registration.ShouldContain("ExceptionCatalog<global::Refund, global::Capar.Unit>");
+    }
+
+    [Theory]
+    [InlineData("public static class Nothing;")]
+    [InlineData("public sealed record Lonely : INotification;")]
+    [InlineData("public sealed record Unheard : INotification; public sealed class Hears : INotificationHandler<Unheard> { public Task Handle(Unheard n, CancellationToken c) => Task.CompletedTask; }")]
+    public void Small_projects_compile_strictly(string source)
+    {
+        GeneratorRun run = GeneratorHarness.RunStrict(Usings + source);
+
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_keyword_in_the_assembly_name_still_gives_a_valid_namespace()
     {
         GeneratorRun run = GeneratorHarness.Run("Acme.event.class", [], Usings + "public sealed record Ping : IRequest<int>;");

@@ -11,6 +11,16 @@ public static partial class Library
         {
             options.Lifetime = lifetime;
 
+            if (profile == Profile.WhenAll)
+            {
+                options.NotificationPublisherType = typeof(TaskWhenAllPublisher);
+            }
+
+            if (profile == Profile.ReversePublisher)
+            {
+                options.NotificationPublisher = new ReversePublisher();
+            }
+
             if (profile == Profile.AllExceptions)
             {
                 options.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;

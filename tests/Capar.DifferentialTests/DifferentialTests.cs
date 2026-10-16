@@ -107,6 +107,22 @@ public sealed class DifferentialTests
         cached.ShouldContain("AuditedPre(Cached), CachedPre");
     }
 
+    /// <summary>A configured publisher is really used: the reversing one runs the same handlers backwards.</summary>
+    [Fact]
+    public async Task A_configured_publisher_gets_the_handlers()
+    {
+        static string[] Handlers(string outcome) =>
+            [.. outcome[(outcome.IndexOf('[', StringComparison.Ordinal) + 1)..outcome.IndexOf(']', StringComparison.Ordinal)]
+                .Split(", ")
+                .Select(entry => entry[..entry.IndexOf('(', StringComparison.Ordinal)])];
+
+        string[] normal = Handlers(await Invoke(OnCapar, "PublishToSeveralHandlers"));
+        string[] reversed = Handlers(await Invoke(OnCapar, "PublishWithACustomPublisher"));
+
+        normal.Length.ShouldBeGreaterThan(1);
+        reversed.ShouldBe([.. normal.Reverse()]);
+    }
+
     private static Task<string> Invoke(Type scenarios, string name) =>
         (Task<string>)scenarios.GetMethod(name, BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!;
 }

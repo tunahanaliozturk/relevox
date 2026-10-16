@@ -54,6 +54,12 @@ internal static class Emitter
 
         code.Line("private readonly global::System.IServiceProvider _services;");
         code.Line("private readonly global::Capar.Internal.PipelineState<CaparMediator> _pipelines;");
+        if (plan.Notifications.Any(static notification => notification.Targets.Length > 0))
+        {
+            // Only when some notification has handlers: an unused private field is CS0169, which breaks the
+            // user's build when warnings are errors. The strict generator tests exist to catch exactly this.
+            code.Line("private global::Capar.INotificationPublisher? _publisher;");
+        }
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"private readonly bool _keep{handler.Value};");
@@ -251,7 +257,18 @@ internal static class Emitter
         code.Line("    || exceptionHandlers");
         code.Line("    || exceptionActions");
         code.Line("    || HasOpenBehavior(services);");
-        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}, everyRequestHasBehaviours), {DependencyInjection}.ServiceLifetime.Singleton));");
+        code.Line();
+        code.Line("if (options.NotificationPublisherType is not null)");
+        code.Line("{");
+        code.Line($"    {TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.INotificationPublisher), options.NotificationPublisherType, lifetime));");
+        code.Line("}");
+        code.Line("else");
+        code.Line("{");
+        code.Line($"    {TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.INotificationPublisher), options.NotificationPublisher));");
+        code.Line("}");
+        code.Line();
+        code.Line("bool sequentialPublish = IsSequentialPublisher(services);");
+        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}, everyRequestHasBehaviours, sequentialPublish), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
         code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<CaparMediator>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Capar.IMediator", "global::Capar.ISender", "global::Capar.IPublisher" })
@@ -285,6 +302,24 @@ internal static class Emitter
         code.Close();
         code.Line();
         code.Line("return false;");
+        code.Close();
+
+        code.Line();
+        code.Line("// The default publisher is inlined by the generated mediator. Anything else, including a publisher the");
+        code.Line("// application registered itself before calling AddCapar, is called the way MediatR calls it.");
+        code.Open($"private static bool IsSequentialPublisher({DependencyInjection}.IServiceCollection services)");
+        code.Line($"{DependencyInjection}.ServiceDescriptor? last = null;");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
+        code.Line("if (descriptor.ServiceType == typeof(global::Capar.INotificationPublisher))");
+        code.Line("{");
+        code.Line("    last = descriptor;");
+        code.Line("}");
+        code.Close();
+        code.Line();
+        code.Line("return last is not null");
+        code.Line("    && !last.IsKeyedService");
+        code.Line("    && (last.ImplementationInstance is global::Capar.NotificationPublishers.ForeachAwaitPublisher");
+        code.Line("        || last.ImplementationType == typeof(global::Capar.NotificationPublishers.ForeachAwaitPublisher));");
         code.Close();
 
         EmitExceptionCatalogs(code, plan);
@@ -520,7 +555,31 @@ internal static class Emitter
             }
 
             arguments.Add("cancellationToken");
-            code.Line($"return PublishSequentially{index}({string.Join(", ", arguments)});");
+            code.Line("return _pipelines.SequentialPublish");
+            code.Line($"    ? PublishSequentially{index}({string.Join(", ", arguments)})");
+            code.Line($"    : PublishThrough{index}({string.Join(", ", arguments)});");
+            code.Close();
+
+            // A configured publisher gets one executor per handler, in the same order, as MediatR builds them.
+            List<string> throughParameters = [$"{shape.Syntax} notification"];
+            for (int target = 0; target < notification.Targets.Length; target++)
+            {
+                throughParameters.Add($"global::Capar.INotificationHandler<{notification.Targets[target].HandledSyntax}> handler{target}");
+            }
+
+            throughParameters.Add($"{Token} cancellationToken");
+            code.Line();
+            code.Open($"private {Task} PublishThrough{index}({string.Join(", ", throughParameters)})");
+            code.Line("global::Capar.NotificationHandlerExecutor[] executors =");
+            code.Line("[");
+            for (int target = 0; target < notification.Targets.Length; target++)
+            {
+                code.Line($"    new(handler{target}, (message, token) => handler{target}.Handle(({shape.Syntax})message, token)),");
+            }
+
+            code.Line("];");
+            code.Line("_publisher ??= Resolve<global::Capar.INotificationPublisher>();");
+            code.Line("return _publisher.Publish(executors, notification, cancellationToken);");
             code.Close();
 
             // Async even for one handler, so an exception a handler throws before its first await ends up in

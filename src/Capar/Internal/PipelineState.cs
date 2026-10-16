@@ -47,12 +47,20 @@ public sealed class PipelineState<TMediator>
     /// built-in processor or exception behaviour. MediatR then runs a pipeline even for a request it has no
     /// handler for, so failing to find one faults the task instead of throwing.
     /// </param>
-    public PipelineState(int requests, int streams, bool everyRequestHasBehaviours)
+    /// <param name="sequentialPublish">
+    /// True when the notification publisher in force is the default sequential one, which the generated
+    /// mediator then inlines.
+    /// </param>
+    public PipelineState(int requests, int streams, bool everyRequestHasBehaviours, bool sequentialPublish)
     {
         _requests = new byte[requests];
         _streams = new byte[streams];
         EveryRequestHasBehaviours = everyRequestHasBehaviours;
+        SequentialPublish = sequentialPublish;
     }
+
+    /// <summary>Whether notifications are published by awaiting each handler in turn, the default.</summary>
+    public bool SequentialPublish { get; }
 
     /// <summary>Whether some behaviour applies to every request type.</summary>
     public bool EveryRequestHasBehaviours { get; }

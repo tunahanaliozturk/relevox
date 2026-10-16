@@ -44,6 +44,7 @@ internal static class Sanity
         pipeline.Setup();
         Expect(await pipeline.MediatR(), 42, "MediatR pipeline send");
         Expect(await pipeline.MediatorTyped(), 42, "Mediator pipeline send");
+        Expect(await pipeline.CaparTyped(), 42, "Capar pipeline send");
         pipeline.Cleanup();
 
         PublishBenchmarks publish = new();
@@ -68,7 +69,7 @@ internal static class Sanity
         Expect(await startup.Mediator(), 42, "Mediator startup");
         Expect(await startup.Capar(), 42, "Capar startup");
 
-        foreach (string expected in new[] { "MediatR behaviour", "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Capar fifth listener" })
+        foreach (string expected in new[] { "MediatR behaviour", "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Capar fifth listener", "Capar behaviour" })
         {
             Expect(Counts.GetValueOrDefault(expected), 1, expected);
         }
