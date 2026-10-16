@@ -61,19 +61,78 @@ returned task instead.
 **A request whose only handler is for its base type has no handler.** Sending a `DerivedQuery` when only
 `IRequestHandler<BaseQuery, T>` exists throws `InvalidOperationException`, in both.
 
-## Different on purpose
+**Handlers run in declaration order.** MediatR registers what its scan finds in metadata order, which is the
+order types are declared in, and that is the order notification handlers, processors and exception handlers
+run in. Çapar records where each handler is declared and registers in the same order, so every trace in the
+differential tests is compared in order, not as a set.
 
-**Notification handlers run in a fixed order: by handler type name.** MediatR runs them in container
-registration order, which follows its assembly scan and is documented as unspecified. The differential
-tests compare the set of handlers that ran, not their order.
+## The pipeline
+
+**Behaviours run outermost first, in registration order**, and are resolved from the container on every
+send. Behaviours registered through `AddCapar`'s options and ones registered directly with the container,
+before or after, all run. `next` can be called more than once, and a token passed to `next` replaces the
+original from there inward; `next()` with no token keeps the token `Send` was given.
+
+**A request without a response runs through behaviours typed over `Unit`**: `IPipelineBehavior<Ring, Unit>`.
+
+**Processors only run when one was added through the options.** This is the most surprising rule the
+differential tests found. MediatR 12 registers processors it finds when `AutoRegisterRequestProcessors` is
+set, but it only adds the behaviour that runs them when at least one processor of that kind was added with
+`AddRequestPreProcessor`, `AddOpenRequestPreProcessor` or their post-processor equivalents. Processors
+found by scanning, or registered with the container directly, therefore never run on their own. Çapar does
+exactly the same, so no processor starts running on the day you migrate. If yours never ran under MediatR,
+this is why.
+
+**Pre-processors run before every behaviour, post-processors after all of them**, because the processor
+behaviours are registered ahead of anything from the options.
+
+**A processor, exception handler or exception action written for a base type or interface reaches a request
+only when something else names that request exactly.** The same rule as catch-all notification handlers,
+for the same reason.
+
+**Exception handlers are tried from the thrown type up to `Exception`**, in declaration order at each step,
+until one calls `SetHandled`. A handler for `Exception` also runs at the step of any more specific exception
+type that some other handler names. A handler is tried once, at the most specific step that reaches it.
+Unhandled exceptions are rethrown with their original stack.
+
+**Exception actions see only unhandled exceptions by default**, and every exception with
+`RequestExceptionActionProcessorStrategy.ApplyForAllExceptions`.
+
+**Once any exception handler, exception action or processor behaviour exists, every send is asynchronous.**
+In MediatR those behaviours apply to every request, and they are `async`, so a handler that throws before
+its first `await` faults the returned task instead of throwing out of `Send`, for every request in the
+application. Çapar leaves a behaviour with nothing to do out of the pipeline, for speed, and turns a
+synchronous throw into a faulted task in its place, which costs a try block and nothing on the success
+path. A request with no handler faults the task in that case too.
+
+**Stream behaviours are resolved when enumeration starts**, and their `next` takes no token.
+
+**`TaskWhenAllPublisher` and custom publishers receive one executor per handler**, in declaration order.
+With the default `ForeachAwaitPublisher`, Çapar awaits the handlers itself without building executors;
+the behaviour is the same.
+
+## Different on purpose
 
 **Two handlers for one request is a build error (`CPR0002`).** That includes a concrete handler and a
 concrete subclass of it. MediatR keeps whichever its scan registered first.
 
 **Exception messages differ.** Only exception types are part of the contract.
 
+**Behaviours do not run for a request nothing handles.** MediatR closes its open generic behaviours over
+the request type and runs them before discovering that no handler exists. Çapar knows at build time that
+no handler exists, cannot close a generic behaviour over a type it has no dispatch entry for, and fails
+straight away. The exception type is the same; the behaviours' side effects are missing. The build has
+already warned about such a request with `CPR0001`.
+
 ## Not supported
 
 **Handlers the build cannot see.** A handler in an assembly loaded at run time, or a generic handler closed
 at run time, is not registered. The generator reports generic handlers as `CPR0004`, and handlers it can
 see but cannot call, such as internal ones in another project, as `CPR0003`.
+
+**Exception handlers for exception types the build cannot see.** MediatR closes
+`IRequestExceptionHandler<,,>` over every type in the thrown exception's hierarchy at run time. Çapar looks
+up only the exception types some handler for that request names, which is what lets it run without
+generating code at run time. An exception handler registered directly with the container for some other
+exception type is not found. Open generic exception handlers and actions are closed over those same
+exception types, plus `Exception`.
