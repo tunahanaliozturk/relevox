@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Referenced as a library, not as an analyzer: these tests drive the generator through
+      CSharpGeneratorDriver to see diagnostics, emitted text and cached pipeline steps, none of which a
+      normal build exposes.
+    -->
+    <ProjectReference Include="../../src/Capar/Capar.csproj" />
+    <ProjectReference Include="../../src/Capar.SourceGenerator/Capar.SourceGenerator.csproj" />
+  </ItemGroup>
+
+</Project>

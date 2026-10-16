@@ -1,6 +1,7 @@
+using Capar.Benchmarks;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Capar.Benchmarks;
+namespace Benchmarks;
 
 /// <summary>
 /// Builds each library's container the way its own documentation does it.
@@ -25,6 +26,14 @@ internal static class Containers
                 configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Third>();
             }
         });
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>Capar with its default transient handlers, or with singletons to compare like with like.</summary>
+    public static ServiceProvider Capar(ServiceLifetime lifetime)
+    {
+        ServiceCollection services = new();
+        services.AddCapar(options => options.Lifetime = lifetime);
         return services.BuildServiceProvider();
     }
 

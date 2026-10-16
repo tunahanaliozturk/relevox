@@ -1,6 +1,6 @@
 using Mediator;
 
-namespace Capar.Benchmarks.MediatorPeer;
+namespace Benchmarks.MediatorPeer;
 
 // The same scenarios written against martinothamar/Mediator, in its own idiom: ValueTask everywhere, so a
 // constant result costs nothing.

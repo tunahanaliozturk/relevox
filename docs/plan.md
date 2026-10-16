@@ -196,14 +196,16 @@ diagnostic, not a silent skip.
 
 | ID | Severity | When |
 |---|---|---|
-| CPR0001 | Warning | a request type sent somewhere has no handler |
+| CPR0001 | Warning | a request type declared in this project has no handler |
 | CPR0002 | Error | two handlers for the same request type |
-| CPR0003 | Error | handler not accessible from the generated code |
-| CPR0004 | Warning | open generic handler that the generator cannot close |
-| CPR0005 | Warning | `Send(object)` or `Publish(object)` used where the static type is known |
+| CPR0003 | Warning | handler not accessible from the generated code, so it is not registered |
+| CPR0004 | Warning | generic handler that the generator cannot close |
+| CPR0005 | Warning | `Send(object)` or `Publish(object)` used where the static type is known (later) |
 
-CPR0001 only fires for request types the generator can see being sent. A request built by reflection
-still fails at runtime, with an exception that names the type.
+CPR0001 fires for request types declared in the project being built. Detecting which requests are
+actually sent would need flow analysis the generator does not do, and a request declared without a
+handler is almost always a mistake anyway. A request built by reflection still fails at run time, with an
+exception that names the type.
 
 ## 5. Performance plan
 

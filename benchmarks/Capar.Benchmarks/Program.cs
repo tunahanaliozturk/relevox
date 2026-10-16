@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Running;
-using Capar.Benchmarks;
+using Benchmarks;
 
 // `--sanity` runs every scenario once per library and checks the answer, so a benchmark that silently
 // skips a behaviour or a handler fails loudly instead of producing a flattering number.
