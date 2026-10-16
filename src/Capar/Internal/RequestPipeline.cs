@@ -17,9 +17,10 @@ namespace Capar.Internal;
 /// <c>next()</c> with no token keeps the token <c>Send</c> was given.
 /// </para>
 /// <para>
-/// Per send, the chain object and one delegate per behaviour are allocated. For the first eight behaviours
-/// the delegates point at methods on the chain itself, so no separate object is needed to remember which
-/// step comes next; that took the three-behaviour send from 544 to 376 bytes.
+/// Per send, the chain object and one delegate per behaviour are allocated, and one more for each step a
+/// retrying behaviour runs again. For the first eight behaviours the delegates point at methods on the chain
+/// itself, so no separate object is needed to remember which step comes next; that took the three-behaviour
+/// send from 544 to 392 bytes.
 /// </para>
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]

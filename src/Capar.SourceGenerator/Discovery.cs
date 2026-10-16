@@ -250,7 +250,7 @@ internal static class Discovery
                 continue;
             }
 
-            (List<DiscoveryModel> parts, bool ownsMediator) = ScanAssembly(assembly, compilation, cancellationToken);
+            (DiscoveryModel[] parts, bool ownsMediator) = ScanAssembly(assembly, compilation, cancellationToken);
 
             if (!ownsMediator)
             {
@@ -283,13 +283,20 @@ internal static class Discovery
     /// What one referenced assembly contributes, remembered for as long as Roslyn keeps the assembly's symbol.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Without this the walk over every type of every handler-bearing reference ran again on each keystroke:
     /// its output compared equal, so nothing downstream re-ran, but the walk itself did. Roslyn reuses the
-    /// symbol of an unchanged metadata reference across compilations, so it is a natural cache key. The result
-    /// also depends on the consuming assembly, through InternalsVisibleTo, and on the reference's position, which
-    /// orders its handlers, so both are part of the key.
+    /// symbol of an unchanged metadata reference across compilations, so it is a natural cache key.
+    /// </para>
+    /// <para>
+    /// The result also depends on the consuming assembly, through InternalsVisibleTo, and on the reference's
+    /// position, which orders its handlers. Several projects in one solution consume the same reference at
+    /// once, so each symbol keeps one entry per consumer and position rather than a single slot they would
+    /// keep overwriting. The generator and the analyzer can scan at the same moment, so every access holds the
+    /// entry's lock; the M4 review found that two unguarded misses could make the second one throw.
+    /// </para>
     /// </remarks>
-    private static (List<DiscoveryModel> Parts, bool OwnsMediator) ScanAssembly(IAssemblySymbol assembly, Compilation compilation, CancellationToken cancellationToken)
+    private static (DiscoveryModel[] Parts, bool OwnsMediator) ScanAssembly(IAssemblySymbol assembly, Compilation compilation, CancellationToken cancellationToken)
     {
         string consumer = compilation.Assembly.Identity.ToString();
         int position = 0;
@@ -303,9 +310,14 @@ internal static class Discovery
             position++;
         }
 
-        if (ScanCache.TryGetValue(assembly, out CachedScan? cached) && cached.Consumer == consumer && cached.Position == position)
+        ScanEntries entries = ScanCache.GetValue(assembly, static _ => new ScanEntries());
+        string key = consumer + "|" + position.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        lock (entries)
         {
-            return (cached.Parts, cached.OwnsMediator);
+            if (entries.TryGetValue(key, out (DiscoveryModel[] Parts, bool OwnsMediator) cached))
+            {
+                return cached;
+            }
         }
 
         List<DiscoveryModel> parts = [];
@@ -320,14 +332,25 @@ internal static class Discovery
             }
         }
 
-        ScanCache.Remove(assembly);
-        ScanCache.Add(assembly, new CachedScan(consumer, position, parts, ownsMediator));
-        return (parts, ownsMediator);
+        (DiscoveryModel[] Parts, bool OwnsMediator) result = ([.. parts], ownsMediator);
+        lock (entries)
+        {
+            entries[key] = result;
+        }
+
+        return result;
     }
 
-    private static readonly ConditionalWeakTable<IAssemblySymbol, CachedScan> ScanCache = new();
+    private static readonly ConditionalWeakTable<IAssemblySymbol, ScanEntries> ScanCache = new();
 
-    private sealed record CachedScan(string Consumer, int Position, List<DiscoveryModel> Parts, bool OwnsMediator);
+    /// <summary>One cached scan per consumer and position. Guarded by locking the instance.</summary>
+    private sealed class ScanEntries : Dictionary<string, (DiscoveryModel[] Parts, bool OwnsMediator)>
+    {
+        public ScanEntries()
+            : base(System.StringComparer.Ordinal)
+        {
+        }
+    }
 
     public static DiscoveryModel Merge(IEnumerable<DiscoveryModel> parts)
     {

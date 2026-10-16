@@ -816,8 +816,11 @@ internal static class Emitter
         code.Open("private abstract class StreamDispatcher<TResponse> : StreamDispatcher");
         code.Line($"public abstract {AsyncEnumerable}<TResponse> Create(CaparMediator mediator, global::Capar.IStreamRequest<TResponse> request, {Token} cancellationToken);");
         code.Line();
+        // The boxing iterator already combines the creation token with any WithCancellation token, so the inner
+        // stream is created without one and receives the combined token on enumeration. Passing it twice made
+        // the inner stream link the same two tokens a second time.
         code.Line($"public sealed override {AsyncEnumerable}<object?> CreateObject(CaparMediator mediator, object request, {Token} cancellationToken) =>");
-        code.Line("    Box(Create(mediator, (global::Capar.IStreamRequest<TResponse>)request, cancellationToken), cancellationToken);");
+        code.Line("    Box(Create(mediator, (global::Capar.IStreamRequest<TResponse>)request, default), cancellationToken);");
         code.Line();
         code.Open($"private static async {AsyncEnumerable}<object?> Box({AsyncEnumerable}<TResponse> items, [global::System.Runtime.CompilerServices.EnumeratorCancellation] {Token} cancellationToken)");
         code.Open("await foreach (TResponse item in global::System.Threading.Tasks.TaskAsyncEnumerableExtensions.WithCancellation(items, cancellationToken).ConfigureAwait(false))");
