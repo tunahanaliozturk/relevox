@@ -256,5 +256,7 @@ Each milestone is a branch and a PR with green CI. Commits land as each unit pas
 
 ## 10. Open questions
 
-- Logo. Four concepts are drafted under `docs/brand/logo-canvas/`; one gets picked before M5.
+- Logo: decided. The "Nal-Ç" mark (a horseshoe drawn as Ç; nail holes are the pipeline stops, the dot
+  is the message) in night `#0F172A` and cobalt `#3B82F6`. Sources in `docs/brand/`. The 128 px PNG
+  that NuGet requires is rendered from the SVG at M5.
 - NuGet ID prefix reservation, which needs the package owner account; only relevant at M6.
