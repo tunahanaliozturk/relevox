@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Capar.SourceGenerator.Tests;
 
@@ -55,8 +56,15 @@ public static class GeneratorHarness
 
         GeneratorDriverRunResult result = driver.GetRunResult();
 
+        // The rules are reported by the analyzer, against the user's own source, so that is where they are read.
+        ImmutableArray<Diagnostic> analyzer = compilation
+            .WithAnalyzers([new CaparAnalyzer()])
+            .GetAnalyzerDiagnosticsAsync()
+            .GetAwaiter()
+            .GetResult();
+
         return new GeneratorRun(
-            result.Diagnostics,
+            [.. result.Diagnostics, .. analyzer],
             result.Results
                 .SelectMany(single => single.GeneratedSources)
                 .ToDictionary(source => source.HintName, source => source.SourceText.ToString(), StringComparer.Ordinal),

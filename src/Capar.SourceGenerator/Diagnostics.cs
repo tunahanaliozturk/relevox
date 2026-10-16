@@ -15,6 +15,10 @@ internal static class Diagnostics
 {
     private const string Category = "Capar";
 
+    // Every rule is reported once the whole compilation has been seen, because whether a request has one
+    // handler, none or two is only known then. Roslyn requires such rules to say so.
+    private static readonly string[] CompilationEnd = [WellKnownDiagnosticTags.CompilationEnd];
+
     /// <summary>
     /// A warning, not an error: a request can legitimately exist before its handler does, and failing the
     /// build halfway through a refactoring would only get the rule switched off.
@@ -26,6 +30,7 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
+        customTags: CompilationEnd,
         description: "Every request and stream request needs exactly one handler. This one has none that the generator can see, so sending it compiles and then fails when it runs.");
 
     /// <summary>
@@ -39,6 +44,7 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
+        customTags: CompilationEnd,
         description: "A request or stream request is handled by exactly one handler. Use a notification when several handlers should all run.");
 
     /// <summary>
@@ -52,6 +58,7 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
+        customTags: CompilationEnd,
         description: "The generated mediator is ordinary C# in this assembly, so it can only call handlers this assembly can see. Make the handler public, or add InternalsVisibleTo for this assembly.");
 
     public static readonly DiagnosticDescriptor GenericHandler = new(
@@ -61,6 +68,7 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
+        customTags: CompilationEnd,
         description: "MediatR can close a generic handler at run time. The generator cannot, because it writes dispatch for types it can see. Declare a closed handler per request instead.");
 
     /// <summary>
@@ -74,7 +82,17 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
+        customTags: CompilationEnd,
         description: "Projects whose handlers belong to the application should reference Capar.Contracts. Only the project that calls AddCapar, usually the host, references Capar itself.");
+
+    public static DiagnosticDescriptor Descriptor(string rule) => rule switch
+    {
+        "CPR0001" => NoHandler,
+        "CPR0002" => AmbiguousHandler,
+        "CPR0003" => Inaccessible,
+        "CPR0004" => GenericHandler,
+        _ => OwnMediator,
+    };
 
     public static Location ToLocation(LocationModel? model) =>
         model is null
