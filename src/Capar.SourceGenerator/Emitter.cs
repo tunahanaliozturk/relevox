@@ -154,8 +154,7 @@ internal static class Emitter
         code.Line();
         int requestCount = plan.Requests.Count(static request => !request.Request.IsAbstract);
         int streamCount = plan.Streams.Count(static stream => !stream.Request.IsAbstract);
-        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), static _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}), {DependencyInjection}.ServiceLifetime.Singleton));");
-        code.Line();
+
         code.Line("if (options.AutoRegisterRequestProcessors)");
         code.Line("{");
         foreach (ServiceRegistration processor in plan.Processors)
@@ -163,7 +162,7 @@ internal static class Emitter
             code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({processor.ServiceType}), typeof({processor.ImplementationType}), handlerLifetime));");
         }
 
-        foreach (OpenRegistration processor in plan.OpenProcessors)
+        foreach (OpenRegistration processor in plan.OpenProcessors.Where(static open => !open.ServiceType.Contains("Exception")))
         {
             code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({processor.ServiceType}), typeof({processor.ImplementationType}), handlerLifetime));");
         }
@@ -199,11 +198,60 @@ internal static class Emitter
             code.Line();
         }
 
+        // Exception handlers and actions are registered whatever AutoRegisterRequestProcessors says, as MediatR's
+        // scan registers them. The two behaviours are added when any are registered, in an order that decides
+        // whether actions see handled exceptions too.
+        foreach (ServiceRegistration registration in plan.ExceptionRegistrations)
+        {
+            code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({registration.ServiceType}), typeof({registration.ImplementationType}), handlerLifetime));");
+        }
+
+        foreach (OpenRegistration registration in plan.OpenProcessors.Where(static open => open.ServiceType.Contains("Exception")))
+        {
+            code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({registration.ServiceType}), typeof({registration.ImplementationType}), handlerLifetime));");
+        }
+
+        for (int index = 0; index < plan.ExceptionCatalogs.Length; index++)
+        {
+            ExceptionCatalogEntry catalog = plan.ExceptionCatalogs[index];
+            code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.ExceptionCatalog<{catalog.Request.Type}, {catalog.ResponseType}>), new ExceptionCatalog{index}()));");
+        }
+
+        code.Line();
+        code.Line("bool actionsOutside = options.RequestExceptionActionProcessorStrategy == global::Capar.RequestExceptionActionProcessorStrategy.ApplyForUnhandledExceptions;");
+        code.Line("bool exceptionHandlers = Has(services, typeof(global::Capar.Pipeline.IRequestExceptionHandler<,,>));");
+        code.Line("bool exceptionActions = Has(services, typeof(global::Capar.Pipeline.IRequestExceptionAction<,>));");
+        foreach ((string condition, string behavior) in new[]
+        {
+            ("actionsOutside && exceptionActions", "RequestExceptionActionProcessorBehavior"),
+            ("exceptionHandlers", "RequestExceptionProcessorBehavior"),
+            ("!actionsOutside && exceptionActions", "RequestExceptionActionProcessorBehavior"),
+        })
+        {
+            code.Line($"if ({condition})");
+            code.Line("{");
+            foreach (RequestEntry request in dispatched)
+            {
+                string response = request.ResponseType ?? "global::Capar.Unit";
+                code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.IPipelineBehavior<{request.Request.Type}, {response}>), typeof(global::Capar.Pipeline.{behavior}<{request.Request.Type}, {response}>), {DependencyInjection}.ServiceLifetime.Transient));");
+            }
+
+            code.Line("}");
+            code.Line();
+        }
+
         code.Line("// Behaviours are resolved from the container on every send, as in MediatR, so these are simply registered.");
         code.Line("// TryAddEnumerable keeps a behaviour added twice from running twice.");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor behavior in options.BehaviorsToRegister)");
         code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, behavior);");
         code.Close();
+        code.Line();
+        code.Line("bool everyRequestHasBehaviours = options.RequestPreProcessorsToRegister.Count > 0");
+        code.Line("    || options.RequestPostProcessorsToRegister.Count > 0");
+        code.Line("    || exceptionHandlers");
+        code.Line("    || exceptionActions");
+        code.Line("    || HasOpenBehavior(services);");
+        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}, everyRequestHasBehaviours), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
         code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<CaparMediator>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Capar.IMediator", "global::Capar.ISender", "global::Capar.IPublisher" })
@@ -214,6 +262,32 @@ internal static class Emitter
         code.Line("return services;");
         code.Close();
 
+
+        code.Line();
+        code.Open($"private static bool Has({DependencyInjection}.IServiceCollection services, {Type} openContract)");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
+        code.Line("if (descriptor.ServiceType.IsGenericType && descriptor.ServiceType.GetGenericTypeDefinition() == openContract)");
+        code.Line("{");
+        code.Line("    return true;");
+        code.Line("}");
+        code.Close();
+        code.Line();
+        code.Line("return false;");
+        code.Close();
+
+        code.Line();
+        code.Open($"private static bool HasOpenBehavior({DependencyInjection}.IServiceCollection services)");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
+        code.Line("if (descriptor.ServiceType == typeof(global::Capar.IPipelineBehavior<,>))");
+        code.Line("{");
+        code.Line("    return true;");
+        code.Line("}");
+        code.Close();
+        code.Line();
+        code.Line("return false;");
+        code.Close();
+
+        EmitExceptionCatalogs(code, plan);
 
         code.Line();
         code.Open($"private static bool IsShared({DependencyInjection}.IServiceCollection services, {Type} type)");
@@ -252,6 +326,64 @@ internal static class Emitter
         return code;
     }
 
+    private static void EmitExceptionCatalogs(CodeWriter code, EmitPlan plan)
+    {
+        for (int index = 0; index < plan.ExceptionCatalogs.Length; index++)
+        {
+            ExceptionCatalogEntry catalog = plan.ExceptionCatalogs[index];
+            string request = catalog.Request.Syntax;
+            string response = catalog.ResponseType;
+
+            code.Line();
+            code.Open($"private sealed class ExceptionCatalog{index} : global::Capar.Internal.ExceptionCatalog<{catalog.Request.Type}, {response}>");
+            code.Line($"public override bool HasHandlers => {(catalog.HandledExceptions.Length > 0 ? "true" : "false")};");
+            code.Line();
+            code.Line($"public override bool HasActions => {(catalog.ActionExceptions.Length > 0 ? "true" : "false")};");
+
+            foreach ((string method, string parameters, string arguments, string step, EquatableArray<string> types) in new[]
+            {
+                ("Handle", $"global::System.IServiceProvider services, {request} request, global::System.Exception exception, global::Capar.Pipeline.RequestExceptionHandlerState<{response}> state, {Token} cancellationToken", "services, request, exception, state, seen, cancellationToken", "HandleAs", catalog.HandledExceptions),
+                ("Execute", $"global::System.IServiceProvider services, {request} request, global::System.Exception exception, {Token} cancellationToken", "services, request, exception, seen, cancellationToken", "ExecuteAs", catalog.ActionExceptions),
+            })
+            {
+                code.Line();
+                if (types.Length == 0)
+                {
+                    code.Line($"public override {Task} {method}({parameters}) => {Task}.CompletedTask;");
+                    continue;
+                }
+
+                // Most specific exception type first, as MediatR walks it. The base type of Exception is object,
+                // so the walk ends there.
+                code.Open($"public override async {Task} {method}({parameters})");
+                code.Line("global::System.ArgumentNullException.ThrowIfNull(exception);");
+                code.Line("global::System.Collections.Generic.HashSet<global::System.Type> seen = new();");
+                code.Open($"for ({Type}? type = exception.GetType(); type is not null; type = type.BaseType)");
+                foreach (string exceptionType in types)
+                {
+                    code.Line($"if (type == typeof({exceptionType}))");
+                    code.Line("{");
+                    code.Line(step == "HandleAs"
+                        ? $"    if (await {step}<{exceptionType}>({arguments}).ConfigureAwait(false))"
+                        : $"    await {step}<{exceptionType}>({arguments}).ConfigureAwait(false);");
+                    if (step == "HandleAs")
+                    {
+                        code.Line("    {");
+                        code.Line("        return;");
+                        code.Line("    }");
+                    }
+
+                    code.Line("}");
+                }
+
+                code.Close();
+                code.Close();
+            }
+
+            code.Close();
+        }
+    }
+
     private static void EmitRequests(CodeWriter code, EmitPlan plan, Dictionary<string, int> handlerIndex)
     {
         RequestEntry[] requests = [.. plan.Requests.Where(static request => !request.Request.IsAbstract)];
@@ -280,10 +412,24 @@ internal static class Emitter
                     ? $"Send<{request.ResponseSyntax}>((global::Capar.IRequest<{request.ResponseSyntax}>)request, cancellationToken)"
                     : "Send<global::Capar.IRequest>(request, cancellationToken)");
             string response = request.ResponseSyntax ?? "global::Capar.Unit";
-            code.Line($"global::Capar.IPipelineBehavior<{request.Request.Syntax}, {response}>[]? behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services);");
+            code.Line($"global::Capar.IPipelineBehavior<{request.Request.Syntax}, {response}>[]? behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services, out bool asynchronous);");
             code.Line("if (behaviors is null)");
             code.Line("{");
-            code.Line($"    return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
+            code.Line("    if (!asynchronous)");
+            code.Line("    {");
+            code.Line($"        return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
+            code.Line("    }");
+            code.Line();
+            code.Line("    try");
+            code.Line("    {");
+            code.Line($"        return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
+            code.Line("    }");
+            code.Line("    catch (global::System.Exception exception)");
+            code.Line("    {");
+            code.Line(hasResponse
+                ? $"        return {Task}.FromException<{request.ResponseSyntax}>(exception);"
+                : $"        return {Task}.FromException(exception);");
+            code.Line("    }");
             code.Line("}");
             code.Line();
 
@@ -398,8 +544,15 @@ internal static class Emitter
         code.Open($"public {Task}<TResponse> Send<TResponse>(global::Capar.IRequest<TResponse> request, {Token} cancellationToken = default)");
         code.Line("global::System.ArgumentNullException.ThrowIfNull(request);");
         code.Line($"{Type} type = request.GetType();");
-        code.Line("return Requests.TryGetValue(type, out RequestDispatcher? dispatcher) && dispatcher is RequestDispatcher<TResponse> typed");
-        code.Line("    ? typed.Send(this, request, cancellationToken)");
+        code.Line("if (Requests.TryGetValue(type, out RequestDispatcher? dispatcher) && dispatcher is RequestDispatcher<TResponse> typed)");
+        code.Line("{");
+        code.Line("    return typed.Send(this, request, cancellationToken);");
+        code.Line("}");
+        code.Line();
+        code.Line("// With a behaviour that applies to every request, MediatR runs a pipeline before finding no handler,");
+        code.Line("// so the task faults rather than Send throwing.");
+        code.Line("return _pipelines.EveryRequestHasBehaviours");
+        code.Line($"    ? {Task}.FromException<TResponse>(NoHandler(type))");
         code.Line("    : throw NoHandler(type);");
         code.Close();
 
@@ -413,8 +566,13 @@ internal static class Emitter
         code.Line("}");
         code.Line();
         code.Line($"{Type} type = request.GetType();");
-        code.Line("return Requests.TryGetValue(type, out RequestDispatcher? dispatcher) && dispatcher is VoidRequestDispatcher typed");
-        code.Line("    ? typed.Send(this, request, cancellationToken)");
+        code.Line("if (Requests.TryGetValue(type, out RequestDispatcher? dispatcher) && dispatcher is VoidRequestDispatcher typed)");
+        code.Line("{");
+        code.Line("    return typed.Send(this, request, cancellationToken);");
+        code.Line("}");
+        code.Line();
+        code.Line("return _pipelines.EveryRequestHasBehaviours");
+        code.Line($"    ? {Task}.FromException(NoHandler(type))");
         code.Line("    : throw NoHandler(type);");
         code.Close();
 

@@ -98,8 +98,7 @@ public static partial class Scenarios
             {
                 await services.GetRequiredService<IPublisher>().Publish(new Alarm("north"));
                 return "done";
-            },
-            TraceOrder.Unordered);
+            });
 
     public static Task<string> PublishObject() =>
         Run.Scenario(
@@ -107,8 +106,7 @@ public static partial class Scenarios
             {
                 await services.GetRequiredService<IPublisher>().Publish((object)new Alarm("south"));
                 return "done";
-            },
-            TraceOrder.Unordered);
+            });
 
     public static Task<string> PublishWithOnlyCatchAllHandler() =>
         Run.Scenario(
@@ -116,8 +114,7 @@ public static partial class Scenarios
             {
                 await services.GetRequiredService<IMediator>().Publish(new Quiet());
                 return "done";
-            },
-            TraceOrder.Unordered);
+            });
 
     public static Task<string> PublishThroughBaseTypeUsesRuntimeType() =>
         Run.Scenario(
@@ -125,8 +122,7 @@ public static partial class Scenarios
             {
                 await services.GetRequiredService<IPublisher>().Publish<Signal>(new Alarm("east"));
                 return "done";
-            },
-            TraceOrder.Unordered);
+            });
 
     public static Task<string> PublishClosedGenericNotification() =>
         Run.Scenario(
@@ -134,8 +130,7 @@ public static partial class Scenarios
             {
                 await services.GetRequiredService<IPublisher>().Publish(new EntityCreated<Order>(new Order(7)));
                 return "done";
-            },
-            TraceOrder.Unordered);
+            });
 
     public static Task<string> PublishStructNotification() =>
         Run.Scenario(
@@ -143,8 +138,7 @@ public static partial class Scenarios
             {
                 await services.GetRequiredService<IPublisher>().Publish(new Beep(3));
                 return "done";
-            },
-            TraceOrder.Unordered);
+            });
 
     public static Task<string> PublishWhenAHandlerCannotBeBuilt() =>
         Run.Scenario(services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Fragile())));
@@ -157,8 +151,7 @@ public static partial class Scenarios
 
     public static Task<string> PublishToHandlerThatThrows() =>
         Run.Scenario(
-            services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Boom())),
-            TraceOrder.Ignored);
+            services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Boom())));
 
     // Streams
 

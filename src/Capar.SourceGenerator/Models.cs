@@ -30,6 +30,12 @@ internal enum HandlerKind
 
     /// <summary><c>IRequestPostProcessor&lt;TRequest, TResponse&gt;</c>.</summary>
     PostProcessor,
+
+    /// <summary><c>IRequestExceptionHandler&lt;TRequest, TResponse, TException&gt;</c>.</summary>
+    ExceptionHandler,
+
+    /// <summary><c>IRequestExceptionAction&lt;TRequest, TException&gt;</c>.</summary>
+    ExceptionAction,
 }
 
 /// <summary>Facts about a message type that decide how it can be dispatched.</summary>
@@ -49,7 +55,17 @@ internal sealed record MessageShape(string Type, string Syntax, bool IsValueType
 /// <param name="Message">The request or notification type it handles.</param>
 /// <param name="ResponseType">Plain response or stream item type, for typeof, or null when there is none.</param>
 /// <param name="ResponseSyntax">Annotated response or stream item type, or null when there is none.</param>
+/// <param name="ExceptionChain">
+/// For exception handlers and actions: the exception type they name, then its base types, plain names.
+/// Empty for everything else.
+/// </param>
 /// <param name="IsPublic">Visible outside its own assembly, which matters for CPR0005.</param>
+/// <param name="Order">
+/// Where the handler is declared: the syntax tree's index in the compilation, then the position in it.
+/// MediatR registers what its scan finds in metadata order, which is declaration order, and that registration
+/// order is the order notification handlers, processors and exception handlers run in. Types from referenced
+/// assemblies sort after source, by name.
+/// </param>
 /// <param name="Location">Where the handler is declared, when it is in source.</param>
 internal sealed record HandlerModel(
     HandlerKind Kind,
@@ -57,8 +73,21 @@ internal sealed record HandlerModel(
     MessageShape Message,
     string? ResponseType,
     string? ResponseSyntax,
+    EquatableArray<string> ExceptionChain,
     bool IsPublic,
+    DeclarationOrder Order,
     LocationModel? Location);
+
+/// <summary>Where a type is declared, as a sort key.</summary>
+/// <param name="Tree">The syntax tree's index in the compilation, or int.MaxValue for metadata.</param>
+/// <param name="Position">The declaration's start within that tree.</param>
+internal sealed record DeclarationOrder(int Tree, int Position) : System.IComparable<DeclarationOrder>
+{
+    public static DeclarationOrder Metadata { get; } = new(int.MaxValue, 0);
+
+    public int CompareTo(DeclarationOrder? other) =>
+        other is null ? 1 : Tree != other.Tree ? Tree.CompareTo(other.Tree) : Position.CompareTo(other.Position);
+}
 
 /// <summary>Which contract a message implements.</summary>
 internal enum MessageKind
