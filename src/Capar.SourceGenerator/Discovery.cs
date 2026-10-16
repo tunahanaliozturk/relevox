@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -249,17 +250,7 @@ internal static class Discovery
                 continue;
             }
 
-            List<DiscoveryModel> parts = [];
-            bool ownsMediator = false;
-            foreach (INamedTypeSymbol type in AllTypes(assembly.GlobalNamespace))
-            {
-                ownsMediator |= IsGeneratedMediator(type);
-                DiscoveryModel model = Classify(type, compilation, fromSource: false, cancellationToken);
-                if (!model.IsEmpty)
-                {
-                    parts.Add(model);
-                }
-            }
+            (List<DiscoveryModel> parts, bool ownsMediator) = ScanAssembly(assembly, compilation, cancellationToken);
 
             if (!ownsMediator)
             {
@@ -287,6 +278,56 @@ internal static class Discovery
 
         return Merge(found);
     }
+
+    /// <summary>
+    /// What one referenced assembly contributes, remembered for as long as Roslyn keeps the assembly's symbol.
+    /// </summary>
+    /// <remarks>
+    /// Without this the walk over every type of every handler-bearing reference ran again on each keystroke:
+    /// its output compared equal, so nothing downstream re-ran, but the walk itself did. Roslyn reuses the
+    /// symbol of an unchanged metadata reference across compilations, so it is a natural cache key. The result
+    /// also depends on the consuming assembly, through InternalsVisibleTo, and on the reference's position, which
+    /// orders its handlers, so both are part of the key.
+    /// </remarks>
+    private static (List<DiscoveryModel> Parts, bool OwnsMediator) ScanAssembly(IAssemblySymbol assembly, Compilation compilation, CancellationToken cancellationToken)
+    {
+        string consumer = compilation.Assembly.Identity.ToString();
+        int position = 0;
+        foreach (IAssemblySymbol referenced in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            if (SymbolEqualityComparer.Default.Equals(referenced, assembly))
+            {
+                break;
+            }
+
+            position++;
+        }
+
+        if (ScanCache.TryGetValue(assembly, out CachedScan? cached) && cached.Consumer == consumer && cached.Position == position)
+        {
+            return (cached.Parts, cached.OwnsMediator);
+        }
+
+        List<DiscoveryModel> parts = [];
+        bool ownsMediator = false;
+        foreach (INamedTypeSymbol type in AllTypes(assembly.GlobalNamespace))
+        {
+            ownsMediator |= IsGeneratedMediator(type);
+            DiscoveryModel model = Classify(type, compilation, fromSource: false, cancellationToken);
+            if (!model.IsEmpty)
+            {
+                parts.Add(model);
+            }
+        }
+
+        ScanCache.Remove(assembly);
+        ScanCache.Add(assembly, new CachedScan(consumer, position, parts, ownsMediator));
+        return (parts, ownsMediator);
+    }
+
+    private static readonly ConditionalWeakTable<IAssemblySymbol, CachedScan> ScanCache = new();
+
+    private sealed record CachedScan(string Consumer, int Position, List<DiscoveryModel> Parts, bool OwnsMediator);
 
     public static DiscoveryModel Merge(IEnumerable<DiscoveryModel> parts)
     {
