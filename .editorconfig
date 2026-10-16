@@ -48,3 +48,8 @@ dotnet_diagnostic.CA1822.severity = none
 [src/Capar.Contracts/**.cs]
 dotnet_diagnostic.CA1711.severity = none
 dotnet_diagnostic.CA1716.severity = none
+
+# The shared scenarios call next() without a token on purpose: what the handler receives then is one of
+# the behaviours being compared with MediatR.
+[tests/Capar.DifferentialTests.Scenarios/**.cs]
+dotnet_diagnostic.CA2016.severity = none

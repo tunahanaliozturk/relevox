@@ -53,6 +53,7 @@ internal static class Emitter
         code.Open("internal sealed partial class CaparMediator : global::Capar.IMediator");
 
         code.Line("private readonly global::System.IServiceProvider _services;");
+        code.Line("private readonly global::Capar.Internal.PipelineState<CaparMediator> _pipelines;");
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"private readonly bool _keep{handler.Value};");
@@ -67,9 +68,11 @@ internal static class Emitter
         code.Line("/// as scoped or singleton, so the container would hand this mediator the same instance every time anyway");
         code.Line("/// and the first one can be kept.");
         code.Line("/// </param>");
-        code.Open("public CaparMediator(global::System.IServiceProvider services, bool[] keep)");
+        code.Line("/// <param name=\"pipelines\">Which requests this container has no behaviours for, learned on first use.</param>");
+        code.Open("public CaparMediator(global::System.IServiceProvider services, bool[] keep, global::Capar.Internal.PipelineState<CaparMediator> pipelines)");
         code.Line("global::System.ArgumentNullException.ThrowIfNull(keep);");
         code.Line("_services = services;");
+        code.Line("_pipelines = pipelines;");
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"_keep{handler.Value} = keep[{handler.Value}];");
@@ -149,7 +152,17 @@ internal static class Emitter
         }
 
         code.Line();
-        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep), lifetime));");
+        int requestCount = plan.Requests.Count(static request => !request.Request.IsAbstract);
+        int streamCount = plan.Streams.Count(static stream => !stream.Request.IsAbstract);
+        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), static _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}), {DependencyInjection}.ServiceLifetime.Singleton));");
+        code.Line();
+        code.Line("// Behaviours are resolved from the container on every send, as in MediatR, so these are simply registered.");
+        code.Line("// TryAddEnumerable keeps a behaviour added twice from running twice.");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor behavior in options.BehaviorsToRegister)");
+        code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, behavior);");
+        code.Close();
+        code.Line();
+        code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<CaparMediator>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Capar.IMediator", "global::Capar.ISender", "global::Capar.IPublisher" })
         {
             code.Line($"{TryAdd}(services, new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<CaparMediator>(provider), lifetime));");
@@ -197,8 +210,10 @@ internal static class Emitter
 
     private static void EmitRequests(CodeWriter code, EmitPlan plan, Dictionary<string, int> handlerIndex)
     {
-        foreach (RequestEntry request in plan.Requests.Where(static request => !request.Request.IsAbstract))
+        RequestEntry[] requests = [.. plan.Requests.Where(static request => !request.Request.IsAbstract)];
+        for (int position = 0; position < requests.Length; position++)
         {
+            RequestEntry request = requests[position];
             int handler = handlerIndex[request.HandlerType];
             bool hasResponse = request.ResponseSyntax is not null;
             string returns = hasResponse ? $"{Task}<{request.ResponseSyntax}>" : Task;
@@ -220,7 +235,20 @@ internal static class Emitter
                 hasResponse
                     ? $"Send<{request.ResponseSyntax}>((global::Capar.IRequest<{request.ResponseSyntax}>)request, cancellationToken)"
                     : "Send<global::Capar.IRequest>(request, cancellationToken)");
-            code.Line($"return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
+            string response = request.ResponseSyntax ?? "global::Capar.Unit";
+            code.Line($"global::Capar.IPipelineBehavior<{request.Request.Syntax}, {response}>[]? behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services);");
+            code.Line("if (behaviors is null)");
+            code.Line("{");
+            code.Line($"    return (({contract})Handler{handler}()).Handle(request, cancellationToken);");
+            code.Line("}");
+            code.Line();
+
+            // The handler is resolved inside the innermost step, so a behaviour that short-circuits never causes
+            // it to be constructed, as in MediatR. A request without a response runs through behaviours typed
+            // over Unit, which is how MediatR 12 models it too.
+            code.Line(hasResponse
+                ? $"return global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);"
+                : $"return global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken);");
             code.Close();
         }
     }

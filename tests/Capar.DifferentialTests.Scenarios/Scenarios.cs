@@ -9,7 +9,7 @@ namespace Scenarios;
 /// A scenario describes everything a caller can observe: the result, which handlers ran in what order, and
 /// the type of any exception, including whether it escaped synchronously or inside the task.
 /// </remarks>
-public static class Scenarios
+public static partial class Scenarios
 {
     // Requests
 

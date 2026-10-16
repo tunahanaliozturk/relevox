@@ -68,6 +68,16 @@ public sealed class DifferentialTests
         quiet.ShouldContain("trace=[]");
     }
 
+    /// <summary>Pins down the pipeline order, so agreement cannot mean "no behaviour ran in either".</summary>
+    [Fact]
+    public async Task Behaviours_run_outermost_first_in_registration_order()
+    {
+        string outcome = await Invoke(OnCapar, "PipelineRunsInRegistrationOrder");
+
+        outcome.ShouldBe(
+            "result=\"p pong!\" | trace=[Outer>Ping/String, Inner>, PingAudit>, Late>, PingHandler(p), Late<, Inner<, Outer<] | error=none");
+    }
+
     private static Task<string> Invoke(Type scenarios, string name) =>
         (Task<string>)scenarios.GetMethod(name, BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!;
 }
