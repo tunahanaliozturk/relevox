@@ -145,6 +145,37 @@ public sealed class EmissionTests
         host.CompilationErrors.ShouldBeEmpty();
     }
 
+    [Fact]
+    public void The_reference_scan_cache_keeps_InternalsVisibleTo_per_consumer()
+    {
+        // One reference object, two consumers. The scan of the reference is cached, and must not hand the
+        // second consumer the first one's idea of what it can see.
+        MetadataReference application = GeneratorHarness.Library("Shop.Application", """
+            using Capar;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Shop.Tests")]
+
+            namespace Shop.Application;
+
+            public sealed record Audit : IRequest;
+            internal sealed class AuditHandler : IRequestHandler<Audit>
+            {
+                public Task Handle(Audit request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        GeneratorRun outsider = GeneratorHarness.Run("Shop.Api", [application], "public static class Program;");
+        GeneratorRun friend = GeneratorHarness.Run("Shop.Tests", [application], "public static class Program;");
+        GeneratorRun outsiderAgain = GeneratorHarness.Run("Shop.Api", [application], "public static class Program;");
+
+        outsider.Ids.ShouldBe(["CPR0003"]);
+        friend.Diagnostics.ShouldBeEmpty();
+        friend.Sources["CaparServiceCollectionExtensions.g.cs"].ShouldContain("typeof(global::Shop.Application.AuditHandler)");
+        outsiderAgain.Ids.ShouldBe(["CPR0003"]);
+    }
+
     private static string Between(string text, string start, string end)
     {
         int from = text.IndexOf(start, StringComparison.Ordinal);
