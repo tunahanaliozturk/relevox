@@ -23,3 +23,10 @@ All notable changes to this project are written down here. The format follows
 - Differential tests that run the same scenario source against MediatR 12.5.0 and Çapar, and generator
   tests for diagnostics, determinism, incrementality and strict builds.
 - M1 benchmark results.
+- Pipeline behaviours, resolved from the container on every send and skipped entirely for a request that
+  has none; `AddBehavior` and `AddOpenBehavior` on the options, as in MediatR.
+- Pre and post processors with MediatR 12's registration rules, including `AutoRegisterRequestProcessors`.
+- Exception handlers and actions, both strategies, without closing generic types at run time.
+- Stream pipeline behaviours.
+- `INotificationPublisher`, `ForeachAwaitPublisher` and `TaskWhenAllPublisher`.
+- Handlers, processors and exception handlers run in declaration order, as MediatR's scan registers them.
