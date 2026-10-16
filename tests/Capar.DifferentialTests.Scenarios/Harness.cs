@@ -36,15 +36,29 @@ public sealed class Trace
 /// <summary>Builds the container the way each library's documentation does.</summary>
 public static partial class Library
 {
-    public static ServiceProvider Build(ServiceLifetime lifetime = ServiceLifetime.Transient)
+    public static ServiceProvider Build(ServiceLifetime lifetime = ServiceLifetime.Transient, Profile profile = Profile.Plain)
     {
         ServiceCollection services = new();
         services.AddSingleton<Trace>();
-        Register(services, lifetime);
+        Register(services, lifetime, profile);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
-    static partial void Register(IServiceCollection services, ServiceLifetime lifetime);
+    static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile);
+}
+
+/// <summary>Which optional parts of each library a scenario registers.</summary>
+public enum Profile
+{
+    /// <summary>Handlers only.</summary>
+    Plain,
+
+    /// <summary>
+    /// Handlers plus pipeline behaviours: two open behaviours through the library's configuration, a
+    /// constrained open behaviour, several closed ones, and one more open behaviour registered straight into
+    /// the container afterwards.
+    /// </summary>
+    Pipeline,
 }
 
 /// <summary>How a scenario's trace is compared.</summary>
@@ -69,9 +83,10 @@ public static class Run
     public static async Task<string> Scenario(
         Func<IServiceProvider, Task<object?>> body,
         TraceOrder order = TraceOrder.Exact,
-        ServiceLifetime lifetime = ServiceLifetime.Transient)
+        ServiceLifetime lifetime = ServiceLifetime.Transient,
+        Profile profile = Profile.Plain)
     {
-        await using ServiceProvider root = Library.Build(lifetime);
+        await using ServiceProvider root = Library.Build(lifetime, profile);
         await using AsyncServiceScope scope = root.CreateAsyncScope();
         Trace trace = scope.ServiceProvider.GetRequiredService<Trace>();
 
