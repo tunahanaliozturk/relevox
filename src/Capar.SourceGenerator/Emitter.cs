@@ -97,8 +97,10 @@ internal static class Emitter
     {
         const string TryAdd = DependencyInjection + ".Extensions.ServiceCollectionDescriptorExtensions.TryAdd";
 
+        string mediator = $"global::{plan.Namespace}.CaparMediator";
+
         CodeWriter code = Header(plan);
-        code.Open($"namespace {plan.Namespace}");
+        code.Open($"namespace {plan.RegistrationNamespace}");
         code.Line("/// <summary>Registers the mediator Capar generated for this assembly.</summary>");
         code.Line($"[global::System.CodeDom.Compiler.GeneratedCode(\"Capar\", \"{Version}\")]");
         code.Open("internal static class CaparServiceCollectionExtensions");
@@ -117,7 +119,7 @@ internal static class Emitter
         code.Open($"public static {DependencyInjection}.IServiceCollection AddCapar(this {DependencyInjection}.IServiceCollection services, global::System.Action<global::Capar.CaparOptions>? configure = null)");
         code.Line("global::System.ArgumentNullException.ThrowIfNull(services);");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor existing in services)");
-        code.Line("if (existing.ServiceType == typeof(CaparMediator))");
+        code.Line($"if (existing.ServiceType == typeof({mediator}))");
         code.Line("{");
         code.Line("    return services;");
         code.Line("}");
@@ -268,12 +270,12 @@ internal static class Emitter
         code.Line("// Whether the publisher in force is the default, and whether some behaviour applies to every request, are");
         code.Line("// both settled on first use rather than here, so registrations made after this call still count.");
         code.Line("bool builtInsForEveryRequest = exceptionHandlers || exceptionActions || preProcessors || postProcessors;");
-        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<CaparMediator>), _ => new global::Capar.Internal.PipelineState<CaparMediator>({requestCount}, {streamCount}, builtInsForEveryRequest), {DependencyInjection}.ServiceLifetime.Singleton));");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Capar.Internal.PipelineState<{mediator}>), _ => new global::Capar.Internal.PipelineState<{mediator}>({requestCount}, {streamCount}, builtInsForEveryRequest), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
-        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(CaparMediator), provider => new CaparMediator(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<CaparMediator>>(provider)), lifetime));");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Capar.Internal.PipelineState<{mediator}>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Capar.IMediator", "global::Capar.ISender", "global::Capar.IPublisher" })
         {
-            code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<CaparMediator>(provider), lifetime));");
+            code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<{mediator}>(provider), lifetime));");
         }
 
         code.Line("return services;");

@@ -46,14 +46,16 @@ public sealed class CaparGenerator : IIncrementalGenerator
         IncrementalValueProvider<ReferenceModel> fromReferences = context.CompilationProvider
             .Select(static (compilation, cancellationToken) => new ReferenceModel(
                 compilation.AssemblyName ?? "Capar.Generated",
-                Discovery.ScanReferences(compilation, cancellationToken)))
+                Discovery.ScanReferences(compilation, cancellationToken),
+                Discovery.SeesAnotherRegistration(compilation)))
             .WithTrackingName(TrackingNames.References);
 
         IncrementalValueProvider<EmitPlan> plan = fromSource
             .Combine(fromReferences)
             .Select(static (pair, _) => Planner.Build(
                 pair.Right.AssemblyName,
-                Discovery.Merge([pair.Left, pair.Right.Discovery])))
+                Discovery.Merge([pair.Left, pair.Right.Discovery]),
+                pair.Right.SeesAnotherRegistration))
             .WithTrackingName(TrackingNames.Plan);
 
         // Diagnostics are reported by CaparAnalyzer, which has the syntax trees to put them in source.

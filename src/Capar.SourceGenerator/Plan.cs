@@ -46,8 +46,11 @@ internal sealed record NotificationEntry(MessageShape Notification, EquatableArr
 internal sealed record DiagnosticEntry(string Rule, EquatableArray<string> Arguments, LocationModel? Location);
 
 /// <summary>Everything the emitter needs, decided.</summary>
+/// <param name="Namespace">Where the generated mediator lives, named after the assembly.</param>
+/// <param name="RegistrationNamespace">Where <c>AddCapar</c> lives; see <see cref="Planner.RegistrationNamespaceFor"/>.</param>
 internal sealed record EmitPlan(
     string Namespace,
+    string RegistrationNamespace,
     EquatableArray<RequestEntry> Requests,
     EquatableArray<StreamEntry> Streams,
     EquatableArray<NotificationEntry> Notifications,
@@ -66,7 +69,7 @@ internal sealed record EmitPlan(
 /// </remarks>
 internal static class Planner
 {
-    public static EmitPlan Build(string assemblyName, DiscoveryModel discovery)
+    public static EmitPlan Build(string assemblyName, DiscoveryModel discovery, bool seesAnotherRegistration = false)
     {
         List<DiagnosticEntry> diagnostics = [];
         MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order));
@@ -237,6 +240,7 @@ internal static class Planner
 
         return new EmitPlan(
             ToNamespace(assemblyName),
+            RegistrationNamespaceFor(assemblyName, seesAnotherRegistration),
             requests.OrderBy(static request => request.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
             streams.OrderBy(static stream => stream.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
             notifications.ToEquatableArray(),
@@ -516,10 +520,23 @@ internal static class Planner
             : fullyQualified;
 
     /// <summary>
+    /// Where <c>AddCapar</c> is declared: <c>Microsoft.Extensions.DependencyInjection</c>, where MediatR's
+    /// <c>AddMediatR</c> is, so a migrated <c>Program.cs</c> compiles without a new <c>using</c>.
+    /// </summary>
+    /// <remarks>
+    /// The exception is a project that can see another project's <c>AddCapar</c> there, which happens when a
+    /// test project references Çapar and the app it tests gives it InternalsVisibleTo. Two methods with one
+    /// signature in one namespace would make every call ambiguous (CS0121), so this project's method moves to
+    /// its own namespace. Code inside that namespace finds it first; code outside gets the other project's.
+    /// </remarks>
+    public static string RegistrationNamespaceFor(string assemblyName, bool seesAnotherRegistration) =>
+        seesAnotherRegistration ? ToNamespace(assemblyName) : "Microsoft.Extensions.DependencyInjection";
+
+    /// <summary>
     /// The assembly name, made into a valid namespace.
     /// </summary>
     /// <remarks>
-    /// The generated types are internal and live in a namespace named after their assembly, so two projects
+    /// The generated mediator is internal and lives in a namespace named after its assembly, so two projects
     /// that both reference Çapar, one with InternalsVisibleTo the other, never declare the same type name.
     /// A shared fixed namespace would give CS0436 in every test project that can see the app's internals.
     /// </remarks>
