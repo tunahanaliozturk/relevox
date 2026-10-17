@@ -28,14 +28,7 @@ namespace Capar.SourceGenerator;
 public sealed class CaparAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-    [
-        Diagnostics.NoHandler,
-        Diagnostics.AmbiguousHandler,
-        Diagnostics.Inaccessible,
-        Diagnostics.GenericHandler,
-        Diagnostics.OwnMediator,
-    ];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [.. Diagnostics.All];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

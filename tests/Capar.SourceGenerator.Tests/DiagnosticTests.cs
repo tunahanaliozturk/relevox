@@ -127,4 +127,44 @@ public sealed class DiagnosticTests
         run.Diagnostics.ShouldBeEmpty();
         run.CompilationErrors.ShouldBeEmpty();
     }
+
+    [Fact]
+    public void Every_rule_links_to_a_section_of_the_diagnostics_page_that_exists()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "Capar.slnx")))
+        {
+            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("Capar.slnx not found above the test output.");
+        }
+
+        string page = File.ReadAllText(Path.Combine(root, "docs", "diagnostics.md"));
+
+        foreach (DiagnosticDescriptor rule in Diagnostics.All)
+        {
+            rule.HelpLinkUri.ShouldEndWith("/docs/diagnostics.md#" + rule.Id.ToLowerInvariant());
+            // A heading of the id alone, so its anchor is the lower-case id the link ends with.
+            page.ReplaceLineEndings("\n").ShouldContain($"## {rule.Id}\n\n**{rule.Title}.**");
+        }
+    }
+
+    [Fact]
+    public void The_fix_the_diagnostics_page_gives_for_a_generic_handler_dispatches_both_closed_requests()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public sealed record Customer;
+            public sealed record Order;
+            public sealed record GetById<T>(int Id) : IRequest<T?>;
+            public abstract class GetByIdHandler<T> : IRequestHandler<GetById<T>, T?>
+            {
+                public Task<T?> Handle(GetById<T> request, CancellationToken cancellationToken) => Task.FromResult(default(T));
+            }
+            public sealed class GetCustomerById : GetByIdHandler<Customer>;
+            public sealed class GetOrderById : GetByIdHandler<Order>;
+            """);
+
+        run.Diagnostics.ShouldBeEmpty();
+        run.Mediator.ShouldContain("GetById<global::Customer> request");
+        run.Mediator.ShouldContain("GetById<global::Order> request");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
 }
