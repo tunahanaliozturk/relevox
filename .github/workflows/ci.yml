@@ -93,6 +93,21 @@ jobs:
       - name: Binary size
         run: ls -l aot/Capar.Samples.Aot
 
+  package:
+    name: package smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Packs both packages into a local feed and builds a new application against the .nupkg files, with no
+      # project references. Every other job uses project references, which hide packaging mistakes.
+      - name: Pack, install and run
+        run: bash eng/package-smoke.sh
+
   benchmarks:
     name: benchmark sanity
     runs-on: ubuntu-latest

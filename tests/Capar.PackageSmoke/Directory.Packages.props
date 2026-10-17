@@ -1,0 +1,6 @@
+<Project>
+  <!-- Shadows the repository's central package versions: the versions an application chooses are in its csproj. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

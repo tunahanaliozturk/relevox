@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Packages are restored under obj, which the script deletes, so a package rebuilt with the same version is
+      never served stale from the machine-wide cache.
+    -->
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)obj/packages</RestorePackagesPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Capar" Version="0.0.0-smoke" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- Built only by the second step of the script, which expects the packaged analyzer to report CPR0001. -->
+  <ItemGroup Condition="'$(SmokeUnhandled)' != 'true'">
+    <Compile Remove="Unhandled.cs" />
+  </ItemGroup>
+
+</Project>
