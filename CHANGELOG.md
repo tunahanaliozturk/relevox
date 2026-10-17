@@ -37,3 +37,14 @@ All notable changes to this project are written down here. The format follows
 - Pipeline steps bound to the chain itself: three behaviours at 0.47 of MediatR's time, from 0.61.
 - The reference scan is cached per referenced assembly.
 - A 500-request-type benchmark, with Mediator built with transient handlers for a like-for-like comparison.
+- `eng/package-smoke.sh` and a CI job that pack both packages, install them into a new application, run it,
+  and check that the packaged analyzer reports CPR0001.
+- Package icon and a package README.
+- A help page per diagnostic, linked from each rule.
+- A migration guide, and an order service on MediatR 12.5 next to the same service moved to Çapar; CI fails
+  if the two print different results.
+
+### Fixed
+
+- `AddCapar` is declared in `Microsoft.Extensions.DependencyInjection`, so a top-level `Program.cs` finds it
+  without a `using` for the project's namespace.

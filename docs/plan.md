@@ -297,22 +297,51 @@ milestones:
 - ~~**M3:** the NativeAOT publish smoke test in CI that this plan promises.~~ Done in M3.
 - ~~**M4:** the pipeline row and streams.~~ Done: 0.47 and 0.57 of MediatR, see
   [the M4 numbers](benchmark-results/2026-10-17-m4.md).
-- ~~**M4:** cache the reference scan per referenced assembly.~~ Done. It is correct today, and its output is
-  value-equal, so downstream stages stay cached, but the walk itself repeats on every compilation.
+- ~~**M4:** cache the reference scan per referenced assembly.~~ Done.
+
+### M5, and what it found
+
+Packing the two packages and installing them into a new console app showed that `services.AddCapar()` did not
+compile from a top-level `Program.cs`: the generated method sat in the project's own namespace, and every test
+had a `using` for it. It now lives in `Microsoft.Extensions.DependencyInjection` ([ADR 0007](adr/0007-addcapar-namespace.md)),
+and `eng/package-smoke.sh` builds an application against the `.nupkg` files in CI so the next packaging mistake
+fails a build. "Operations notes" from the table above became [diagnostics.md](diagnostics.md): a library has
+no process to operate, and what a user needs at three in the morning is what each build error means.
+
+### M6 is on hold
+
+The owner decided on 2026-10-17 that nothing is published until the library is ready, and that the name may
+still change. So no NuGet package, no prefix reservation and no public repository until they say so. The
+package ID, the namespaces, the diagnostic prefix and the help links all carry the name; renaming is a
+mechanical change today and gets more expensive after the first release.
 
 ## 9. ADRs to write
 
 - 0001 Source-generated dispatch, not reflection or expression trees.
-- 0002 Handlers return `Task<T>`, not `ValueTask<T>`, to keep MediatR signatures. Revisit if M4 shows the
-  cost matters.
+- 0002 Handlers return `Task<T>`, not `ValueTask<T>`, to keep MediatR signatures. Revisited after M4 and kept.
 - 0003 `net10.0` only.
 - 0004 Handlers resolved per call from the container; no handler caching.
 - 0005 No `namespace MediatR` shim; a code fix later instead.
 - 0006 Clean-room rule and the use of MediatR 12.5.0 as a test oracle.
+- 0007 `AddCapar` declared in `Microsoft.Extensions.DependencyInjection`. Written in M5.
 
 ## 10. Open questions
 
 - Logo: decided. The "Nal-Ç" mark (a horseshoe drawn as Ç; nail holes are the pipeline stops, the dot
-  is the message) in night `#0F172A` and cobalt `#3B82F6`. Sources in `docs/brand/`. The 128 px PNG
-  that NuGet requires is rendered from the SVG at M5.
-- NuGet ID prefix reservation, which needs the package owner account; only relevant at M6.
+  is the message) in night `#0F172A` and cobalt `#3B82F6`. Sources in `docs/brand/`. The package icon,
+  `capar-icon.png`, is the mark in white on a night tile, rendered from `capar-icon.svg`.
+- The name. It may still change before the first release; see "M6 is on hold".
+- NuGet ID prefix reservation: not before the name is final.
+
+## 11. After v1.0
+
+In rough order of value to someone migrating:
+
+- **A code fix for the migration.** An analyzer that offers to rewrite `using MediatR` and `AddMediatR`,
+  promised by ADR 0005.
+- **Generic handlers.** MediatR 12 closes them at run time; Çapar reports them as CPR0004. Closing them over
+  the request types the build can see would cover most real uses.
+- **Built-in behaviours created for nothing.** Once any processor or exception handler exists, the built-in
+  behaviours are resolved on every pipelined send, even for requests none of them apply to.
+- **API compatibility checks.** Package validation against the 1.0.0 baseline, so a breaking change cannot
+  ship in a minor version.
