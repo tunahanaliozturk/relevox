@@ -6,9 +6,15 @@ You need the .NET 10 SDK. Nothing else.
 
 ```bash
 dotnet build Capar.slnx
+dotnet run --project tests/Capar.SourceGenerator.Tests
+dotnet run --project tests/Capar.DifferentialTests
 dotnet run -c Release --project benchmarks/Capar.Benchmarks -- --sanity
 dotnet run --project tools/Capar.LicenseAudit -- .
+bash eng/package-smoke.sh
 ```
+
+The last one packs both packages and builds a new application against them. Run it after touching anything
+the package carries: the generator, project files, `Directory.Build.props`.
 
 ## Ground rules
 
