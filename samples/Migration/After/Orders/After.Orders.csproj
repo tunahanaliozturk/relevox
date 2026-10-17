@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Shop.Orders</RootNamespace>
+  </PropertyGroup>
+
+  <!-- A library with handlers references the contracts only. The application's mediator finds them. -->
+  <ItemGroup>
+    <ProjectReference Include="../../../../src/Capar.Contracts/Capar.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
