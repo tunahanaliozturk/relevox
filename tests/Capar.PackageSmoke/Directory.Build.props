@@ -1,0 +1,7 @@
+<Project>
+  <!--
+    Stops the repository's Directory.Build.props from being imported. This project builds the way an
+    application that installed the packages from a feed builds: no project references, no central package
+    versions, nothing from this repository except the .nupkg files.
+  -->
+</Project>
