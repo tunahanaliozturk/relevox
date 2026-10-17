@@ -49,6 +49,15 @@ jobs:
       - name: Differential tests against MediatR 12.5.0
         run: dotnet run --project tests/Capar.DifferentialTests --configuration Release --no-build
 
+      # The same order service on MediatR 12.5 and moved to Capar by following docs/migration.md. Both print
+      # what they did; any difference in the transcripts fails the build.
+      - name: Migration sample prints the same before and after
+        run: |
+          dotnet run --project samples/Migration/Before/App --configuration Release --no-build > before.txt
+          dotnet run --project samples/Migration/After/App --configuration Release --no-build > after.txt
+          diff before.txt after.txt
+          cat after.txt
+
   licences:
     name: dependency licences
     runs-on: ubuntu-latest
