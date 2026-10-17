@@ -163,7 +163,8 @@ internal sealed record DiscoveryModel(
 /// <summary>What the referenced assemblies contributed, plus the facts taken from the compilation.</summary>
 /// <param name="AssemblyName">Names the generated namespace.</param>
 /// <param name="Discovery">Handlers and messages found in references.</param>
-internal sealed record ReferenceModel(string AssemblyName, DiscoveryModel Discovery);
+/// <param name="SeesAnotherRegistration">Whether a reference's generated <c>AddCapar</c> is visible here.</param>
+internal sealed record ReferenceModel(string AssemblyName, DiscoveryModel Discovery, bool SeesAnotherRegistration);
 
 /// <summary>A source location reduced to values, because <c>Location</c> holds the syntax tree.</summary>
 internal sealed record LocationModel(

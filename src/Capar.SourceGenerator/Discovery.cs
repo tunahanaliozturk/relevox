@@ -379,9 +379,29 @@ internal static class Discovery
         return reaches;
     }
 
-    private static bool IsGeneratedMediator(INamedTypeSymbol type) =>
-        type.Name == "CaparMediator"
-        && type.GetAttributes().Any(static attribute =>
+    /// <summary>
+    /// Whether a referenced assembly's generated <c>AddCapar</c> sits in the shared namespace and is visible
+    /// here through InternalsVisibleTo. One metadata lookup per reference that grants access; nothing is walked.
+    /// </summary>
+    public static bool SeesAnotherRegistration(Compilation compilation)
+    {
+        foreach (IAssemblySymbol assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            if (assembly.GivesAccessTo(compilation.Assembly)
+                && assembly.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.CaparServiceCollectionExtensions") is { } registration
+                && IsGenerated(registration))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsGeneratedMediator(INamedTypeSymbol type) => type.Name == "CaparMediator" && IsGenerated(type);
+
+    private static bool IsGenerated(INamedTypeSymbol type) =>
+        type.GetAttributes().Any(static attribute =>
             attribute.AttributeClass?.ToDisplayString() == "System.CodeDom.Compiler.GeneratedCodeAttribute"
             && attribute.ConstructorArguments.Length > 0
             && attribute.ConstructorArguments[0].Value is "Capar");

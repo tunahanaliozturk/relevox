@@ -2,7 +2,7 @@ extern alias oncapar;
 
 using Microsoft.Extensions.DependencyInjection;
 using CaparMediator = oncapar::Capar.DifferentialTests.OnCapar.CaparMediator;
-using Registration = oncapar::Capar.DifferentialTests.OnCapar.CaparServiceCollectionExtensions;
+using Registration = oncapar::Microsoft.Extensions.DependencyInjection.CaparServiceCollectionExtensions;
 using S = oncapar::Scenarios;
 
 namespace Capar.DifferentialTests;

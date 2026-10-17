@@ -284,4 +284,64 @@ public sealed class EdgeCaseTests
         owned.Id.ShouldBe("CPR0005");
         owned.GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("Billing.ChargeHandler");
     }
+
+    [Fact]
+    public void AddCapar_is_found_where_AddMediatR_was_with_no_using_for_the_project_namespace()
+    {
+        // Top-level statements live in the global namespace, so a method in the project's own namespace
+        // was invisible to a Program.cs moved over from MediatR. Packing and installing the package found it.
+        GeneratorRun run = GeneratorHarness.Run("Shop.Api", [], Usings + """
+            using Microsoft.Extensions.DependencyInjection;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public static class Startup
+            {
+                public static IServiceCollection Configure(IServiceCollection services) => services.AddCapar();
+            }
+            """);
+
+        run.Sources["CaparServiceCollectionExtensions.g.cs"].ShouldContain("namespace Microsoft.Extensions.DependencyInjection");
+        run.Mediator.ShouldContain("namespace Shop.Api");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_test_project_that_sees_the_app_internals_gets_its_own_AddCapar_without_an_ambiguous_call()
+    {
+        MetadataReference app = GeneratorHarness.Library("Shop.Api", [], withGenerator: true, Usings + """
+            [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Shop.Tests")]
+            namespace Shop.Api;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        GeneratorRun tests = GeneratorHarness.Run("Shop.Tests", [app], Usings + """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Shop.Tests
+            {
+                public sealed record Probe : IRequest<int>;
+                public sealed class ProbeHandler : IRequestHandler<Probe, int>
+                {
+                    public Task<int> Handle(Probe request, CancellationToken cancellationToken) => Task.FromResult(2);
+                }
+                public static class Own
+                {
+                    public static IServiceCollection Configure(IServiceCollection services) => services.AddCapar();
+                }
+            }
+            public static class Outside
+            {
+                public static IServiceCollection Configure(IServiceCollection services) => services.AddCapar();
+            }
+            """);
+
+        tests.Sources["CaparServiceCollectionExtensions.g.cs"].ShouldContain("namespace Shop.Tests");
+        tests.CompilationErrors.ShouldBeEmpty();
+    }
 }
