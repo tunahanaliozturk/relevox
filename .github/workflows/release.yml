@@ -107,7 +107,8 @@ jobs:
       # Trusted publishing: a short-lived key in exchange for this workflow's identity, no stored secret.
       - name: NuGet login
         id: login
-        uses: NuGet/login@v1
+        # Pinned to a commit: this step mints the key that can publish the packages. Dependabot proposes updates.
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ vars.NUGET_USER }}
 
