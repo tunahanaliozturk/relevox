@@ -12,6 +12,7 @@ disable` and `.editorconfig` severities work as they do for any other analyzer.
 | [CPR0003](#cpr0003) | Error | A handler cannot be called from the generated code |
 | [CPR0004](#cpr0004) | Warning | A generic handler cannot be registered |
 | [CPR0005](#cpr0005) | Warning | A referenced project has its own mediator |
+| [CPR0006](#cpr0006) | Warning | An `AddCapar` call registers another project's mediator |
 
 ## CPR0001
 
@@ -95,3 +96,23 @@ meant to contribute handlers to the application and referenced the wrong package
 **Fix:** in the referenced project, replace the `Capar` package with `Capar.Contracts`. Only the project that
 calls `AddCapar`, usually the host, references `Capar`. If the library really does keep its own mediator,
 make its handlers `internal` and the warning goes away.
+
+## CPR0006
+
+**AddCapar call registers another project's mediator.** Warning.
+
+Every project that references the `Capar` package gets an `AddCapar` of its own, which registers that
+project's mediator and the handlers it found. When another project's `AddCapar` is visible too, because that
+project gives this one `InternalsVisibleTo`, a call can bind to the other one. It compiles, and this project's
+handlers are never registered: the first request sent fails with "no handler".
+
+The usual cases are a test project that references `Capar` and the application it tests, and a library that
+uses Çapar privately and grants the host access to its internals.
+
+**Fix:** call this project's method by its full name, which the message gives:
+
+```csharp
+global::Shop.Tests.CaparServiceCollectionExtensions.AddCapar(services);
+```
+
+If registering the other project's mediator is what you meant, suppress the warning at that call.

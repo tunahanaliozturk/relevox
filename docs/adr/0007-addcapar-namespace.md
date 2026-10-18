@@ -26,15 +26,26 @@ ambiguous (CS0121). The usual case is a test project that references `Capar` and
 access to its internals. Inside the test project's namespace its own method is found first; from the global
 namespace the app's is.
 
-`eng/package-smoke.sh` now packs both packages and builds an application against the `.nupkg` files in CI,
-so a packaging mistake of this kind fails the build.
+`eng/package-smoke.sh` now packs both packages and builds an application against the `.nupkg` files in CI.
+Its `Program.cs` imports only `Capar`, `Microsoft.Extensions.DependencyInjection` and its own types'
+namespace, which is not the generated one, so a mistake of this kind fails the build.
 
 ## Consequences
 
 - A `Program.cs` moved from MediatR needs no new `using` for registration, and neither does a new one.
 - The generated class name, `CaparServiceCollectionExtensions`, now sits in a namespace many assemblies
-  share. It is `internal`, so it clashes only with an assembly that grants this one access, which is the case
-  handled above.
+  share. It is `internal`, so it clashes only with an assembly that grants this one access, and the fallback
+  above covers the common shape of that. Two shapes it leaves to the user:
+  - A file outside the project's namespace that imports both the project's namespace and
+    `Microsoft.Extensions.DependencyInjection` sees two `AddCapar` methods and gets CS0121.
+  - A project that two others grant access to sees both of theirs in the shared namespace: an unqualified call
+    is ambiguous, and naming the class is CS0433.
+
+  In both, the project's own method is reachable by its full name,
+  `global::<ProjectNamespace>.CaparServiceCollectionExtensions.AddCapar(services)`.
+- A call that compiles but binds to another project's `AddCapar` would leave this project's handlers
+  unregistered with nothing said at build time. The analyzer reports it as
+  [CPR0006](../diagnostics.md#cpr0006) and names the call to use instead.
 - Code that named the class to call it statically, as the differential tests do, names the new namespace.
 
 ## Alternatives considered

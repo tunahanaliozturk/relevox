@@ -8,8 +8,9 @@ signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 - **Dispatch decided at build time.** No assembly scanning. A request with no handler, or with two, is
   reported by the compiler.
 - **NativeAOT and trimming** without annotations.
-- **Faster than MediatR 12.5:** a send takes a quarter of the time, startup a thirtieth. Every number is
-  measured and published with the hardware named, in the repository.
+- **Faster than MediatR 12.5:** a send takes under half the time through `ISender` and a quarter through
+  the generated mediator; startup takes a thirtieth. Every number is measured and published with the
+  hardware named, in the repository.
 
 ## Packages
 

@@ -41,6 +41,8 @@ All notable changes to this project are written down here. The format follows
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
 - A help page per diagnostic, linked from each rule.
+- CPR0006: an `AddCapar` call that binds to another project's generated method, which would register that
+  project's handlers instead of this one's.
 - A migration guide, and an order service on MediatR 12.5 next to the same service moved to Çapar; CI fails
   if the two print different results.
 

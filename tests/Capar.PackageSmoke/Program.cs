@@ -1,10 +1,11 @@
 using System.Runtime.CompilerServices;
 using Capar;
-using Capar.PackageSmoke;
 using Microsoft.Extensions.DependencyInjection;
+using Smoke;
 
-// Built against the packed .nupkg files, the way an application that installed them builds. AddCapar and
-// the contracts need only the Capar and DependencyInjection usings; the third is for the typed CaparMediator.
+// Built against the packed .nupkg files, the way an application that installed them builds. AddCapar has to
+// be found with only the Capar and DependencyInjection usings: Smoke is this file's own namespace, not the one
+// the generator writes into, so a generated AddCapar that strayed back there would fail this build.
 ServiceCollection services = new();
 services.AddSingleton<Log>();
 services.AddCapar(options => options.AddOpenBehavior(typeof(Counting<,>)));
@@ -15,7 +16,7 @@ ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
 Log log = provider.GetRequiredService<Log>();
 
 Check("send through ISender", await sender.Send(new Ping("hi")), "hi pong");
-Check("send through the typed mediator", await scope.ServiceProvider.GetRequiredService<CaparMediator>().Send(new Ping("typed")), "typed pong");
+Check("send through the typed mediator", await scope.ServiceProvider.GetRequiredService<global::Capar.PackageSmoke.CaparMediator>().Send(new Ping("typed")), "typed pong");
 await sender.Send(new Touch());
 Check("send without a response", log.Entries.Contains("touched"), true);
 Check("behaviour around every send", log.Entries.Count(entry => entry == "behaviour"), 3);
@@ -42,7 +43,7 @@ static void Check<T>(string what, T actual, T expected)
     }
 }
 
-namespace Capar.PackageSmoke
+namespace Smoke
 {
     public sealed class Log
     {

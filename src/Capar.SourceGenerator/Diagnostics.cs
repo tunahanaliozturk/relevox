@@ -93,7 +93,22 @@ internal static class Diagnostics
         helpLinkUri: Help + "cpr0005",
         description: "Projects whose handlers belong to the application should reference Capar.Contracts. Only the project that calls AddCapar, usually the host, references Capar itself.");
 
-    public static readonly DiagnosticDescriptor[] All = [NoHandler, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator];
+    /// <summary>
+    /// A warning, because the call compiles and does something; it just registers a different project's
+    /// handlers, which shows up as "no handler" only when a request is sent. Calling another project's
+    /// <c>AddCapar</c> on purpose is possible, which is what a suppression is for.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForeignRegistration = new(
+        id: "CPR0006",
+        title: "AddCapar call registers another project's mediator",
+        messageFormat: "This calls the AddCapar generated for '{0}', which registers that project's mediator and handlers, not this project's. To register this project's, call {1}.AddCapar(services).",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: Help + "cpr0006",
+        description: "Each project that references Capar gets its own AddCapar. When another project's is visible too, through InternalsVisibleTo, a call can bind to it, and this project's handlers are then never registered.");
+
+    public static readonly DiagnosticDescriptor[] All = [NoHandler, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator, ForeignRegistration];
 
     public static DiagnosticDescriptor Descriptor(string rule) => rule switch
     {
@@ -101,6 +116,7 @@ internal static class Diagnostics
         "CPR0002" => AmbiguousHandler,
         "CPR0003" => Inaccessible,
         "CPR0004" => GenericHandler,
+        "CPR0006" => ForeignRegistration,
         _ => OwnMediator,
     };
 

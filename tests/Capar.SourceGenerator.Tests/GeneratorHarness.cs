@@ -57,7 +57,9 @@ public static class GeneratorHarness
         GeneratorDriverRunResult result = driver.GetRunResult();
 
         // The rules are reported by the analyzer, against the user's own source, so that is where they are read.
-        ImmutableArray<Diagnostic> analyzer = compilation
+        // It runs over the compilation the generator produced, as in a real build: an AddCapar call only binds to
+        // this project's method once that method has been generated.
+        ImmutableArray<Diagnostic> analyzer = output
             .WithAnalyzers([new CaparAnalyzer()])
             .GetAnalyzerDiagnosticsAsync()
             .GetAwaiter()

@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Capar.SourceGenerator;
@@ -42,6 +43,31 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
             {
                 return;
             }
+
+            // Where this project's own AddCapar is, worked out the way the generator works it out, so the warning
+            // can name the call that reaches it.
+            string assemblyName = start.Compilation.AssemblyName ?? "Capar.Generated";
+            string ownRegistration = "global::"
+                + Planner.RegistrationNamespaceFor(assemblyName, Discovery.SeesAnotherRegistration(start.Compilation))
+                + ".CaparServiceCollectionExtensions";
+
+            start.RegisterOperationAction(
+                operation =>
+                {
+                    IMethodSymbol method = ((IInvocationOperation)operation.Operation).TargetMethod;
+                    if (method.Name == "AddCapar"
+                        && method.ContainingType is { Name: "CaparServiceCollectionExtensions" } registration
+                        && !SymbolEqualityComparer.Default.Equals(registration.ContainingAssembly, operation.Compilation.Assembly)
+                        && Discovery.IsGeneratedByCapar(registration))
+                    {
+                        operation.ReportDiagnostic(Diagnostic.Create(
+                            Diagnostics.ForeignRegistration,
+                            operation.Operation.Syntax.GetLocation(),
+                            registration.ContainingAssembly.Name,
+                            ownRegistration));
+                    }
+                },
+                OperationKind.Invocation);
 
             ConcurrentBag<DiscoveryModel> parts = [];
             start.RegisterSymbolAction(
