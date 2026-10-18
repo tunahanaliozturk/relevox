@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
@@ -78,6 +79,16 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
                 OperationKind.Invocation);
 
             ConcurrentBag<DiscoveryModel> parts = [];
+            int callsAddCapar = 0;
+            start.RegisterSyntaxNodeAction(
+                call =>
+                {
+                    if (CaparGenerator.IsAddCaparCall(call.Node))
+                    {
+                        Interlocked.Exchange(ref callsAddCapar, 1);
+                    }
+                },
+                Microsoft.CodeAnalysis.CSharp.SyntaxKind.InvocationExpression);
             start.RegisterSymbolAction(
                 symbol =>
                 {
@@ -93,7 +104,11 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
             {
                 DiscoveryModel references = Discovery.ScanReferences(end.Compilation, end.CancellationToken);
                 DiscoveryModel closings = Discovery.CloseGenerics(end.Compilation, end.CancellationToken);
-                EmitPlan plan = Planner.Build(end.Compilation.AssemblyName ?? "Capar.Generated", Discovery.Merge([.. parts, references, closings]));
+                EmitPlan plan = Planner.Build(
+                    end.Compilation.AssemblyName ?? "Capar.Generated",
+                    Discovery.Merge([.. parts, references, closings]),
+                    referencesAMediator: Discovery.ReferencesAMediator(end.Compilation, end.CancellationToken),
+                    callsAddCapar: Volatile.Read(ref callsAddCapar) == 1);
 
                 foreach (DiagnosticEntry entry in plan.Diagnostics)
                 {

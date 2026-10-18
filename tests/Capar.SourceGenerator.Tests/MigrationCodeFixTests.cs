@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Capar.CodeFixes;
+using Capar.Migration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -183,6 +184,11 @@ public sealed class MigrationCodeFixTests
         fixedSources[1].ShouldContain("options.AddOpenBehavior(typeof(Logging<,>));");
         fixedSources[1].ShouldContain("// Lifetimes match the web host's.");
         fixedSources[1].ShouldNotContain("LicenseKey");
+
+        // Every line left in the lambda keeps its own indentation: a removed statement's does not pile onto it.
+        string[] indents = [.. fixedSources[1].ReplaceLineEndings("\n").Split('\n').Where(line => line.TrimStart().StartsWith("options.", StringComparison.Ordinal) || line.TrimStart().StartsWith("// Lifetimes", StringComparison.Ordinal))
+            .Select(line => line[..(line.Length - line.TrimStart().Length)]).Distinct()];
+        indents.ShouldHaveSingleItem();
         ShouldBuildWithTheGenerator(fixedSources);
     }
 

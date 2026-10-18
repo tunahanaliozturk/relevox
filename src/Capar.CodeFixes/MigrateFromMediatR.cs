@@ -228,7 +228,7 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         {
             trimmed = leftover switch
             {
-                StatementSyntax { Parent: BlockSyntax } statement => trimmed.RemoveNode(statement, SyntaxRemoveOptions.KeepLeadingTrivia | SyntaxRemoveOptions.KeepDirectives)!,
+                StatementSyntax { Parent: BlockSyntax } statement => Remove(trimmed, statement),
                 StatementSyntax statement => trimmed.ReplaceNode(statement, SyntaxFactory.Block().WithTriviaFrom(statement)),
                 ExpressionSyntax { Parent: LambdaExpressionSyntax lambda } => trimmed.ReplaceNode(lambda, lambda.WithExpressionBody(null).WithBlock(SyntaxFactory.Block())),
                 _ => trimmed,
@@ -236,6 +236,34 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         }
 
         return trimmed.Block is { Statements.Count: 0 } block && !HasCommentOrDirective(block) ? null : trimmed;
+    }
+
+    /// <summary>
+    /// Removes a statement from its block, keeping the comments and directives above it on the next line. Its
+    /// indentation goes with it: carried over, it would indent the next line twice.
+    /// </summary>
+    private static AnonymousFunctionExpressionSyntax Remove(AnonymousFunctionExpressionSyntax function, StatementSyntax statement)
+    {
+        SyntaxTriviaList leading = statement.GetLeadingTrivia();
+        List<SyntaxTrivia> kept = [];
+        if (leading.Any(static trivia => !trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia)))
+        {
+            int last = leading.Count - 1;
+            while (last >= 0 && leading[last].IsKind(SyntaxKind.WhitespaceTrivia))
+            {
+                last--;
+            }
+
+            kept.AddRange(leading.Take(last + 1));
+        }
+
+        SyntaxAnnotation next = new();
+        SyntaxToken following = statement.GetLastToken().GetNextToken();
+        AnonymousFunctionExpressionSyntax marked = function.ReplaceToken(following, following.WithAdditionalAnnotations(next));
+        StatementSyntax target = marked.DescendantNodes().OfType<StatementSyntax>().First(candidate => candidate.SpanStart == statement.SpanStart && candidate.IsKind(statement.Kind()));
+        AnonymousFunctionExpressionSyntax removed = marked.RemoveNode(target, SyntaxRemoveOptions.KeepNoTrivia)!;
+        SyntaxToken landing = removed.GetAnnotatedTokens(next).Single();
+        return removed.ReplaceToken(landing, landing.WithLeadingTrivia(SyntaxFactory.TriviaList(kept).AddRange(landing.LeadingTrivia)));
     }
 
     // A statement or a nested lambda's expression body that a dropped member left with nothing to do.

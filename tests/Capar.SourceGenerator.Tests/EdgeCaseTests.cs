@@ -277,7 +277,13 @@ public sealed class EdgeCaseTests
             }
             """);
 
-        GeneratorRun host = GeneratorHarness.Run("Shop.Api", [module], "public static class Program;");
+        GeneratorRun host = GeneratorHarness.Run("Shop.Api", [module], """
+            using Microsoft.Extensions.DependencyInjection;
+            public static class Program
+            {
+                public static void Configure(IServiceCollection services) => services.AddCapar();
+            }
+            """);
 
         host.Sources["CaparServiceCollectionExtensions.g.cs"].ShouldNotContain("ChargeHandler");
         Diagnostic owned = host.Diagnostics.ShouldHaveSingleItem();
@@ -389,5 +395,36 @@ public sealed class EdgeCaseTests
         Diagnostic foreign = host.Diagnostics.ShouldHaveSingleItem();
         foreign.Id.ShouldBe("CPR0006");
         foreign.GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("global::Shop.Api.CaparServiceCollectionExtensions.AddCapar(services)");
+    }
+
+    [Fact]
+    public void A_project_downstream_of_the_one_with_the_mediator_writes_nothing_and_reports_nothing()
+    {
+        // Analyzers flow through project references, so an API or test project below the application layer runs
+        // the generator too. Found migrating a real Clean Architecture solution, where every such project warned.
+        MetadataReference application = GeneratorHarness.Library("Shop.Application", [], withGenerator: true, Usings + """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Shop.Application;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public static class Setup
+            {
+                public static IServiceCollection AddApplication(IServiceCollection services) => services.AddCapar();
+            }
+            """);
+
+        GeneratorRun api = GeneratorHarness.Run("Shop.Api", [application], """
+            public static class Program
+            {
+                public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) => Shop.Application.Setup.AddApplication(services);
+            }
+            """);
+
+        api.Sources.ShouldBeEmpty();
+        api.Diagnostics.ShouldBeEmpty();
+        api.CompilationErrors.ShouldBeEmpty();
     }
 }

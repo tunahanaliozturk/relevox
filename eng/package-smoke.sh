@@ -24,10 +24,18 @@ for package in Capar Capar.Contracts; do
 done
 
 contents="$(unzip -l "$feed/Capar.$version.nupkg")"
-for analyzer in Capar.SourceGenerator.dll Capar.CodeFixes.dll; do
-  grep -q " analyzers/dotnet/cs/$analyzer\$" <<<"$contents" \
-    || { echo "Capar.$version.nupkg has no $analyzer under analyzers/" >&2; exit 1; }
+grep -q " analyzers/dotnet/cs/Capar.SourceGenerator.dll\$" <<<"$contents" \
+  || { echo "Capar.$version.nupkg has no generator under analyzers/" >&2; exit 1; }
+
+contracts="$(unzip -l "$feed/Capar.Contracts.$version.nupkg")"
+for analyzer in Capar.Migration.dll Capar.CodeFixes.dll; do
+  grep -q " analyzers/dotnet/cs/$analyzer\$" <<<"$contracts" \
+    || { echo "Capar.Contracts.$version.nupkg has no $analyzer under analyzers/" >&2; exit 1; }
 done
+
+# The contracts' analyzers have to reach an application that references only Capar.
+unzip -p "$feed/Capar.$version.nupkg" Capar.nuspec | grep 'id="Capar.Contracts"' | grep -vq 'exclude="[^"]*Analyzers' \
+  || { echo "Capar.$version.nupkg keeps the contracts' analyzers from flowing to the application" >&2; exit 1; }
 
 dotnet run --project "$app" --configuration Release
 

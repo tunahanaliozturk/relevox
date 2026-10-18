@@ -15,7 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Capar.Contracts/Capar.Contracts.csproj" />
+    <!-- PrivateAssets none, so the contracts' migration analyzer reaches projects that reference only Capar. -->
+    <ProjectReference Include="../Capar.Contracts/Capar.Contracts.csproj" PrivateAssets="none" />
     <!--
       Built before this project so its dll can be packed under analyzers/, but not referenced as an
       assembly: the generator runs inside the consumer's compiler and never at run time.
@@ -23,17 +24,10 @@
     <ProjectReference Include="../Capar.SourceGenerator/Capar.SourceGenerator.csproj"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
-    <ProjectReference Include="../Capar.CodeFixes/Capar.CodeFixes.csproj"
-                      ReferenceOutputAssembly="false"
-                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="../Capar.SourceGenerator/bin/$(Configuration)/netstandard2.0/Capar.SourceGenerator.dll"
-          Pack="true"
-          PackagePath="analyzers/dotnet/cs"
-          Visible="false" />
-    <None Include="../Capar.CodeFixes/bin/$(Configuration)/netstandard2.0/Capar.CodeFixes.dll"
           Pack="true"
           PackagePath="analyzers/dotnet/cs"
           Visible="false" />
