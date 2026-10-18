@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.ComponentModel;
+using System.Diagnostics;
 using Capar.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
 
