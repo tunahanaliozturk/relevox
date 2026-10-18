@@ -1,0 +1,42 @@
+name: Bug report
+description: Something Çapar does differently from what you expected, or from MediatR 12.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. A security problem belongs in a [private advisory](https://github.com/tunahanaliozturk/capar/security/advisories/new), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Çapar version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, including the full exception or diagnostic text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: If MediatR 12.5 behaves differently on the same code, say how. That is the most useful thing a report can contain.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest code that shows it
+      description: The request, the handler, any behaviours or processors involved, and how AddCapar is called.
+      render: csharp
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: .NET SDK and IDE
+      placeholder: .NET SDK 10.0.402, Rider 2026.2

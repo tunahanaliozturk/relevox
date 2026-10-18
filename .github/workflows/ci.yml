@@ -122,6 +122,13 @@ jobs:
       - name: Pack, install and run
         run: bash eng/package-smoke.sh
 
+      # SourceLink, deterministic build and compiler flags, read from the packages. The release workflow runs the
+      # same check on the packages it is about to publish.
+      - name: Validate packages
+        run: |
+          dotnet tool install --global dotnet-validate --version 0.0.1-preview.582
+          for package in artifacts/smoke-feed/*.nupkg; do dotnet validate package local "$package"; done
+
   benchmarks:
     name: benchmark sanity
     runs-on: ubuntu-latest

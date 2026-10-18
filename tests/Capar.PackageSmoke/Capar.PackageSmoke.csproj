@@ -11,10 +11,11 @@
       never served stale from the machine-wide cache.
     -->
     <RestorePackagesPath>$(MSBuildThisFileDirectory)obj/packages</RestorePackagesPath>
+    <CaparVersion Condition="'$(CaparVersion)' == ''">0.0.0-smoke</CaparVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Capar" Version="0.0.0-smoke" />
+    <PackageReference Include="Capar" Version="$(CaparVersion)" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
 

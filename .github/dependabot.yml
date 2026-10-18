@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dependencies:
+        patterns: ["*"]
+    ignore:
+      # The test oracle and baseline, pinned on purpose: 12.5.0 is the last Apache-2.0 release, and 13 and later
+      # would fail the licence audit. See ADR 0006.
+      - dependency-name: MediatR
+        versions: [">= 13.0.0"]
+      # The generator's Roslyn floor: the oldest .NET 10 SDK has to be able to load it. See ADR 0003.
+      - dependency-name: Microsoft.CodeAnalysis.CSharp
+      - dependency-name: Microsoft.CodeAnalysis.CSharp.Workspaces
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
