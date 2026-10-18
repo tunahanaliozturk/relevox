@@ -338,8 +338,9 @@ mechanical change today and gets more expensive after the first release.
 
 In rough order of value to someone migrating:
 
-- **A code fix for the migration.** An analyzer that offers to rewrite `using MediatR` and `AddMediatR`,
-  promised by ADR 0005.
+- ~~**A code fix for the migration.**~~ Done before the first release. No analyzer was needed: after the
+  package swap the compiler already reports every `using MediatR` and `AddMediatR`, so the fix hangs off
+  those errors.
 - ~~**Generic handlers.**~~ Done before the first release ([ADR 0008](adr/0008-generic-handlers.md)). Working on
   it showed MediatR's default registers generic notification handlers, which Çapar had been skipping: a real
   behaviour difference, now matched and covered by differential tests.

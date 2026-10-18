@@ -47,4 +47,6 @@ Handlers are found in the application and in every referenced project that uses 
 3. Replace `AddMediatR(cfg => cfg.RegisterServicesFromAssembly(...))` with `AddCapar()`. Behaviours,
    processors and lifetimes are configured with the same members as before.
 
-The migration guide in the repository covers the rest, including the few places where behaviour differs.
+In an IDE, steps 2 and 3 are a code fix: after the package swap, apply **Move from MediatR to Capar** to the
+whole solution. The migration guide in the repository covers the rest, including the few places where
+behaviour differs.
