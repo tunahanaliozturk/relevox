@@ -80,11 +80,15 @@ The message says which of these a handler missed:
 
 | The message says | Because |
 |---|---|
-| has no constraint naming a type declared in this solution | An unconstrained type parameter, or one constrained only to a .NET type such as `IComparable<T>`, would mean closing it over every type there is. |
+| has no constraint naming a type declared in this solution | An unconstrained type parameter, or one constrained only to a type from .NET or a NuGet package such as `IComparable<T>`, would mean closing it over far too many types. |
 | no type in this solution satisfies its constraints | Nothing to close it over yet. |
-| more than the 256 the generator will write | The constraints admit too many types, or too many combinations of them. |
-| declared as H&lt;T&gt; : INotificationHandler&lt;T&gt; | The notification is built from the type parameter, as in `INotificationHandler<Envelope<T>>`, so there is no single notification to close it for. |
+| more than the 256 type combinations the generator will write | The constraints admit too many types, or too many combinations of them. |
+| declared as H&lt;T&gt; : INotificationHandler&lt;T&gt;, with one type parameter | The notification is built from the type parameter, as in `INotificationHandler<Envelope<T>>`, or the handler has more type parameters than the notification. MediatR throws on every publish for the first shape. |
+| registered only when its type parameters are exactly the interface's | A generic processor, exception handler or action such as `Pre<T> : IRequestPreProcessor<Wrapper<T>>`, which the container cannot close. |
 | nested in a generic type | The handler's own type parameters come from the type around it. |
+
+An inaccessible generic handler, such as a `private` nested one or an `internal` one in another project, is
+reported as [CPR0003](#cpr0003), like a written one.
 
 **Fix:** constrain the type parameter to an interface or base class declared in the solution, or make the
 generic handler `abstract` and declare one closed handler per request:

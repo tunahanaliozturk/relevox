@@ -167,7 +167,7 @@ public sealed class GenericHandlerTests
             }
             """);
 
-        Reason(run).ShouldContain("satisfied by 300 type combinations, more than the 256");
+        Reason(run).ShouldContain("satisfied by more than the 256 type combinations");
         run.Mediator.ShouldNotContain("PriceHandler<");
     }
 
@@ -223,6 +223,164 @@ public sealed class GenericHandlerTests
         run.Mediator.ShouldContain("global::BoltCount");
         run.Mediator.ShouldNotContain("global::CountHandler<global::Bolt>");
         run.Mediator.ShouldContain("global::CountHandler<global::Nut>");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_generic_class_that_handles_notifications_and_requests_is_closed_as_a_notification_handler()
+    {
+        // MediatR's container closes only the notification interface; the request side is not registered.
+        GeneratorRun run = GeneratorHarness.Run(Usings + Stock + """
+            public sealed record Shipped : INotification;
+            public sealed record Wrap<T> : IRequest<string>;
+            public sealed class Dual<T> : INotificationHandler<T>, IRequestHandler<Wrap<T>, string> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task<string> Handle(Wrap<T> request, CancellationToken cancellationToken) => Task.FromResult("");
+            }
+            """);
+
+        run.Diagnostics.ShouldBeEmpty();
+        run.Mediator.ShouldContain("global::Dual<global::Shipped>");
+        run.Mediator.ShouldNotContain("global::Wrap<");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_self_referential_constraint_is_not_drowned_by_unrelated_types()
+    {
+        string unrelated = string.Concat(Enumerable.Range(0, 300).Select(index => $"public sealed class Other{index};\n"));
+        GeneratorRun run = GeneratorHarness.Run(Usings + unrelated + """
+            public interface IEntity<TSelf> where TSelf : IEntity<TSelf>;
+            public sealed class Customer : IEntity<Customer>;
+            public sealed record Load<T>(int Id) : IRequest<string> where T : IEntity<T>;
+            public sealed class LoadHandler<T> : IRequestHandler<Load<T>, string> where T : IEntity<T>
+            {
+                public Task<string> Handle(Load<T> request, CancellationToken cancellationToken) => Task.FromResult(typeof(T).Name);
+            }
+            """);
+
+        run.Diagnostics.ShouldBeEmpty();
+        run.Mediator.ShouldContain("global::LoadHandler<global::Customer>");
+    }
+
+    [Fact]
+    public void A_type_parameter_bounded_by_another_borrows_its_bounds()
+    {
+        string unrelated = string.Concat(Enumerable.Range(0, 300).Select(index => $"public sealed class Other{index};\n"));
+        GeneratorRun run = GeneratorHarness.Run(Usings + unrelated + """
+            public interface IUnit;
+            public class Length : IUnit;
+            public sealed class Metre : Length;
+            public sealed record Narrow<TFrom, TTo>(double Value) : IRequest<double> where TFrom : IUnit where TTo : TFrom;
+            public sealed class NarrowHandler<TFrom, TTo> : IRequestHandler<Narrow<TFrom, TTo>, double> where TFrom : IUnit where TTo : TFrom
+            {
+                public Task<double> Handle(Narrow<TFrom, TTo> request, CancellationToken cancellationToken) => Task.FromResult(request.Value);
+            }
+            """);
+
+        run.Diagnostics.ShouldBeEmpty();
+        run.Mediator.ShouldContain("global::NarrowHandler<global::Length, global::Metre>");
+        run.Mediator.ShouldContain("global::NarrowHandler<global::Metre, global::Metre>");
+        run.Mediator.ShouldNotContain("global::NarrowHandler<global::Metre, global::Length>");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_constraint_on_a_type_nested_in_a_generic_is_substituted()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public class Outer<T> { public interface IInner; }
+            public sealed class Thing : Outer<Thing>.IInner;
+            public sealed record Fetch<T> : IRequest<int> where T : Outer<T>.IInner;
+            public sealed class FetchHandler<T> : IRequestHandler<Fetch<T>, int> where T : Outer<T>.IInner
+            {
+                public Task<int> Handle(Fetch<T> request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        run.Diagnostics.ShouldBeEmpty();
+        run.Mediator.ShouldContain("global::FetchHandler<global::Thing>");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void An_inaccessible_generic_handler_is_reported_as_CPR0003_rather_than_dropped()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public sealed record Shipped : INotification;
+            public static class Holder
+            {
+                private sealed class Audit<T> : INotificationHandler<T> where T : INotification
+                {
+                    public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+
+                private sealed class Pre<T> : Capar.Pipeline.IRequestPreProcessor<T> where T : notnull
+                {
+                    public Task Process(T request, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+            }
+            """);
+
+        run.Ids.ShouldBe(["CPR0003", "CPR0003"], ignoreOrder: true);
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void An_internal_generic_handler_in_a_referenced_project_is_reported()
+    {
+        MetadataReference library = GeneratorHarness.Library("Shop.Audit", Usings + """
+            namespace Shop.Audit;
+            internal sealed class Audit<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        GeneratorRun host = GeneratorHarness.Run("Shop.Api", [library], Usings + "public sealed record Shipped : INotification;");
+
+        Diagnostic reported = host.Diagnostics.ShouldHaveSingleItem();
+        reported.Id.ShouldBe("CPR0003");
+        reported.GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("internal to 'Shop.Audit'");
+    }
+
+    [Fact]
+    public void Two_generic_handlers_for_one_request_point_at_a_declaration()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + Stock + """
+            public sealed record Count<T> : IRequest<int> where T : IStockItem;
+            public sealed class CountHandler<T> : IRequestHandler<Count<T>, int> where T : IStockItem
+            {
+                public Task<int> Handle(Count<T> request, CancellationToken cancellationToken) => Task.FromResult(0);
+            }
+            public sealed class CachedCount<T> : IRequestHandler<Count<T>, int> where T : IStockItem
+            {
+                public Task<int> Handle(Count<T> request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        Diagnostic[] ambiguous = [.. run.Diagnostics.Where(diagnostic => diagnostic.Id == "CPR0002")];
+        ambiguous.ShouldNotBeEmpty();
+        ambiguous.ShouldAllBe(diagnostic => diagnostic.Location.IsInSource);
+    }
+
+    [Fact]
+    public void A_class_that_is_an_open_processor_and_a_generic_handler_is_registered_as_a_processor_once()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + Stock + """
+            public sealed record Level<T> : IRequest<string> where T : IStockItem;
+            public sealed class Both<T> : Capar.Pipeline.IRequestPreProcessor<T>, IRequestHandler<Level<T>, string> where T : IStockItem
+            {
+                public Task Process(T request, CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task<string> Handle(Level<T> request, CancellationToken cancellationToken) => Task.FromResult("");
+            }
+            """);
+
+        string registration = run.Sources["CaparServiceCollectionExtensions.g.cs"];
+        registration.ShouldContain("typeof(global::Capar.Pipeline.IRequestPreProcessor<>), typeof(global::Both<>)");
+        registration.ShouldNotContain("IRequestPreProcessor<global::Bolt>");
+        run.Mediator.ShouldContain("global::Both<global::Bolt>");
         run.CompilationErrors.ShouldBeEmpty();
     }
 }

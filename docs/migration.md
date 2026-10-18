@@ -90,6 +90,8 @@ stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `Notificatio
 member by member. Delete `RegisterGenericHandlers` and the limits that go with it
 (`MaxGenericTypeParameters`, `MaxGenericTypeRegistrations`, `MaxTypesClosing`, `RegistrationTimeout`): generic
 handlers are closed while the project builds, whatever they said ([ADR 0008](adr/0008-generic-handlers.md)).
+A generic request handler that MediatR's default never registered is live after the migration, and two of
+them for the same request fail the build with [CPR0002](diagnostics.md#cpr0002).
 
 If you named the configuration type, `MediatRServiceConfiguration` is `CaparOptions`.
 

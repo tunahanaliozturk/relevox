@@ -72,8 +72,8 @@ returned task instead.
 **Handlers run in metadata order.** MediatR registers what its scan finds in metadata order, and that is the
 order notification handlers, processors and exception handlers run in. For a referenced project that is its
 TypeDef table, which Çapar reads directly. For the project being built it is what the compiler will emit: a
-namespace's own types in declaration order, then its child namespaces, each in the order it was first
-declared. A handler in a nested namespace therefore runs after the handlers of its parent namespace even when
+namespace's own types in declaration order, then its child namespaces, the one first declared last. A
+handler in a nested namespace therefore runs after the handlers of its parent namespace even when
 its file comes first. Every trace in the differential tests is compared in order, not as a set.
 
 ## The pipeline
@@ -160,8 +160,8 @@ the generator can see but cannot call, such as internal ones in another project,
 
 **Generic handlers the build cannot close.** A generic handler is registered by closing it at build time
 ([ADR 0008](adr/0008-generic-handlers.md)). A generic notification handler reaches the notification types
-the build can see: concrete ones declared in the application and the projects it references, and closed
-generic ones some handler names. Publishing an `EntityCreated<Invoice>` that nothing names reaches no
+the build can see: concrete ones declared in the application and the projects it references, apart from
+projects with a mediator of their own, and closed generic ones some handler names. Publishing an `EntityCreated<Invoice>` that nothing names reaches no
 generic handler, where MediatR's container would close one for it. Generic request and stream handlers are
 closed only over types that satisfy a constraint naming a type in the solution; the rest are reported as
 `CPR0004`.
