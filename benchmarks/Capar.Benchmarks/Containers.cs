@@ -13,7 +13,7 @@ namespace Benchmarks;
 /// </remarks>
 internal static class Containers
 {
-    public static ServiceProvider MediatR(bool withPipeline)
+    public static ServiceProvider MediatR(bool withPipeline, bool withProcessors = false)
     {
         ServiceCollection services = new();
         services.AddMediatR(configuration =>
@@ -25,12 +25,18 @@ internal static class Containers
                 configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Second>();
                 configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Third>();
             }
+
+            if (withProcessors)
+            {
+                configuration.AddRequestPreProcessor<global::MediatR.Pipeline.IRequestPreProcessor<MediatRPeer.Ping>, MediatRPeer.PingPre>();
+                configuration.AddRequestPostProcessor<global::MediatR.Pipeline.IRequestPostProcessor<MediatRPeer.Ping, int>, MediatRPeer.PingPost>();
+            }
         });
         return services.BuildServiceProvider();
     }
 
     /// <summary>Capar with its default transient handlers, or with singleton handlers to compare like with like.</summary>
-    public static ServiceProvider Capar(ServiceLifetime lifetime, bool withPipeline = false)
+    public static ServiceProvider Capar(ServiceLifetime lifetime, bool withPipeline = false, bool withProcessors = false)
     {
         ServiceCollection services = new();
         services.AddCapar(options =>
@@ -41,6 +47,12 @@ internal static class Containers
                 options.AddBehavior<global::Capar.IPipelineBehavior<CaparPeer.Piped, int>, CaparPeer.First>();
                 options.AddBehavior<global::Capar.IPipelineBehavior<CaparPeer.Piped, int>, CaparPeer.Second>();
                 options.AddBehavior<global::Capar.IPipelineBehavior<CaparPeer.Piped, int>, CaparPeer.Third>();
+            }
+
+            if (withProcessors)
+            {
+                options.AddRequestPreProcessor<global::Capar.Pipeline.IRequestPreProcessor<CaparPeer.Ping>, CaparPeer.PingPre>();
+                options.AddRequestPostProcessor<global::Capar.Pipeline.IRequestPostProcessor<CaparPeer.Ping, int>, CaparPeer.PingPost>();
             }
         });
         return services.BuildServiceProvider();

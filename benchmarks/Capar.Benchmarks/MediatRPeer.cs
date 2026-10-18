@@ -1,4 +1,5 @@
 using MediatR;
+using MediatR.Pipeline;
 
 namespace Benchmarks.MediatRPeer;
 
@@ -98,4 +99,17 @@ public sealed class CountHandler : IStreamRequestHandler<Count, int>
 
         await Task.CompletedTask.ConfigureAwait(false);
     }
+}
+
+// Processors for Ping only. Configured in the built-ins container, they make each library add its processor
+// behaviours for every request, including Piped, which has no processor of its own.
+
+public sealed class PingPre : IRequestPreProcessor<Ping>
+{
+    public Task Process(Ping request, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+public sealed class PingPost : IRequestPostProcessor<Ping, int>
+{
+    public Task Process(Ping request, int response, CancellationToken cancellationToken) => Task.CompletedTask;
 }

@@ -153,6 +153,55 @@ public class PipelineBenchmarks
     public ValueTask<int> MediatorTyped() => _mediatorTyped.Send(_mediatorPiped);
 }
 
+/// <summary>
+/// The pipeline send again, in an application that also configures a pre- and a post-processor for a different
+/// request.
+/// </summary>
+/// <remarks>
+/// Both libraries then add their built-in processor behaviours for every request, so Piped carries two
+/// behaviours with nothing to do on top of its three. This is the shape of most real applications: a
+/// validation or logging processor for some requests, behaviours for others.
+/// </remarks>
+[MemoryDiagnoser]
+[HideColumns("Error", "StdDev", "Median", "RatioSD")]
+public class BuiltInBenchmarks
+{
+    private readonly MediatRPeer.Piped _mediatrPiped = new(1);
+    private readonly CaparPeer.Piped _caparPiped = new(1);
+    private ServiceProvider _mediatr = null!;
+    private ServiceProvider _capar = null!;
+    private IServiceScope _mediatrScope = null!;
+    private IServiceScope _caparScope = null!;
+    private global::MediatR.ISender _mediatrSender = null!;
+    private CaparMediator _caparTyped = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _mediatr = Containers.MediatR(withPipeline: true, withProcessors: true);
+        _capar = Containers.Capar(ServiceLifetime.Transient, withPipeline: true, withProcessors: true);
+        _mediatrScope = _mediatr.CreateScope();
+        _caparScope = _capar.CreateScope();
+        _mediatrSender = _mediatrScope.ServiceProvider.GetRequiredService<global::MediatR.ISender>();
+        _caparTyped = _caparScope.ServiceProvider.GetRequiredService<CaparMediator>();
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _mediatrScope.Dispose();
+        _caparScope.Dispose();
+        _mediatr.Dispose();
+        _capar.Dispose();
+    }
+
+    [Benchmark(Baseline = true, Description = "MediatR 12.5")]
+    public Task<int> MediatR() => _mediatrSender.Send(_mediatrPiped);
+
+    [Benchmark(Description = "Capar, typed")]
+    public Task<int> CaparTyped() => _caparTyped.Send(_caparPiped);
+}
+
 /// <summary>Notifications to one and to five handlers, with each library's default publisher.</summary>
 [MemoryDiagnoser]
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
