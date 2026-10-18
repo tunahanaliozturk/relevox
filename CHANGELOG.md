@@ -45,9 +45,9 @@ All notable changes to this project are written down here. The format follows
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
 - A help page per diagnostic, linked from each rule.
-- A code fix, **Move from MediatR to Capar**, on the compiler errors MediatR code produces once the package
-  is swapped: `using` directives, qualified names, `MediatRServiceConfiguration` and `AddMediatR`, with the
-  scanning, licence and generic-closing settings removed. Fix all covers a solution.
+- CPR0007 and its code fix, **Move from MediatR to Capar**: every piece of MediatR code left after the package
+  swap, `using` directives, names, `MediatRServiceConfiguration` and `AddMediatR` calls, rewritten for Çapar
+  with the scanning, licence and generic-closing settings removed. One "Fix all in solution" covers it all.
 - CPR0006: an `AddCapar` call that binds to another project's generated method, which would register that
   project's handlers instead of this one's.
 - Generic handlers, closed at build time: notification handlers declared as `H<T> : INotificationHandler<T>`

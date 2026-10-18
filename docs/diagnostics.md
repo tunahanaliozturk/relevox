@@ -13,6 +13,7 @@ disable` and `.editorconfig` severities work as they do for any other analyzer.
 | [CPR0004](#cpr0004) | Warning | A generic handler cannot be registered |
 | [CPR0005](#cpr0005) | Warning | A referenced project has its own mediator |
 | [CPR0006](#cpr0006) | Warning | An `AddCapar` call registers another project's mediator |
+| [CPR0007](#cpr0007) | Info | MediatR code to move to Capar |
 
 ## CPR0001
 
@@ -135,3 +136,25 @@ global::Shop.Tests.CaparServiceCollectionExtensions.AddCapar(services);
 ```
 
 If registering the other project's mediator is what you meant, suppress the warning at that call.
+
+## CPR0007
+
+**MediatR code to move to Capar.** Info.
+
+Reported once the MediatR package is gone, on each piece of MediatR code the compiler can no longer resolve: a
+name rooted at `MediatR`, in a `using` directive, an alias, a `using static`, a type or an expression such as
+`MediatR.Unit.Value`; `MediatRServiceConfiguration`; and every `AddMediatR` call. Nothing is reported while the
+MediatR package is still referenced, so a project can move over when it is ready.
+
+The compiler already reports the same code as errors, under several ids. CPR0007 gives it one, so that the code
+fix **Move from MediatR to Capar** can be applied to all of it with a single *Fix all occurrences in: Solution*.
+
+**Fix:** apply the code fix. It renames `MediatR` to `Capar` and `MediatRServiceConfiguration` to `CaparOptions`,
+and turns `AddMediatR` into `AddCapar`, removing the settings that only drove MediatR's assembly scan, its licence
+check or its run-time closing of generic handlers, and keeping comments and `#if` blocks around them. It leaves
+alone, for a person to decide:
+
+- an options object built before the call and passed to `AddMediatR`, which `AddCapar` cannot take;
+- names in MediatR namespaces Çapar has no counterpart for, such as `MediatR.Registration`;
+- a namespace of your own called `MediatR`, which resolves and so is not reported: rename it first;
+- `MediatR` names in XML documentation `cref`s.
