@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit.v3" />
@@ -21,6 +22,7 @@
     -->
     <ProjectReference Include="../../src/Capar/Capar.csproj" />
     <ProjectReference Include="../../src/Capar.SourceGenerator/Capar.SourceGenerator.csproj" />
+    <ProjectReference Include="../../src/Capar.CodeFixes/Capar.CodeFixes.csproj" />
   </ItemGroup>
 
 </Project>

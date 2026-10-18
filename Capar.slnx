@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Capar.Contracts/Capar.Contracts.csproj" />
     <Project Path="src/Capar.SourceGenerator/Capar.SourceGenerator.csproj" />
+    <Project Path="src/Capar.CodeFixes/Capar.CodeFixes.csproj" />
     <Project Path="src/Capar/Capar.csproj" />
   </Folder>
   <Folder Name="/tests/">
