@@ -418,8 +418,8 @@ internal static class Emitter
             // it to be constructed, as in MediatR. A request without a response runs through behaviours typed
             // over Unit, which is how MediatR 12 models it too.
             string pipeline = hasResponse
-                ? $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, skip, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken)"
-                : $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, skip, static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken)";
+                ? $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken)"
+                : $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken)";
 
             // The send itself is kept to a byte read and a call so the JIT can inline it: a method with an
             // exception handler is never inlined, and the M2 benchmark showed the cost (a singleton send went
@@ -435,10 +435,9 @@ internal static class Emitter
             code.Line();
             code.Open($"private {returns} SendThroughPipeline{position}({request.Request.Syntax} request, {Token} cancellationToken)");
             code.Line($"global::Capar.IPipelineBehavior<{request.Request.Syntax}, {response}>[]? behaviors = null;");
-            code.Line("ulong skip = 0;");
             code.Line($"if (!_pipelines.TryDirect({position}, out bool asynchronous))");
             code.Line("{");
-            code.Line($"    behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services, out asynchronous, out skip);");
+            code.Line($"    behaviors = _pipelines.Behaviors<{request.Request.Syntax}, {response}>({position}, _services, out asynchronous);");
             code.Line("}");
             code.Line();
             code.Line("if (!asynchronous)");

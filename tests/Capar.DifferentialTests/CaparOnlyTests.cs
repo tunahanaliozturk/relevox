@@ -73,9 +73,9 @@ public sealed class CaparOnlyTests
 
 
     [Fact]
-    public async Task More_than_64_behaviours_with_idle_and_active_built_ins_all_run_in_order()
+    public async Task Seventy_behaviours_with_idle_and_active_built_ins_all_run()
     {
-        // Past 64 the skip mask cannot hold every position, so idle built-ins are copied out instead.
+        // A long pipeline, so positions are not accidentally right: idle built-ins are left out, active ones kept.
         await using ServiceProvider provider = Build(
             options => options.AddRequestPostProcessor<global::Capar.Pipeline.IRequestPostProcessor<S.Ping, string>, S.PingPost>(),
             before: services =>

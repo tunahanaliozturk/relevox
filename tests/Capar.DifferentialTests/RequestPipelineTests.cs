@@ -54,32 +54,6 @@ public sealed class RequestPipelineTests
         sawReplacement.ShouldBeTrue();
     }
 
-
-    [Fact]
-    public async Task Skipped_positions_do_not_run_and_a_retry_past_them_still_works()
-    {
-        List<string> trace = [];
-        IPipelineBehavior<string, int>[] behaviors =
-        [
-            .. Enumerable.Range(0, 10).Select(index => (IPipelineBehavior<string, int>)new Recording(index, trace, retry: index == 8)),
-        ];
-
-        int handled = 0;
-        int result = await RequestPipeline.Run(
-            trace,
-            "request",
-            behaviors,
-            (1UL << 0) | (1UL << 3) | (1UL << 9),
-            (log, request, token) =>
-            {
-                log.Add("handler");
-                return Task.FromResult(++handled);
-            },
-            CancellationToken.None);
-
-        result.ShouldBe(2);
-        trace.ShouldBe(["b1", "b2", "b4", "b5", "b6", "b7", "b8", "handler", "handler"]);
-    }
     private sealed class Recording(int index, List<string> trace, bool retry) : IPipelineBehavior<string, int>
     {
         public async Task<int> Handle(string request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken)
