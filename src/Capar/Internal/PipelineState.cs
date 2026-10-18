@@ -269,10 +269,12 @@ public sealed class PipelineState<TMediator>
         private const byte PassThrough = 3;
 
         private readonly byte[] _roles;
+        private readonly int[] _slots;
 
         private SlotPlan(byte[] roles, bool asynchronous)
         {
             _roles = roles;
+            _slots = [.. Enumerable.Range(0, roles.Length).Where(position => roles[position] != Keep)];
             Asynchronous = asynchronous;
             Kept = Array.FindAll(roles, static role => role != Idle).Length;
         }
@@ -327,9 +329,11 @@ public sealed class PipelineState<TMediator>
                 return false;
             }
 
-            for (int position = 0; position < behaviors.Length; position++)
+            // Only the slot positions are checked: slots come from AddCapar alone, so a list of the same length with
+            // a slot everywhere one was learned has not moved.
+            foreach (int position in _slots)
             {
-                if ((_roles[position] != Keep) != behaviors[position] is BuiltInSlot<TRequest, TResponse>)
+                if (behaviors[position] is not BuiltInSlot<TRequest, TResponse>)
                 {
                     return false;
                 }

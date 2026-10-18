@@ -344,6 +344,6 @@ In rough order of value to someone migrating:
   it showed MediatR's default registers generic notification handlers, which Çapar had been skipping: a real
   behaviour difference, now matched and covered by differential tests.
 - ~~**Built-in behaviours created for nothing.**~~ Done before the first release:
-  [122 to 80 ns](benchmark-results/2026-10-18-built-ins.md).
+  [122 to 86 ns](benchmark-results/2026-10-18-built-ins.md).
 - **API compatibility checks.** Package validation against the 1.0.0 baseline, so a breaking change cannot
   ship in a minor version.
