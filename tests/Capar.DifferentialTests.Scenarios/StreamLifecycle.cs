@@ -6,6 +6,20 @@ namespace Scenarios;
 // The stream enumerator's life cycle, which M4's hand-written enumerator has to keep identical to MediatR's
 // async iterator: two cancellable tokens, disposing early or twice, and asking for more after a failure.
 
+/// <summary>Yields one item, then fails.</summary>
+public sealed record Sputter : IStreamRequest<int>;
+
+public sealed class SputterHandler(Trace trace) : IStreamRequestHandler<Sputter, int>
+{
+    public async IAsyncEnumerable<int> Handle(Sputter request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        trace.Add("Sputter 1");
+        yield return 1;
+        await Task.Yield();
+        throw new InvalidOperationException("ran dry");
+    }
+}
+
 /// <summary>Yields until the token it was handed is cancelled, then says so.</summary>
 public sealed record Watch : IStreamRequest<int>;
 
@@ -131,4 +145,16 @@ public static partial class Scenarios
 
         return string.Join(",", items);
     }
+
+    public static Task<string> StreamThatFailsAfterItsFirstItem() =>
+        Run.Scenario(async services =>
+        {
+            List<int> items = [];
+            await foreach (int item in services.GetRequiredService<ISender>().CreateStream(new Sputter()))
+            {
+                items.Add(item);
+            }
+
+            return string.Join(",", items);
+        });
 }
