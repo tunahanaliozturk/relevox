@@ -69,7 +69,6 @@ public sealed class DifferentialTests
     }
 
     /// <summary>
-<<<<<<< HEAD
     /// Pins down what MediatR does with generic handlers, so agreement cannot mean both left them out. Read from
     /// MediatR, the oracle, and the differential test holds Capar to the same.
     /// </summary>
@@ -85,7 +84,9 @@ public sealed class DifferentialTests
         string outcome = await Invoke(OnMediatR, scenario);
 
         outcome.ShouldContain(expected);
-=======
+    }
+
+    /// <summary>
     /// Pins down where a behaviour registered before the library's call runs: outside the built-in behaviours,
     /// which are registered by that call. Capar keeps the built-ins' places with slots.
     /// </summary>
@@ -95,7 +96,6 @@ public sealed class DifferentialTests
         string outcome = await Invoke(OnMediatR, "EarlyBehaviourAroundABuiltInWithWork");
 
         outcome.ShouldContain("trace=[Early>, PingHandler(early), PingPost(early pong), Early<]");
->>>>>>> 7b8c226 (perf: built-in behaviours keep their place as singleton slots)
     }
 
     /// <summary>Pins down the pipeline order, so agreement cannot mean "no behaviour ran in either".</summary>
