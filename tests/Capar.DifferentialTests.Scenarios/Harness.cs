@@ -88,6 +88,12 @@ public enum Profile
     /// Ping only, so every request carries a built-in behaviour that has work for Ping and none for the rest.
     /// </summary>
     EarlyBehavior,
+
+    /// <summary>
+    /// Behaviours that are not async, registered with the container before the library's call, and a
+    /// post-processor for Ping only, so an idle built-in sits inside them for every other request.
+    /// </summary>
+    EarlySyncBehavior,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>

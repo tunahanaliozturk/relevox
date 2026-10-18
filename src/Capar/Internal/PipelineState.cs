@@ -19,8 +19,9 @@ namespace Capar.Internal;
 /// <para>
 /// Built-in behaviours are registered as <see cref="BuiltInSlot{TRequest, TResponse}"/>s, which keep their
 /// place in the container's order and cost nothing to resolve. The first send of a request type works out
-/// which slots have something to do; from then on the idle ones are left out of the array the pipeline gets
-/// and the others are replaced by their behaviours, with nothing created for the idle ones.
+/// which slots have something to do; from then on the idle ones are left out of the array the pipeline gets,
+/// or kept as an <c>async</c> pass-through where one of the application's behaviours sits outside them, and the
+/// others are replaced by their behaviours, with nothing created for the idle ones.
 /// In MediatR a skipped built-in would still be there, outermost and <c>async</c>, so a handler that throws
 /// before returning a task would produce a faulted task rather than an exception out of <c>Send</c>.
 /// Requests that skip one are remembered as asynchronous, and the generated code turns a synchronous throw
@@ -106,12 +107,19 @@ public sealed class PipelineState<TMediator>
 
         if (state == Unknown)
         {
-            return Learn(index, behaviors, services, out asynchronous);
+            return Learn(index, behaviors, services, out asynchronous, remember: true);
         }
 
-        SlotPlan plan = Volatile.Read(ref _plans[index])!;
-        asynchronous = plan.Asynchronous;
-        return plan.Apply(behaviors, services);
+        // The plan is read on its own, not through the state byte, so a thread that sees the state before the
+        // plan simply works the roles out again. So does a container whose scopes add behaviours of their own,
+        // which return an array of another shape than the one the plan was learned from.
+        if (Volatile.Read(ref _plans[index]) is { } plan && plan.Fits(behaviors))
+        {
+            asynchronous = plan.Asynchronous;
+            return plan.Apply(behaviors, services);
+        }
+
+        return Learn(index, behaviors, services, out asynchronous, remember: false);
     }
 
     /// <summary>The stream behaviours for one stream request type, or null when it has none.</summary>
@@ -169,78 +177,67 @@ public sealed class PipelineState<TMediator>
         int index,
         IPipelineBehavior<TRequest, TResponse>[] behaviors,
         IServiceProvider services,
-        out bool asynchronous)
+        out bool asynchronous,
+        bool remember)
         where TRequest : notnull
     {
-        byte[] roles = new byte[behaviors.Length];
         IPipelineBehavior<TRequest, TResponse>?[] created = new IPipelineBehavior<TRequest, TResponse>?[behaviors.Length];
         bool anySlot = false;
         for (int position = 0; position < behaviors.Length; position++)
         {
-            if (behaviors[position] is not BuiltInSlot<TRequest, TResponse> slot)
+            if (behaviors[position] is BuiltInSlot<TRequest, TResponse> slot)
             {
-                continue;
+                anySlot = true;
+                created[position] = slot.Create(services);
             }
-
-            anySlot = true;
-            created[position] = slot.Create(services);
-            roles[position] = SlotPlan.Role(isSlot: true, hasWork: created[position] is not Capar.Pipeline.IOptionalBehavior { IsEmpty: true });
         }
 
         if (!anySlot)
         {
-            _requests[index] = Pipeline;
+            if (remember)
+            {
+                _requests[index] = Pipeline;
+            }
+
             asynchronous = false;
             return behaviors;
         }
 
-        SlotPlan plan = new(roles);
+        SlotPlan plan = SlotPlan.For(behaviors, created);
         asynchronous = plan.Asynchronous;
         if (plan.Kept == 0)
         {
-            _requests[index] = plan.Asynchronous ? DirectButAsynchronous : Direct;
+            if (remember)
+            {
+                _requests[index] = plan.Asynchronous ? DirectButAsynchronous : Direct;
+            }
+
             return null;
         }
 
-        Volatile.Write(ref _plans[index], plan);
-        _requests[index] = PipelineWithSlots;
+        if (remember)
+        {
+            Volatile.Write(ref _plans[index], plan);
+            Volatile.Write(ref _requests[index], PipelineWithSlots);
+        }
+
         return plan.Apply(behaviors, services, created);
     }
 
     private static T[]? Resolve<T>(byte[] states, int index, IServiceProvider services, out bool asynchronous)
     {
+        asynchronous = false;
         byte state = states[index];
-        if (state is Direct or DirectButAsynchronous)
+        if (state == Direct)
         {
-            asynchronous = state == DirectButAsynchronous;
             return null;
         }
 
         IEnumerable<T> resolved = services.GetServices<T>();
         T[] behaviors = resolved as T[] ?? [.. resolved];
-
-        if (state is Pipeline)
-        {
-            asynchronous = false;
-            return behaviors;
-        }
-
-        // A behaviour with nothing to run for this request is left out: it would not change what happens, apart
-        // from making the send asynchronous, which the caller reproduces. Requests use slots instead; this path
-        // is for streams, where an application may still register such a behaviour itself.
-        bool dropped = state == PipelineWithSlots
-            || (state == Unknown && Array.Exists(behaviors, static behavior => behavior is Capar.Pipeline.IOptionalBehavior { IsEmpty: true }));
-        if (dropped)
-        {
-            behaviors = Array.FindAll(behaviors, static behavior => behavior is not Capar.Pipeline.IOptionalBehavior { IsEmpty: true });
-        }
-
-        asynchronous = dropped;
         if (state == Unknown)
         {
-            states[index] = behaviors.Length == 0
-                ? dropped ? DirectButAsynchronous : Direct
-                : dropped ? PipelineWithSlots : Pipeline;
+            states[index] = behaviors.Length == 0 ? Direct : Pipeline;
         }
 
         return behaviors.Length == 0 ? null : behaviors;
@@ -251,30 +248,95 @@ public sealed class PipelineState<TMediator>
 
     /// <summary>What one request type's slots do, learned on its first send.</summary>
     /// <remarks>
+    /// <para>
     /// Idle slots are copied out rather than skipped in place: the copy is one small array, and keeping the
     /// pipeline itself unaware of slots keeps the common send, with no built-ins at all, as cheap as before.
-    /// A skip mask in the chain cost that send 8 bytes and about a tenth of its time.
+    /// A skip mask in the chain cost that send 8 bytes and a fifth of its time.
+    /// </para>
+    /// <para>
+    /// A MediatR built-in is <c>async</c>, so even with nothing to do it turns a synchronous throw from
+    /// everything inside it into a faulted task. Where it sits outside every behaviour of the application's,
+    /// the generated code reproduces that for the whole send. Where an application's behaviour sits outside it,
+    /// as one registered before <c>AddCapar</c> does, that behaviour must still see a faulted task, so the slot
+    /// becomes a shared pass-through that awaits instead of disappearing.
+    /// </para>
     /// </remarks>
     private sealed class SlotPlan
     {
         private const byte Keep = 0;
         private const byte Idle = 1;
         private const byte Active = 2;
+        private const byte PassThrough = 3;
 
         private readonly byte[] _roles;
 
-        public SlotPlan(byte[] roles)
+        private SlotPlan(byte[] roles, bool asynchronous)
         {
             _roles = roles;
+            Asynchronous = asynchronous;
             Kept = Array.FindAll(roles, static role => role != Idle).Length;
-            Asynchronous = Array.IndexOf(roles, Idle) >= 0;
         }
 
         public bool Asynchronous { get; }
 
         public int Kept { get; }
 
-        public static byte Role(bool isSlot, bool hasWork) => !isSlot ? Keep : hasWork ? Active : Idle;
+        /// <summary>Works out each position's role from what the container returned and what the slots created.</summary>
+        public static SlotPlan For<TRequest, TResponse>(IPipelineBehavior<TRequest, TResponse>[] behaviors, IPipelineBehavior<TRequest, TResponse>?[] created)
+            where TRequest : notnull
+        {
+            byte[] roles = new byte[behaviors.Length];
+            bool asynchronous = false;
+
+            // What runs immediately outside the current position: nothing yet, an async built-in, or one of the
+            // application's own behaviours, which may not be async.
+            byte outside = Idle;
+            for (int position = 0; position < behaviors.Length; position++)
+            {
+                if (created[position] is null)
+                {
+                    roles[position] = Keep;
+                    outside = Keep;
+                }
+                else if (created[position] is not Capar.Pipeline.IOptionalBehavior { IsEmpty: true })
+                {
+                    roles[position] = Active;
+                    outside = Active;
+                }
+                else if (outside == Keep)
+                {
+                    roles[position] = PassThrough;
+                    outside = PassThrough;
+                }
+                else
+                {
+                    roles[position] = Idle;
+                    asynchronous |= outside == Idle;
+                }
+            }
+
+            return new SlotPlan(roles, asynchronous);
+        }
+
+        /// <summary>Whether the container returned an array of the shape the plan was learned from.</summary>
+        public bool Fits<TRequest, TResponse>(IPipelineBehavior<TRequest, TResponse>[] behaviors)
+            where TRequest : notnull
+        {
+            if (behaviors.Length != _roles.Length)
+            {
+                return false;
+            }
+
+            for (int position = 0; position < behaviors.Length; position++)
+            {
+                if ((_roles[position] != Keep) != behaviors[position] is BuiltInSlot<TRequest, TResponse>)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
         /// <summary>
         /// The behaviours to run: idle slots left out, active ones replaced. A new array, because the container
@@ -300,6 +362,9 @@ public sealed class PipelineState<TMediator>
                         break;
                     case Active:
                         running[next++] = created?[position] ?? ((BuiltInSlot<TRequest, TResponse>)behaviors[position]).Create(services);
+                        break;
+                    case PassThrough:
+                        running[next++] = AsyncPassThrough<TRequest, TResponse>.Instance;
                         break;
                     default:
                         break;

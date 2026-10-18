@@ -38,7 +38,9 @@ All notable changes to this project are written down here. The format follows
 - The reference scan is cached per referenced assembly.
 - A 500-request-type benchmark, with Mediator built with transient handlers for a like-for-like comparison.
 - Built-in exception and processor behaviours are registered as slots and created only for the requests they
-  have work for: a pipelined send in an application with processors went from 0.51 to 0.42 of MediatR's time.
+  have work for: a send with three behaviours, in an application with processors, went from 122 ns and 592 B
+  to 80 ns and 456 B. Resolving `IEnumerable<IPipelineBehavior<,>>` from the container yourself now returns
+  these slots, which throw if run; send through `ISender` or `IMediator`.
 - `eng/package-smoke.sh` and a CI job that pack both packages, install them into a new application, run it,
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
