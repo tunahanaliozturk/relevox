@@ -343,7 +343,7 @@ In rough order of value to someone migrating:
 - ~~**Generic handlers.**~~ Done before the first release ([ADR 0008](adr/0008-generic-handlers.md)). Working on
   it showed MediatR's default registers generic notification handlers, which Çapar had been skipping: a real
   behaviour difference, now matched and covered by differential tests.
-- **Built-in behaviours created for nothing.** Once any processor or exception handler exists, the built-in
-  behaviours are resolved on every pipelined send, even for requests none of them apply to.
+- ~~**Built-in behaviours created for nothing.**~~ Done before the first release:
+  [0.51 to 0.42 of MediatR](benchmark-results/2026-10-18-built-ins.md).
 - **API compatibility checks.** Package validation against the 1.0.0 baseline, so a breaking change cannot
   ship in a minor version.
