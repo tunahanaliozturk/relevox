@@ -389,7 +389,7 @@ internal static class Discovery
         {
             if (assembly.GivesAccessTo(compilation.Assembly)
                 && assembly.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.CaparServiceCollectionExtensions") is { } registration
-                && IsGenerated(registration))
+                && IsGeneratedByCapar(registration))
             {
                 return true;
             }
@@ -398,9 +398,9 @@ internal static class Discovery
         return false;
     }
 
-    private static bool IsGeneratedMediator(INamedTypeSymbol type) => type.Name == "CaparMediator" && IsGenerated(type);
+    private static bool IsGeneratedMediator(INamedTypeSymbol type) => type.Name == "CaparMediator" && IsGeneratedByCapar(type);
 
-    private static bool IsGenerated(INamedTypeSymbol type) =>
+    public static bool IsGeneratedByCapar(INamedTypeSymbol type) =>
         type.GetAttributes().Any(static attribute =>
             attribute.AttributeClass?.ToDisplayString() == "System.CodeDom.Compiler.GeneratedCodeAttribute"
             && attribute.ConstructorArguments.Length > 0

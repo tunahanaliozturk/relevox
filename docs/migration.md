@@ -39,9 +39,10 @@ dependencies.
 
 Remove `MediatR.Contracts` and `MediatR.Extensions.Microsoft.DependencyInjection` too, if they are referenced.
 
-Getting this split wrong is reported, not silent: a library that references `Capar` instead of
-`Capar.Contracts` gets a mediator of its own, and the host's build warns with
-[CPR0005](diagnostics.md#cpr0005).
+Getting this split wrong is reported: a library that references `Capar` instead of `Capar.Contracts` gets a
+mediator of its own, and the host's build warns with [CPR0005](diagnostics.md#cpr0005) when the library has
+public handlers. If that library also gives the host `InternalsVisibleTo`, the host's `AddCapar()` call can
+bind to the library's method, and the build warns with [CPR0006](diagnostics.md#cpr0006).
 
 ## 2. `using` directives
 
@@ -52,13 +53,17 @@ Getting this split wrong is reported, not silent: a library that references `Cap
 | `using MediatR.NotificationPublishers;` | `using Capar.NotificationPublishers;` |
 | `using MediatR.Entities;` | `using Capar.Entities;` |
 
-The type names inside them are the same. A find and replace over the solution does it:
+The type names inside them are the same. A find and replace over the solution does it, with GNU `grep` and
+`sed` (Linux, or Git Bash on Windows):
 
 ```bash
-grep -rl --include=*.cs "using MediatR" . | xargs sed -i 's/using MediatR\b/using Capar/'
+pattern='using MediatR(\.Pipeline|\.NotificationPublishers|\.Entities)?;'
+grep -rlZE --include=*.cs "$pattern" . | xargs -0 -r sed -i -E "s/$pattern/using Capar\1;/"
 ```
 
-Check `global using` files and `<Using Include="MediatR" />` items in project files as well.
+It rewrites only the four namespaces in the table, `global using` lines included. Any other `MediatR`
+namespace left behind, such as `MediatR.Registration`, has no Çapar counterpart and shows up as a compile
+error. Check `<Using Include="MediatR" />` items in project files as well.
 
 ## 3. Registration
 
@@ -76,14 +81,31 @@ Check `global using` files and `<Using Include="MediatR" />` items in project fi
 ```
 
 Delete the scanning calls, because there is nothing to scan: `RegisterServicesFromAssembly`,
-`RegisterServicesFromAssemblies`, `RegisterServicesFromAssemblyContaining` and `TypeEvaluator`. Everything
-else on MediatR's configuration exists on `CaparOptions` with the same name and parameters: behaviours,
+`RegisterServicesFromAssemblies`, `RegisterServicesFromAssemblyContaining`, `AssembliesToRegister` and
+`TypeEvaluator`. Delete `MediatorImplementationType` too: the mediator is generated, so there is no class to
+swap. Everything else on MediatR's configuration exists on `CaparOptions` with the same name and number of
+parameters: behaviours,
 stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `NotificationPublisherType`,
 `AutoRegisterRequestProcessors` and `RequestExceptionActionProcessorStrategy`. A test compares the two types
 member by member. The settings for closing generic handlers at run time have no counterpart; see
 [CPR0004](diagnostics.md#cpr0004).
 
 If you named the configuration type, `MediatRServiceConfiguration` is `CaparOptions`.
+
+### Test projects
+
+A test project that only resolves the application's services needs nothing: it does not reference `Capar`,
+so it has no `AddCapar` of its own, and if the application gives it `InternalsVisibleTo` it can call the
+application's.
+
+A test project that references `Capar` itself, to declare test handlers, gets its own `AddCapar` in its own
+namespace when the application's is visible to it ([ADR 0007](adr/0007-addcapar-namespace.md)). Code inside
+the test project's namespace reaches its own; anywhere else a call can reach the application's, and the build
+warns with [CPR0006](diagnostics.md#cpr0006). Calling it by its full name always works:
+
+```csharp
+global::Shop.Tests.CaparServiceCollectionExtensions.AddCapar(services);
+```
 
 ## 4. Build, and read what it reports
 
@@ -95,6 +117,7 @@ The first build tells you what MediatR would only have told you at run time:
   MediatR's scan registered it through reflection.
 - [CPR0004](diagnostics.md#cpr0004): a generic handler MediatR closed at run time.
 - [CPR0005](diagnostics.md#cpr0005): a library that references `Capar` instead of `Capar.Contracts`.
+- [CPR0006](diagnostics.md#cpr0006): an `AddCapar` call that registers another project's mediator.
 
 Each one links to what it means and how to fix it.
 

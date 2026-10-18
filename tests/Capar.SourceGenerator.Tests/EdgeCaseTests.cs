@@ -343,5 +343,51 @@ public sealed class EdgeCaseTests
 
         tests.Sources["CaparServiceCollectionExtensions.g.cs"].ShouldContain("namespace Shop.Tests");
         tests.CompilationErrors.ShouldBeEmpty();
+
+        // Inside its own namespace the project reaches its own AddCapar. Outside it, the call binds to the app's,
+        // which would register the app's handlers instead of these, so the analyzer says so and names the fix.
+        // The app's public handler also earns CPR0005, which is right for a project that references Capar.
+        Diagnostic foreign = tests.Diagnostics.Where(diagnostic => diagnostic.Id == "CPR0006").ShouldHaveSingleItem();
+        foreign.Location.SourceTree!.GetText().ToString(foreign.Location.SourceSpan).ShouldBe("services.AddCapar()");
+        string source = foreign.Location.SourceTree.ToString();
+        int outside = source[..source.IndexOf("class Outside", StringComparison.Ordinal)].Count(character => character == '\n');
+        foreign.Location.GetLineSpan().StartLinePosition.Line.ShouldBeGreaterThan(outside, "the call in Outside, not the one in Own");
+        string message = foreign.GetMessage(System.Globalization.CultureInfo.InvariantCulture);
+        message.ShouldContain("'Shop.Api'");
+        message.ShouldContain("global::Shop.Tests.CaparServiceCollectionExtensions.AddCapar(services)");
+    }
+
+    [Fact]
+    public void A_host_whose_call_binds_to_a_library_mediator_is_warned_rather_than_left_without_handlers()
+    {
+        // The library uses Capar privately, keeps its handlers internal so CPR0005 stays quiet, and grants the host
+        // access. Without CPR0006 this built cleanly and failed only when the host sent its own request.
+        MetadataReference library = GeneratorHarness.Library("Billing", [], withGenerator: true, Usings + """
+            [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Shop.Api")]
+            namespace Billing;
+            internal sealed record Charge : IRequest<int>;
+            internal sealed class ChargeHandler : IRequestHandler<Charge, int>
+            {
+                public Task<int> Handle(Charge request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        GeneratorRun host = GeneratorHarness.Run("Shop.Api", [library], Usings + """
+            using Microsoft.Extensions.DependencyInjection;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(2);
+            }
+            public static class Startup
+            {
+                public static IServiceCollection Configure(IServiceCollection services) => services.AddCapar();
+            }
+            """);
+
+        host.CompilationErrors.ShouldBeEmpty();
+        Diagnostic foreign = host.Diagnostics.ShouldHaveSingleItem();
+        foreign.Id.ShouldBe("CPR0006");
+        foreign.GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("global::Shop.Api.CaparServiceCollectionExtensions.AddCapar(services)");
     }
 }
