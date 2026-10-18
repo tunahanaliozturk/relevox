@@ -98,6 +98,20 @@ public sealed class DifferentialTests
         outcome.ShouldContain("trace=[Early>, PingHandler(early), PingPost(early pong), Early<]");
     }
 
+    /// <summary>
+    /// Pins down what a behaviour that is not async, registered first, sees through an idle built-in: a faulted
+    /// task from the handler, and its own throw leaving Send as a throw.
+    /// </summary>
+    [Theory]
+    [InlineData("ASyncBehaviourOutsideAnIdleBuiltInSeesAFaultedTask", "result=\"faulted task: System.InvalidOperationException\"")]
+    [InlineData("ASyncBehaviourOutsideAnIdleBuiltInThrowsSynchronously", "result=\"threw synchronously: System.InvalidOperationException\"")]
+    public async Task A_sync_behaviour_registered_first_keeps_MediatR_timing(string scenario, string expected)
+    {
+        string outcome = await Invoke(OnMediatR, scenario);
+
+        outcome.ShouldContain(expected);
+    }
+
     /// <summary>Pins down the pipeline order, so agreement cannot mean "no behaviour ran in either".</summary>
     /// <remarks>
     /// Pre-processors run ahead of every behaviour and post-processors after all of them, because MediatR

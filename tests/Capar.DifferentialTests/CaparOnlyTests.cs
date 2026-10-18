@@ -71,7 +71,6 @@ public sealed class CaparOnlyTests
         refused.Message.ShouldContain("Capar.Contracts");
     }
 
-
     [Fact]
     public async Task Seventy_behaviours_with_idle_and_active_built_ins_all_run()
     {
@@ -106,6 +105,33 @@ public sealed class CaparOnlyTests
 
         Should.Throw<NotSupportedException>(() => slot.Handle(new S.Ping("x"), _ => Task.FromResult("y"), CancellationToken.None));
     }
+    [Fact]
+    public void A_scope_that_returns_more_behaviours_than_the_plan_was_learned_from_still_runs_them_all()
+    {
+        // Containers such as Autofac let a child scope register behaviours of its own, so the same request can
+        // come back with a longer list than the one its first send saw.
+        global::Capar.Internal.PipelineState<CaparOnlyTests> state = new(1, 0, builtInsForEveryRequest: true);
+        S.Trace trace = new();
+        IPipelineBehavior<S.Ping, string> slot = new global::Capar.Internal.PostProcessorSlot<S.Ping, string>();
+        IPipelineBehavior<S.Ping, string> early = new S.EarlyBehavior<S.Ping, string>(trace);
+
+        IPipelineBehavior<S.Ping, string>[]? first = state.Behaviors<S.Ping, string>(0, new Fixed([early, slot]), out _);
+        IPipelineBehavior<S.Ping, string>[]? second = state.Behaviors<S.Ping, string>(0, new Fixed([early, early, slot]), out _);
+
+        first!.Length.ShouldBe(2);
+        second!.Length.ShouldBe(3);
+        second.ShouldNotContain(behavior => behavior is global::Capar.Internal.BuiltInSlot<S.Ping, string>);
+    }
+
+    /// <summary>A container that hands out one fixed list of behaviours and no processors.</summary>
+    private sealed class Fixed(IPipelineBehavior<S.Ping, string>[] behaviors) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IEnumerable<IPipelineBehavior<S.Ping, string>>) ? behaviors
+            : serviceType == typeof(IEnumerable<global::Capar.Pipeline.IRequestPostProcessor<S.Ping, string>>) ? Array.Empty<global::Capar.Pipeline.IRequestPostProcessor<S.Ping, string>>()
+            : null;
+    }
+
     private static ServiceProvider Build(Action<global::Capar.CaparOptions>? configure = null, Action<IServiceCollection>? before = null)
     {
         ServiceCollection services = new();

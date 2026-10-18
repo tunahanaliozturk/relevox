@@ -139,6 +139,12 @@ concrete subclass of it. MediatR keeps whichever its scan registered first.
 
 **Exception messages differ.** Only exception types are part of the contract.
 
+**The built-in behaviours are placeholders in the container.** MediatR registers its exception and processor
+behaviours with the container, and resolving `IEnumerable<IPipelineBehavior<TRequest, TResponse>>` yourself
+returns working ones. Çapar registers slots in their place, which the generated mediator replaces or leaves
+out, and which throw `NotSupportedException` if something else runs them. Code that decorates or runs pipeline
+behaviours itself, outside `ISender` and `IMediator`, sees the difference.
+
 **Generic request and stream handlers are registered without `RegisterGenericHandlers`.** MediatR registers
 them only when that option is set; Çapar closes them at build time and cannot read the option. A send that
 would have failed for want of a handler under MediatR's default works instead.
@@ -154,6 +160,12 @@ straight away. The exception type is the same; the behaviours' side effects are 
 already warned about such a request with `CPR0001`.
 
 ## Not supported
+
+**Behaviours added by a child scope to a request that had none.** Whether a request type has behaviours at
+all is learned on its first send and kept for the container, which is right for Microsoft's container, whose
+registrations are fixed once it is built. A container whose child scopes register behaviours of their own,
+as Autofac's can, will not see them for a request that had none when it was first sent. A request that had
+some is checked against each scope's list.
 
 **Handlers the build cannot see.** A handler in an assembly loaded at run time is not registered. Handlers
 the generator can see but cannot call, such as internal ones in another project, are reported as `CPR0003`.

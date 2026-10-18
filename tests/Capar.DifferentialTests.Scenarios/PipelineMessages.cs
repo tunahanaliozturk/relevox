@@ -67,6 +67,45 @@ public sealed class InnerBehavior<TRequest, TResponse>(Trace trace) : IPipelineB
 }
 
 /// <summary>Registered straight into the container after the library's own registration call.</summary>
+public sealed record Tripwire : IRequest<string>;
+
+public sealed class TripwireHandler : IRequestHandler<Tripwire, string>
+{
+    public Task<string> Handle(Tripwire request, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("tripped before returning a task");
+}
+
+/// <summary>Not async: catches only what next() throws, not a task that faults.</summary>
+public sealed class TripwireCatch(Trace trace) : IPipelineBehavior<Tripwire, string>
+{
+    public Task<string> Handle(Tripwire request, RequestHandlerDelegate<string> next, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return next();
+        }
+        catch (InvalidOperationException)
+        {
+            trace.Add("caught synchronously");
+            return Task.FromResult("caught");
+        }
+    }
+}
+
+public sealed record Gatekept : IRequest<string>;
+
+public sealed class GatekeptHandler : IRequestHandler<Gatekept, string>
+{
+    public Task<string> Handle(Gatekept request, CancellationToken cancellationToken) => Task.FromResult("through");
+}
+
+/// <summary>Not async: throws before it ever calls next().</summary>
+public sealed class Gate : IPipelineBehavior<Gatekept, string>
+{
+    public Task<string> Handle(Gatekept request, RequestHandlerDelegate<string> next, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("closed");
+}
+
 public sealed class EarlyBehavior<TRequest, TResponse>(Trace trace) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {

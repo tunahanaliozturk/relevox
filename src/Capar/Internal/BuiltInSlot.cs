@@ -91,3 +91,22 @@ public sealed class ExceptionActionSlot<TRequest, TResponse> : BuiltInSlot<TRequ
     internal override IPipelineBehavior<TRequest, TResponse> Create(IServiceProvider services) =>
         new RequestExceptionActionProcessorBehavior<TRequest, TResponse>(services);
 }
+
+/// <summary>
+/// Stands where an idle built-in behaviour sits inside one of the application's behaviours: does nothing but
+/// await, so a synchronous throw from further in reaches the outer behaviour as a faulted task, as it would
+/// through MediatR's <c>async</c> built-in.
+/// </summary>
+/// <typeparam name="TRequest">The request type.</typeparam>
+/// <typeparam name="TResponse">The response type.</typeparam>
+internal sealed class AsyncPassThrough<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+{
+    public static readonly AsyncPassThrough<TRequest, TResponse> Instance = new();
+
+    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(next);
+        return await next(cancellationToken).ConfigureAwait(false);
+    }
+}

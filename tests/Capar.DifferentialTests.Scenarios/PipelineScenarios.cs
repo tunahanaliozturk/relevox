@@ -76,4 +76,16 @@ public static partial class Scenarios
                 return await sender.Send(new Ping("again"));
             },
             profile: Profile.EarlyBehavior);
+
+    // MediatR's idle built-in is async and sits inside a behaviour registered first, so that behaviour sees a
+    // faulted task, never a throw, and cannot catch what the handler throws.
+    public static Task<string> ASyncBehaviourOutsideAnIdleBuiltInSeesAFaultedTask() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send(new Tripwire())), profile: Profile.EarlySyncBehavior);
+
+    // Nothing async runs outside that behaviour, so its own throw leaves Send synchronously.
+    public static Task<string> ASyncBehaviourOutsideAnIdleBuiltInThrowsSynchronously() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send(new Gatekept())), profile: Profile.EarlySyncBehavior);
+
+    public static Task<string> AnActiveBuiltInInsideSyncBehavioursStillRuns() =>
+        Run.Scenario(async services => await services.GetRequiredService<ISender>().Send(new Ping("inside")), profile: Profile.EarlySyncBehavior);
 }

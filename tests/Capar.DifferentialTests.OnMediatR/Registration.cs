@@ -11,6 +11,12 @@ public static partial class Library
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(EarlyBehavior<,>));
         }
 
+        if (profile == Profile.EarlySyncBehavior)
+        {
+            services.AddTransient<IPipelineBehavior<Tripwire, string>, TripwireCatch>();
+            services.AddTransient<IPipelineBehavior<Gatekept, string>, Gate>();
+        }
+
         services.AddMediatR(configuration =>
         {
             configuration.RegisterServicesFromAssembly(typeof(Library).Assembly);
@@ -41,7 +47,7 @@ public static partial class Library
                 configuration.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
             }
 
-            if (profile == Profile.EarlyBehavior)
+            if (profile is Profile.EarlyBehavior or Profile.EarlySyncBehavior)
             {
                 configuration.AddRequestPostProcessor<IRequestPostProcessor<Ping, string>, PingPost>();
             }
