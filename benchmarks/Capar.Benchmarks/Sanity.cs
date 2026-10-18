@@ -47,6 +47,12 @@ internal static class Sanity
         Expect(await pipeline.CaparTyped(), 42, "Capar pipeline send");
         pipeline.Cleanup();
 
+        BuiltInBenchmarks builtIns = new();
+        builtIns.Setup();
+        Expect(await builtIns.MediatR(), 42, "MediatR pipeline send with built-ins");
+        Expect(await builtIns.CaparTyped(), 42, "Capar pipeline send with built-ins");
+        builtIns.Cleanup();
+
         PublishBenchmarks publish = new();
         publish.Setup();
         await publish.MediatROne();
@@ -69,9 +75,15 @@ internal static class Sanity
         Expect(await startup.Mediator(), 42, "Mediator startup");
         Expect(await startup.Capar(), 42, "Capar startup");
 
-        foreach (string expected in new[] { "MediatR behaviour", "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Capar fifth listener", "Capar behaviour" })
+        foreach (string expected in new[] { "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Capar fifth listener" })
         {
             Expect(Counts.GetValueOrDefault(expected), 1, expected);
+        }
+
+        // Once through the plain pipeline and once with the built-ins around it.
+        foreach (string expected in new[] { "MediatR behaviour", "Capar behaviour" })
+        {
+            Expect(Counts.GetValueOrDefault(expected), 2, expected);
         }
 
         Console.WriteLine("Every scenario reached its handler, behaviours and listeners included.");
