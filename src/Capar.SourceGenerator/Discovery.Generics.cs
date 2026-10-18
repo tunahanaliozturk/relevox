@@ -396,39 +396,49 @@ internal static partial class Discovery
     }
 
     /// <summary>
-    /// What one assembly offers the closing step, worked out once. Nothing here depends on who is asking, so a
-    /// referenced assembly's facts are cached; accessibility, which does, is checked at use.
+    /// What one assembly offers the closing step. Nothing here depends on who is asking, so a referenced
+    /// assembly's facts are cached; accessibility, which does, is checked at use.
     /// </summary>
+    /// <remarks>
+    /// Only the generic handler definitions are worked out up front, and only generic types are asked for their
+    /// interfaces to find them. Notifications and candidates need every type's interfaces, which on a project of
+    /// thousands of types is most of the step's cost, so they wait until a generic handler needs them: a project
+    /// without one pays for a walk over its type names and nothing else.
+    /// </remarks>
     private sealed class TypeFacts
     {
-        private TypeFacts(INamedTypeSymbol[] definitions, INamedTypeSymbol[] notifications, INamedTypeSymbol[] candidates)
+        private readonly Lazy<INamedTypeSymbol[]> _notifications;
+        private readonly Lazy<INamedTypeSymbol[]> _candidates;
+
+        private TypeFacts(INamedTypeSymbol[] types)
         {
-            Definitions = definitions;
-            Notifications = notifications;
-            Candidates = candidates;
+            Definitions = [.. types.Where(static type => IsOpen(type) && HandlerContracts(type).Any())];
+            _notifications = new(() => NotificationsIn(types));
+            _candidates = new(() =>
+            [
+                .. types.Where(static type => !IsOpen(type) && type is { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class or TypeKind.Struct, CanBeReferencedByName: true }),
+            ]);
         }
 
         /// <summary>Generic handler classes.</summary>
         public INamedTypeSymbol[] Definitions { get; }
 
         /// <summary>Concrete notification types, and closed generic ones that a handler names.</summary>
-        public INamedTypeSymbol[] Notifications { get; }
+        public INamedTypeSymbol[] Notifications => _notifications.Value;
 
         /// <summary>Types that could be a type argument of a sent request: concrete, closed and nameable.</summary>
-        public INamedTypeSymbol[] Candidates { get; }
+        public INamedTypeSymbol[] Candidates => _candidates.Value;
 
-        public static TypeFacts Of(IEnumerable<INamedTypeSymbol> types)
+        public static TypeFacts Of(IEnumerable<INamedTypeSymbol> types) => new([.. types]);
+
+        private static INamedTypeSymbol[] NotificationsIn(INamedTypeSymbol[] types)
         {
-            List<INamedTypeSymbol> definitions = [];
             HashSet<INamedTypeSymbol> notifications = new(SymbolEqualityComparer.Default);
-            List<INamedTypeSymbol> candidates = [];
-
             foreach (INamedTypeSymbol type in types)
             {
-                bool open = IsOpen(type);
-                if (!open && type is { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class or TypeKind.Struct, CanBeReferencedByName: true })
+                if (IsOpen(type))
                 {
-                    candidates.Add(type);
+                    continue;
                 }
 
                 foreach (INamedTypeSymbol contract in type.AllInterfaces)
@@ -436,16 +446,6 @@ internal static partial class Discovery
                     if (contract.ContainingAssembly?.Name != ContractsAssembly)
                     {
                         continue;
-                    }
-
-                    if (open)
-                    {
-                        if (HandlerContracts(type).Any())
-                        {
-                            definitions.Add(type);
-                        }
-
-                        break;
                     }
 
                     if (contract.MetadataName == "INotification" && type is { IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct, CanBeReferencedByName: true })
@@ -461,7 +461,7 @@ internal static partial class Discovery
                 }
             }
 
-            return new TypeFacts([.. definitions], [.. notifications], [.. candidates]);
+            return [.. notifications];
         }
     }
 
