@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    An ASP.NET Core minimal API on Çapar, shaped the way most applications using a mediator are: endpoints that
+    send, a scoped service the handlers depend on, a validation behaviour, a pre-processor, a notification with
+    two listeners, and a streamed list. tests/Capar.Samples.Web.Tests drives it over HTTP in CI.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Shop</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    An application would write <PackageReference Include="Capar" />, which brings the generator with it. Inside
+    this repository the same thing takes two project references.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Capar/Capar.csproj" />
+    <ProjectReference Include="../../src/Capar.SourceGenerator/Capar.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

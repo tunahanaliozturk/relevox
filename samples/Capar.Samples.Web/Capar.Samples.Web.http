@@ -1,0 +1,35 @@
+# The Çapar web sample, in the order a reader would try it. Run it with
+#   dotnet run --project samples/Capar.Samples.Web
+# and send these from Visual Studio, Rider or VS Code's REST Client.
+
+@host = http://localhost:5199
+
+### Place an order. The X-Customer header is read by a scoped service the handler shares with the pipeline.
+POST {{host}}/orders
+Content-Type: application/json
+X-Customer: ada
+
+{ "product": "kettle", "quantity": 2 }
+
+### Read it back.
+GET {{host}}/orders/1
+
+### A request the validation behaviour stops: 400 with the problems per field.
+POST {{host}}/orders
+Content-Type: application/json
+X-Customer: ada
+
+{ "product": "", "quantity": 0 }
+
+### An order that does not exist: the handler throws, the exception handler answers 404.
+GET {{host}}/orders/999
+
+### Cancel: the handler publishes OrderCancelled, which two notification handlers receive.
+POST {{host}}/orders/1/cancel
+
+### What the pre-processor and the notification handlers recorded.
+GET {{host}}/activity
+
+### Ada's orders, streamed as the handler yields them.
+GET {{host}}/orders
+X-Customer: ada

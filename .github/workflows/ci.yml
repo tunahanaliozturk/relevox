@@ -49,6 +49,11 @@ jobs:
       - name: Differential tests against MediatR 12.5.0
         run: dotnet run --project tests/Capar.DifferentialTests --configuration Release --no-build
 
+      # An ASP.NET Core minimal API on Capar, driven over HTTP in process: a scope per request, scoped services in
+      # handlers and behaviours, problem details from exceptions, a streamed response, concurrent requests.
+      - name: Web sample tests
+        run: dotnet run --project tests/Capar.Samples.Web.Tests --configuration Release --no-build
+
       # The same order service on MediatR 12.5 and moved to Capar by following docs/migration.md. Both print
       # what they did; any difference in the transcripts fails the build.
       - name: Migration sample prints the same before and after
