@@ -9,7 +9,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 feed="$root/artifacts/smoke-feed"
 app="$root/tests/Capar.PackageSmoke"
-version="0.0.0-smoke"
+# The release workflow passes the version it is about to publish; anything else tests a throwaway one.
+version="${CAPAR_VERSION:-0.0.0-smoke}"
 
 rm -rf "$feed" "$app/bin" "$app/obj"
 
@@ -37,11 +38,11 @@ done
 unzip -p "$feed/Capar.$version.nupkg" Capar.nuspec | grep 'id="Capar.Contracts"' | grep -vq 'exclude="[^"]*Analyzers' \
   || { echo "Capar.$version.nupkg keeps the contracts' analyzers from flowing to the application" >&2; exit 1; }
 
-dotnet run --project "$app" --configuration Release
+dotnet run --project "$app" --configuration Release -p:CaparVersion="$version"
 
 # The analyzer travels in the same package as the generator. A request with no handler has to be reported,
 # and with warnings as errors, fail the build.
-if output="$(dotnet build "$app" --configuration Release -p:SmokeUnhandled=true 2>&1)"; then
+if output="$(dotnet build "$app" --configuration Release -p:SmokeUnhandled=true -p:CaparVersion="$version" 2>&1)"; then
   echo "A request with no handler built cleanly; the packaged analyzer did not run." >&2
   exit 1
 fi

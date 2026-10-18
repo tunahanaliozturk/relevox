@@ -1,0 +1,39 @@
+name: codeql
+
+# Code scanning is free for public repositories and needs GitHub Advanced Security on private ones, so the job
+# skips itself while the repository is private and starts working the day it is made public.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: manual
+
+      - name: Build
+        run: dotnet build Capar.slnx --configuration Release
+
+      - uses: github/codeql-action/analyze@v3

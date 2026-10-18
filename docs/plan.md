@@ -310,6 +310,10 @@ no process to operate, and what a user needs at three in the morning is what eac
 
 ### M6 is on hold
 
+Everything the release itself needs is in place and unused: `.github/workflows/release.yml` runs on a version
+tag and stops for an approval before NuGet, and [RELEASING.md](../RELEASING.md) is the checklist, starting with
+the decisions only the owner can make.
+
 The owner decided on 2026-10-17 that nothing is published until the library is ready, and that the name may
 still change. So no NuGet package, no prefix reservation and no public repository until they say so. The
 package ID, the namespaces, the diagnostic prefix and the help links all carry the name; renaming is a

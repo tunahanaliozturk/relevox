@@ -8,6 +8,11 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- Release infrastructure, not used yet: a workflow that runs on a version tag, tests, packs, validates SourceLink
+  and determinism, creates the GitHub release from this file and waits for an approval before publishing to
+  NuGet with trusted publishing; RELEASING.md, Dependabot, CodeQL for when the repository is public, issue
+  and pull request templates and a code of conduct.
+
 - Repository scaffold, quality gates and CI.
 - Baseline benchmarks of MediatR 12.5.0 and Mediator 3.0.2: send, pipeline, publish, stream and
   container startup, with a sanity mode that proves every scenario reaches its handler.
