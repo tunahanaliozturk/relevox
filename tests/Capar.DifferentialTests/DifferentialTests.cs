@@ -68,6 +68,24 @@ public sealed class DifferentialTests
         quiet.ShouldContain("trace=[]");
     }
 
+    /// <summary>
+    /// Pins down what MediatR does with generic handlers, so agreement cannot mean both left them out. Read from
+    /// MediatR, the oracle, and the differential test holds Capar to the same.
+    /// </summary>
+    [Theory]
+    [InlineData("GenericNotificationHandlersRunAfterTheWrittenOne", "trace=[logger p1, EverythingWatcher(Dispatched), tracker Dispatched { Parcel = p1 }, audit Dispatched { Parcel = p1 }]")]
+    [InlineData("GenericNotificationHandlersReachANotificationNothingElseHandles", "trace=[tracker Delivered { Parcel = p2 }, audit Delivered { Parcel = p2 }]")]
+    [InlineData("GenericNotificationHandlerConstraintsAreRespectedForStructs", "trace=[tracker Scanned { Parcel = p4 }]")]
+    [InlineData("GenericNotificationHandlerSkipsANotificationOutsideItsConstraint", "trace=[mislaid p5, EverythingWatcher(Mislaid)]")]
+    [InlineData("GenericRequestHandlerClosedOverAConstrainedType", "result=\"Bolt in 3\" | trace=[generic stock level of Bolt]")]
+    [InlineData("GenericVoidRequestHandler", "trace=[restocked 12 Nut]")]
+    public async Task Generic_handlers_are_closed_as_MediatR_closes_them(string scenario, string expected)
+    {
+        string outcome = await Invoke(OnMediatR, scenario);
+
+        outcome.ShouldContain(expected);
+    }
+
     /// <summary>Pins down the pipeline order, so agreement cannot mean "no behaviour ran in either".</summary>
     /// <remarks>
     /// Pre-processors run ahead of every behaviour and post-processors after all of them, because MediatR

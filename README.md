@@ -115,6 +115,7 @@ none skips the pipeline entirely.
 - [5. No `namespace MediatR` shim](docs/adr/0005-no-mediatr-namespace-shim.md)
 - [6. Clean-room rule, and MediatR 12.5.0 as the test oracle](docs/adr/0006-clean-room.md)
 - [7. `AddCapar` lives in `Microsoft.Extensions.DependencyInjection`](docs/adr/0007-addcapar-namespace.md)
+- [8. Generic handlers are closed at build time](docs/adr/0008-generic-handlers.md)
 
 ## Building
 

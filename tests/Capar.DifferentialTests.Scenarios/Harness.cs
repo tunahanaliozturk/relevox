@@ -76,6 +76,12 @@ public enum Profile
 
     /// <summary>Handlers plus one closed behaviour that is not async, and nothing else.</summary>
     SyncBehavior,
+
+    /// <summary>
+    /// Handlers, with MediatR closing generic request handlers (RegisterGenericHandlers). Capar always closes them,
+    /// so this profile only changes the MediatR side.
+    /// </summary>
+    GenericHandlers,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>

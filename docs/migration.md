@@ -87,8 +87,9 @@ swap. Everything else on MediatR's configuration exists on `CaparOptions` with t
 parameters: behaviours,
 stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `NotificationPublisherType`,
 `AutoRegisterRequestProcessors` and `RequestExceptionActionProcessorStrategy`. A test compares the two types
-member by member. The settings for closing generic handlers at run time have no counterpart; see
-[CPR0004](diagnostics.md#cpr0004).
+member by member. Delete `RegisterGenericHandlers` and the limits that go with it
+(`MaxGenericTypeParameters`, `MaxGenericTypeRegistrations`, `MaxTypesClosing`, `RegistrationTimeout`): generic
+handlers are closed while the project builds, whatever they said ([ADR 0008](adr/0008-generic-handlers.md)).
 
 If you named the configuration type, `MediatRServiceConfiguration` is `CaparOptions`.
 
@@ -115,7 +116,8 @@ The first build tells you what MediatR would only have told you at run time:
 - [CPR0002](diagnostics.md#cpr0002): a request with two handlers. MediatR silently used one of them.
 - [CPR0003](diagnostics.md#cpr0003): a handler the application cannot see, usually `internal` in a library.
   MediatR's scan registered it through reflection.
-- [CPR0004](diagnostics.md#cpr0004): a generic handler MediatR closed at run time.
+- [CPR0004](diagnostics.md#cpr0004): a generic handler the build cannot close, usually one whose type parameter
+  has no constraint.
 - [CPR0005](diagnostics.md#cpr0005): a library that references `Capar` instead of `Capar.Contracts`.
 - [CPR0006](diagnostics.md#cpr0006): an `AddCapar` call that registers another project's mediator.
 

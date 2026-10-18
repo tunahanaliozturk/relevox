@@ -119,16 +119,23 @@ internal static class Planner
                 message.Location));
         }
 
+        // Handlers closed from a generic definition come after everything else, as MediatR registers open generic
+        // handlers after the ones its scan closed.
         HandlerModel[] notificationHandlers =
         [
             .. discovery.Handlers
                 .Where(static handler => handler.Kind == HandlerKind.Notification)
-                .OrderBy(static handler => handler.Order, order)
+                .OrderBy(static handler => handler.IsClosure)
+                .ThenBy(static handler => handler.Order, order)
                 .ThenBy(static handler => handler.HandlerType, StringComparer.Ordinal)
                 .ThenBy(static handler => handler.Message.Type, StringComparer.Ordinal),
         ];
 
-        HashSet<string> directlyHandled = new(notificationHandlers.Select(static handler => handler.Message.Type), StringComparer.Ordinal);
+        // A closing does not count as naming the notification: MediatR's scan works out the catch-all
+        // registrations before the container ever closes an open generic handler.
+        HashSet<string> directlyHandled = new(
+            notificationHandlers.Where(static handler => !handler.IsClosure).Select(static handler => handler.Message.Type),
+            StringComparer.Ordinal);
         List<NotificationEntry> notifications = [];
         foreach (MessageModel message in messages.Values
             .Where(static message => message.Kind == MessageKind.Notification)
@@ -139,9 +146,18 @@ internal static class Planner
             // handler at all, catch-all handlers included. The differential tests caught this, and it is matched
             // on purpose: after migrating, a catch-all audit handler must not start seeing notifications it never
             // saw before.
+            // The container closes an open generic handler for exactly the type being published, so a closing
+            // reaches its own notification whether or not anything else handles it.
+            NotificationTarget[] closings =
+            [
+                .. notificationHandlers
+                    .Where(handler => handler.IsClosure && handler.Message.Type == message.Shape.Type)
+                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax)),
+            ];
+
             if (!directlyHandled.Contains(message.Shape.Type))
             {
-                notifications.Add(new NotificationEntry(message.Shape, EquatableArray<NotificationTarget>.Empty));
+                notifications.Add(new NotificationEntry(message.Shape, closings.ToEquatableArray()));
                 continue;
             }
 
@@ -153,12 +169,13 @@ internal static class Planner
             NotificationTarget[] targets =
             [
                 .. notificationHandlers
-                    .Where(handler => reachable.Contains(handler.Message.Type))
+                    .Where(handler => !handler.IsClosure && reachable.Contains(handler.Message.Type))
                     .GroupBy(static handler => handler.HandlerType, StringComparer.Ordinal)
                     .Select(group => group
                         .OrderBy(handler => IndexOf(message.AssignableTo, handler.Message.Type))
                         .First())
                     .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax)),
+                .. closings,
             ];
 
             notifications.Add(new NotificationEntry(message.Shape, targets.ToEquatableArray()));
@@ -258,6 +275,15 @@ internal static class Planner
         HandlerModel? Single(IGrouping<string, HandlerModel> group, MessageKind kind)
         {
             HandlerModel[] candidates = [.. group.OrderBy(static handler => handler.HandlerType, StringComparer.Ordinal)];
+
+            // A handler written for this exact request wins over one closed from a generic handler. MediatR with
+            // RegisterGenericHandlers registers both and the container returns the last; the written one is the
+            // one somebody meant.
+            if (candidates.Any(static handler => !handler.IsClosure))
+            {
+                candidates = [.. candidates.Where(static handler => !handler.IsClosure)];
+            }
+
             if (candidates.Length == 1)
             {
                 return candidates[0];

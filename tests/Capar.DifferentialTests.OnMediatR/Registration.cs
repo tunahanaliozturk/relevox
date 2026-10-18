@@ -26,6 +26,11 @@ public static partial class Library
                 configuration.AddBehavior<IPipelineBehavior<Brittle, int>, BrittlePassThrough>();
             }
 
+            if (profile == Profile.GenericHandlers)
+            {
+                configuration.RegisterGenericHandlers = true;
+            }
+
             if (profile == Profile.AllExceptions)
             {
                 configuration.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;

@@ -37,6 +37,14 @@ types.
 **Closed generic notifications work.** A handler for `INotificationHandler<EntityCreated<Order>>` receives
 `EntityCreated<Order>`.
 
+**Generic notification handlers run after every other handler.** MediatR registers a handler declared as
+`Audit<T> : INotificationHandler<T>` as an open generic, after everything its scan closed, and the container
+closes it for each notification published, within its constraints. So it runs last, after catch-all
+handlers, for every notification its constraints admit, including one nothing else handles. A closing does
+not count as handling the notification for the catch-all rule above: a base-type handler still sees only
+notifications some written handler names. Çapar closes such handlers at build time, over the notification
+types the build can see.
+
 **Dispatch goes by the runtime type**, through every entry point, the typed overloads on the generated
 mediator included. A `DerivedQuery` held in a `BaseQuery` variable is a `DerivedQuery`.
 
@@ -131,6 +139,14 @@ concrete subclass of it. MediatR keeps whichever its scan registered first.
 
 **Exception messages differ.** Only exception types are part of the contract.
 
+**Generic request and stream handlers are registered without `RegisterGenericHandlers`.** MediatR registers
+them only when that option is set; Çapar closes them at build time and cannot read the option. A send that
+would have failed for want of a handler under MediatR's default works instead.
+
+**A handler written for one closing wins over the generic one.** With `RegisterGenericHandlers`, MediatR
+registers the closing after the written handler and the container returns the closing. Çapar keeps the
+written one, which is also what MediatR does without the option.
+
 **Behaviours do not run for a request nothing handles.** MediatR closes its open generic behaviours over
 the request type and runs them before discovering that no handler exists. Çapar knows at build time that
 no handler exists, cannot close a generic behaviour over a type it has no dispatch entry for, and fails
@@ -139,9 +155,16 @@ already warned about such a request with `CPR0001`.
 
 ## Not supported
 
-**Handlers the build cannot see.** A handler in an assembly loaded at run time, or a generic handler closed
-at run time, is not registered. The generator reports generic handlers as `CPR0004`, and handlers it can
-see but cannot call, such as internal ones in another project, as `CPR0003`.
+**Handlers the build cannot see.** A handler in an assembly loaded at run time is not registered. Handlers
+the generator can see but cannot call, such as internal ones in another project, are reported as `CPR0003`.
+
+**Generic handlers the build cannot close.** A generic handler is registered by closing it at build time
+([ADR 0008](adr/0008-generic-handlers.md)). A generic notification handler reaches the notification types
+the build can see: concrete ones declared in the application and the projects it references, and closed
+generic ones some handler names. Publishing an `EntityCreated<Invoice>` that nothing names reaches no
+generic handler, where MediatR's container would close one for it. Generic request and stream handlers are
+closed only over types that satisfy a constraint naming a type in the solution; the rest are reported as
+`CPR0004`.
 
 **Exception handlers for exception types the build cannot see.** MediatR closes
 `IRequestExceptionHandler<,,>` over every type in the thrown exception's hierarchy at run time. Çapar looks
