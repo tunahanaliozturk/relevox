@@ -108,22 +108,7 @@ internal static class Diagnostics
         helpLinkUri: Help + "cpr0006",
         description: "Each project that references Capar gets its own AddCapar. When another project's is visible too, through InternalsVisibleTo, a call can bind to it, and this project's handlers are then never registered.");
 
-    /// <summary>
-    /// Info, not a warning: the compiler already reports this code as an error once the MediatR package is
-    /// gone. This exists so that one "Fix all" can reach every kind of it, since the IDE scopes a fix-all to
-    /// the diagnostic id it was started on and the compiler gives the same code several different ids.
-    /// </summary>
-    public static readonly DiagnosticDescriptor MediatRUsage = new(
-        id: "CPR0007",
-        title: "MediatR code to move to Capar",
-        messageFormat: "'{0}' is MediatR code; the fix 'Move from MediatR to Capar' rewrites it",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Info,
-        isEnabledByDefault: true,
-        helpLinkUri: Help + "cpr0007",
-        description: "Reported only where MediatR is no longer referenced and the name does not resolve. The code fix rewrites the namespace, the configuration type and the AddMediatR call; 'Fix all in solution' does the whole migration.");
-
-    public static readonly DiagnosticDescriptor[] All = [NoHandler, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator, ForeignRegistration, MediatRUsage];
+    public static readonly DiagnosticDescriptor[] All = [NoHandler, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator, ForeignRegistration];
 
     public static DiagnosticDescriptor Descriptor(string rule) => rule switch
     {
@@ -132,7 +117,6 @@ internal static class Diagnostics
         "CPR0003" => Inaccessible,
         "CPR0004" => GenericHandler,
         "CPR0006" => ForeignRegistration,
-        "CPR0007" => MediatRUsage,
         _ => OwnMediator,
     };
 

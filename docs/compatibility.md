@@ -18,6 +18,11 @@ A referenced project that references `Capar` itself gets its own generated media
 with it. That is what lets a library use Çapar privately. If such a project has public handlers, the host's
 build warns with `CPR0005`, because that is usually a project that meant to reference the contracts.
 
+Analyzers flow through project references, so projects below the one that calls `AddCapar`, such as an API or a
+test project referencing the application layer, run the generator too. A project that has no handlers of its
+own, does not call `AddCapar`, and references a project with a mediator generates nothing and reports nothing:
+it uses that project's mediator.
+
 `AddCapar` called a second time from the same project does nothing. Called after another project's
 `AddCapar`, it throws, because only one mediator can be `IMediator` and keeping the first silently would
 leave the other's handlers unreachable.

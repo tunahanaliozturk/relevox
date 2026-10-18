@@ -45,6 +45,12 @@ All notable changes to this project are written down here. The format follows
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
 - A help page per diagnostic, linked from each rule.
+- A migration of Jason Taylor's Clean Architecture template from MediatR 14.2.0, with its tests passing before
+  and after: [docs/migration-trial.md](docs/migration-trial.md).
+- A project that has no handlers of its own, does not call `AddCapar`, and references a project with a mediator
+  generates nothing, so the projects below an application layer no longer warn with CPR0005.
+- The migration analyzer and code fix ship in `Capar.Contracts`, so library projects get them too, and run from
+  the command line with `dotnet format analyzers --diagnostics CPR0007 --severity info`.
 - CPR0007 and its code fix, **Move from MediatR to Capar**: every piece of MediatR code left after the package
   swap, `using` directives, names, `MediatRServiceConfiguration` and `AddMediatR` calls, rewritten for Çapar
   with the scanning, licence and generic-closing settings removed. One "Fix all in solution" covers it all.

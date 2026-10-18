@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace Capar.SourceGenerator;
+namespace Capar.Migration;
 
 /// <summary>
 /// Points at MediatR code left after the package swap, so the migration code fix has one id to hang off.
@@ -43,8 +43,23 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     // MediatR namespaces with no Çapar counterpart. Names in them are left for the compiler to point at.
     private static readonly HashSet<string> Unmapped = new(System.StringComparer.Ordinal) { "Registration", "Wrappers", "Licensing", "Internal" };
 
+    /// <summary>
+    /// Info, not a warning: the compiler already reports this code as an error once the MediatR package is
+    /// gone. This exists so that one "Fix all" can reach every kind of it, since the IDE scopes a fix-all to
+    /// the diagnostic id it was started on and the compiler gives the same code several different ids.
+    /// </summary>
+    public static readonly DiagnosticDescriptor Rule = new(
+        id: "CPR0007",
+        title: "MediatR code to move to Capar",
+        messageFormat: "'{0}' is MediatR code; the fix 'Move from MediatR to Capar' rewrites it",
+        category: "Capar",
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        helpLinkUri: "https://github.com/tunahanaliozturk/capar/blob/main/docs/diagnostics.md#cpr0007",
+        description: "Reported only where MediatR is no longer referenced and the name does not resolve. The code fix rewrites the namespace, the configuration type and the AddMediatR call; 'Fix all in solution' does the whole migration.");
+
     /// <inheritdoc />
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Diagnostics.MediatRUsage];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Rule];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -145,7 +160,7 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
 
     private static void Report(SyntaxNodeAnalysisContext context, SyntaxNode node, string kind, string shown) =>
         context.ReportDiagnostic(Diagnostic.Create(
-            Diagnostics.MediatRUsage,
+            Rule,
             node.GetLocation(),
             ImmutableDictionary<string, string?>.Empty.Add(KindProperty, kind),
             shown));

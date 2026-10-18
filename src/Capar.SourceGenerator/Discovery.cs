@@ -414,6 +414,23 @@ internal static partial class Discovery
         return reaches;
     }
 
+    /// <summary>Whether a referenced assembly that can hold handlers has a generated mediator of its own.</summary>
+    public static bool ReferencesAMediator(Compilation compilation, CancellationToken cancellationToken)
+    {
+        Dictionary<IAssemblySymbol, bool> reachesContracts = new(SymbolEqualityComparer.Default);
+        foreach (IAssemblySymbol assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            if (assembly.Name is not (ContractsAssembly or "Capar")
+                && ReachesContracts(assembly, reachesContracts)
+                && ScanAssembly(assembly, compilation, cancellationToken).OwnsMediator)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Whether a referenced assembly's generated <c>AddCapar</c> sits in the shared namespace and is visible
     /// here through InternalsVisibleTo. One metadata lookup per reference that grants access; nothing is walked.

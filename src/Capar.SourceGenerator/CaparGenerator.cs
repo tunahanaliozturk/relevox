@@ -47,7 +47,8 @@ public sealed class CaparGenerator : IIncrementalGenerator
             .Select(static (compilation, cancellationToken) => new ReferenceModel(
                 compilation.AssemblyName ?? "Capar.Generated",
                 Discovery.ScanReferences(compilation, cancellationToken),
-                Discovery.SeesAnotherRegistration(compilation)))
+                Discovery.SeesAnotherRegistration(compilation),
+                Discovery.ReferencesAMediator(compilation, cancellationToken)))
             .WithTrackingName(TrackingNames.References);
 
         // Generic handlers are closed over types found anywhere in the compilation, so this step looks at the
@@ -57,22 +58,45 @@ public sealed class CaparGenerator : IIncrementalGenerator
             .Select(static (compilation, cancellationToken) => Discovery.CloseGenerics(compilation, cancellationToken))
             .WithTrackingName(TrackingNames.Closings);
 
+        // Read from syntax alone: the call cannot bind until this generator has written the method.
+        IncrementalValueProvider<bool> callsAddCapar = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => IsAddCaparCall(node),
+                transform: static (_, _) => true)
+            .Collect()
+            .Select(static (calls, _) => calls.Length > 0);
+
         IncrementalValueProvider<EmitPlan> plan = fromSource
             .Combine(fromReferences)
             .Combine(closings)
+            .Combine(callsAddCapar)
             .Select(static (pair, _) => Planner.Build(
-                pair.Left.Right.AssemblyName,
-                Discovery.Merge([pair.Left.Left, pair.Left.Right.Discovery, pair.Right]),
-                pair.Left.Right.SeesAnotherRegistration))
+                pair.Left.Left.Right.AssemblyName,
+                Discovery.Merge([pair.Left.Left.Left, pair.Left.Left.Right.Discovery, pair.Left.Right]),
+                pair.Left.Left.Right.SeesAnotherRegistration,
+                pair.Left.Left.Right.ReferencesAMediator,
+                pair.Right))
             .WithTrackingName(TrackingNames.Plan);
 
         // Diagnostics are reported by CaparAnalyzer, which has the syntax trees to put them in source.
         context.RegisterSourceOutput(plan, static (output, plan) =>
         {
+            if (!plan.Emits)
+            {
+                return;
+            }
+
             output.AddSource("CaparMediator.g.cs", SourceText.From(Emitter.Mediator(plan), Encoding.UTF8));
             output.AddSource("CaparServiceCollectionExtensions.g.cs", SourceText.From(Emitter.Registration(plan), Encoding.UTF8));
         });
     }
+
+    /// <summary>A call to a method named <c>AddCapar</c>, as <c>services.AddCapar()</c> or <c>AddCapar(services)</c>.</summary>
+    internal static bool IsAddCaparCall(SyntaxNode node) =>
+        node is InvocationExpressionSyntax
+        {
+            Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AddCapar" } or IdentifierNameSyntax { Identifier.ValueText: "AddCapar" },
+        };
 }
 
 /// <summary>Names of the pipeline steps, so tests can ask whether each one was served from cache.</summary>

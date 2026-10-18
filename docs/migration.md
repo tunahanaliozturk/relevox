@@ -52,8 +52,19 @@ occurrences in: Solution* on any of them and the IDE rewrites the `using` direct
 `MediatR`, `MediatRServiceConfiguration` and the registration calls in one go, dropping the scanning, licence
 and generic-closing settings that steps 2 and 3 describe. What it leaves, such as `using
 MediatR.Registration;` or an options object passed to `AddMediatR`, stays a compiler error for you to decide
-about; the CPR0007 page lists those cases. The rest of this guide is what the fix does, for builds without an
-IDE and for reviewing its result.
+about; the CPR0007 page lists those cases.
+
+### From the command line
+
+The same fix runs without an IDE, after the package swap and a restore:
+
+```bash
+dotnet format analyzers YourSolution.slnx --diagnostics CPR0007 --severity info
+```
+
+That is how a real Clean Architecture solution was migrated, with its tests passing before and after; see
+[migration-trial.md](migration-trial.md). The rest of this guide is what the fix does, for reviewing its result
+and for doing it by hand.
 
 ## 2. `using` directives
 

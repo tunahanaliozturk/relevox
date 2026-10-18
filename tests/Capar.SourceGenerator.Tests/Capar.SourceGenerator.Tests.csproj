@@ -23,6 +23,7 @@
     <ProjectReference Include="../../src/Capar/Capar.csproj" />
     <ProjectReference Include="../../src/Capar.SourceGenerator/Capar.SourceGenerator.csproj" />
     <ProjectReference Include="../../src/Capar.CodeFixes/Capar.CodeFixes.csproj" />
+    <ProjectReference Include="../../src/Capar.Migration/Capar.Migration.csproj" />
   </ItemGroup>
 
 </Project>

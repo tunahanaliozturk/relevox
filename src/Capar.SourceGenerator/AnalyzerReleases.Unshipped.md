@@ -11,4 +11,3 @@ CPR0003 | Capar    | Error    | A handler cannot be called from the generated co
 CPR0004 | Capar    | Warning  | A generic handler cannot be registered
 CPR0005 | Capar    | Warning  | A referenced project has its own mediator and public handlers
 CPR0006 | Capar    | Warning  | An AddCapar call binds to another project's generated method
-CPR0007 | Capar    | Info     | MediatR code that the migration code fix can rewrite
