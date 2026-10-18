@@ -42,27 +42,6 @@ public static class RequestPipeline
         IPipelineBehavior<TRequest, TResponse>[] behaviors,
         Func<TState, TRequest, CancellationToken, Task<TResponse>> handler,
         CancellationToken cancellationToken)
-        where TRequest : notnull =>
-        Run(state, request, behaviors, 0, handler, cancellationToken);
-
-    /// <summary>Runs the behaviours, outermost first, passing over the positions in <paramref name="skip"/>, and then the handler.</summary>
-    /// <typeparam name="TState">What the handler delegate needs, normally the generated mediator.</typeparam>
-    /// <typeparam name="TRequest">The request type.</typeparam>
-    /// <typeparam name="TResponse">The response type.</typeparam>
-    /// <param name="state">Passed to <paramref name="handler"/>.</param>
-    /// <param name="request">The request.</param>
-    /// <param name="behaviors">The behaviours, in the order the container returned them.</param>
-    /// <param name="skip">Bit <c>n</c> set means the behaviour at position <c>n</c> does not run.</param>
-    /// <param name="handler">Resolves and calls the handler.</param>
-    /// <param name="cancellationToken">The token <c>Send</c> was given.</param>
-    /// <returns>The response.</returns>
-    public static Task<TResponse> Run<TState, TRequest, TResponse>(
-        TState state,
-        TRequest request,
-        IPipelineBehavior<TRequest, TResponse>[] behaviors,
-        ulong skip,
-        Func<TState, TRequest, CancellationToken, Task<TResponse>> handler,
-        CancellationToken cancellationToken)
         where TRequest : notnull
     {
         ArgumentNullException.ThrowIfNull(behaviors);
@@ -70,30 +49,21 @@ public static class RequestPipeline
 
         return behaviors.Length == 0
             ? handler(state, request, cancellationToken)
-            : new Chain<TState, TRequest, TResponse>(state, request, behaviors, skip, handler, cancellationToken).Invoke(0, cancellationToken);
+            : new Chain<TState, TRequest, TResponse>(state, request, behaviors, handler, cancellationToken).Invoke(0, cancellationToken);
     }
 
     private sealed class Chain<TState, TRequest, TResponse>(
         TState state,
         TRequest request,
         IPipelineBehavior<TRequest, TResponse>[] behaviors,
-        ulong skip,
         Func<TState, TRequest, CancellationToken, Task<TResponse>> handler,
         CancellationToken original)
         where TRequest : notnull
     {
-        public Task<TResponse> Invoke(int index, CancellationToken cancellationToken)
-        {
-            // Positions past 63 are never skipped: the mask only covers the first 64.
-            while (index < behaviors.Length && index < 64 && ((skip >> index) & 1) != 0)
-            {
-                index++;
-            }
-
-            return index == behaviors.Length
+        public Task<TResponse> Invoke(int index, CancellationToken cancellationToken) =>
+            index == behaviors.Length
                 ? handler(state, request, cancellationToken)
                 : behaviors[index].Handle(request, Link(index + 1), cancellationToken);
-        }
 
         private RequestHandlerDelegate<TResponse> Link(int index) => index switch
         {

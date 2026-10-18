@@ -13,8 +13,8 @@ namespace Capar.Internal;
 /// MediatR registers its exception and processor behaviours with the container, so where they run depends on
 /// what else was registered before and after. Çapar keeps that order by registering a slot in the same place,
 /// but a slot is a singleton with no dependencies: resolving it costs nothing per send. The generated mediator
-/// works out once per request type whether the behaviour behind each slot has anything to do, skips the slots
-/// that do not, and creates the real behaviour only for the ones that do.
+/// works out once per request type whether the behaviour behind each slot has anything to do, leaves out the
+/// slots that do not, and creates the real behaviour only for the ones that do.
 /// </para>
 /// <para>
 /// Before slots, the real behaviours were registered and resolved on every send, each looking up its
