@@ -45,6 +45,8 @@ All notable changes to this project are written down here. The format follows
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
 - A help page per diagnostic, linked from each rule.
+- A web sample: an ASP.NET Core minimal API with scoped services in handlers, a validation behaviour, a
+  pre-processor, problem details, a notification with two listeners and a streamed list, tested over HTTP in CI.
 - A migration of Jason Taylor's Clean Architecture template from MediatR 14.2.0, with its tests passing before
   and after: [docs/migration-trial.md](docs/migration-trial.md).
 - A project that has no handlers of its own, does not call `AddCapar`, and references a project with a mediator

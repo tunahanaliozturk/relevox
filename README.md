@@ -100,7 +100,9 @@ moved over that way, ten files and twenty lines, with its 33 tests passing befor
 
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.
 [samples/Migration](samples/Migration) holds the same order service on both libraries; CI runs the two and
-fails if their output differs.
+fails if their output differs. [samples/Capar.Samples.Web](samples/Capar.Samples.Web) is an ASP.NET Core
+minimal API on Çapar, with its [`.http` file](samples/Capar.Samples.Web/Capar.Samples.Web.http) and tests that
+drive it over HTTP.
 
 ## How it works
 
