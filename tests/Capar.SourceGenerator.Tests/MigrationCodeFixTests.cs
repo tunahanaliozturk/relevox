@@ -131,6 +131,27 @@ public sealed class MigrationCodeFixTests
         fixedSources[0].ShouldContain("public Missing? Value");
     }
 
+    [Fact]
+    public async Task The_migration_sample_before_becomes_the_sample_after()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "Capar.slnx")))
+        {
+            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("Capar.slnx not found above the test output.");
+        }
+
+        string Read(string side, string file) => File.ReadAllText(Path.Combine(root, "samples", "Migration", side, file));
+        static string Code(string source) => string.Concat(source.ReplaceLineEndings("\n").Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith("//", StringComparison.Ordinal)));
+
+        string[] migrated = await Migrate(Read("Before", "Orders/Orders.cs"), Read("Before", "App/Program.cs"));
+
+        Code(migrated[0]).ShouldBe(Code(Read("After", "Orders/Orders.cs")));
+        Code(migrated[1]).ShouldBe(Code(Read("After", "App/Program.cs")));
+        ShouldBuildWithTheGenerator(migrated, application: true);
+    }
+
     private static async Task<string[]> Migrate(params string[] sources)
     {
         using AdhocWorkspace workspace = new();
@@ -176,13 +197,20 @@ public sealed class MigrationCodeFixTests
         throw new InvalidOperationException("The code fix kept offering fixes; it is not converging.");
     }
 
-    private static void ShouldBuildWithTheGenerator(string[] sources)
+    /// <param name="sources">The migrated files.</param>
+    /// <param name="application">
+    /// Build as an SDK console app does: an executable, with the implicit usings the sample's project files get.
+    /// </param>
+    private static void ShouldBuildWithTheGenerator(string[] sources, bool application = false)
     {
+        const string ImplicitUsings = "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;";
+        string[] files = application ? [.. sources, ImplicitUsings] : sources;
+
         CSharpCompilation compilation = CSharpCompilation.Create(
             "Shop",
-            sources.Select((source, index) => CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview), $"File{index}.cs")),
+            files.Select((source, index) => CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview), $"File{index}.cs")),
             GeneratorHarness.References,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+            new CSharpCompilationOptions(application ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
         CSharpGeneratorDriver
             .Create([new CaparGenerator().AsSourceGenerator()], parseOptions: new CSharpParseOptions(LanguageVersion.Preview))

@@ -92,6 +92,9 @@ builder.Services.AddCapar(options =>
 2. Replace `using MediatR` with `using Capar`, including `.Pipeline` and the other sub-namespaces.
 3. Replace `AddMediatR` with `AddCapar` and delete the `RegisterServicesFrom...` calls.
 
+In Visual Studio, Rider or VS Code, steps 2 and 3 are one code fix: after the package swap, apply **Move from
+MediatR to Capar** to the whole solution.
+
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.
 [samples/Migration](samples/Migration) holds the same order service on both libraries; CI runs the two and
 fails if their output differs.

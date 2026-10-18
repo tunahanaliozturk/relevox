@@ -44,6 +44,16 @@ mediator of its own, and the host's build warns with [CPR0005](diagnostics.md#cp
 public handlers. If that library also gives the host `InternalsVisibleTo`, the host's `AddCapar()` call can
 bind to the library's method, and the build warns with [CPR0006](diagnostics.md#cpr0006).
 
+### In Visual Studio, Rider or VS Code
+
+Steps 2 and 3 are a code fix. Once the packages are swapped, every `using MediatR;` and every `AddMediatR`
+call is a compiler error, and each one offers **Move from MediatR to Capar**. Choose *Fix all occurrences in:
+Solution* on any of them and the IDE rewrites the `using` directives, names qualified with `MediatR.`,
+`MediatRServiceConfiguration` and the registration calls in one go, dropping the scanning, licence and
+generic-closing settings that steps 2 and 3 describe. Anything it leaves, such as `using MediatR.Registration;`,
+has no Çapar counterpart and stays an error for you to remove. The rest of this guide is what the fix does,
+for builds without an IDE and for reviewing its result.
+
 ## 2. `using` directives
 
 | MediatR | Çapar |
