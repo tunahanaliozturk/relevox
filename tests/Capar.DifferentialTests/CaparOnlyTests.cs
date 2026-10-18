@@ -71,6 +71,41 @@ public sealed class CaparOnlyTests
         refused.Message.ShouldContain("Capar.Contracts");
     }
 
+
+    [Fact]
+    public async Task More_than_64_behaviours_with_idle_and_active_built_ins_all_run_in_order()
+    {
+        // Past 64 the skip mask cannot hold every position, so idle built-ins are copied out instead.
+        await using ServiceProvider provider = Build(
+            options => options.AddRequestPostProcessor<global::Capar.Pipeline.IRequestPostProcessor<S.Ping, string>, S.PingPost>(),
+            before: services =>
+            {
+                for (int index = 0; index < 70; index++)
+                {
+                    services.AddTransient(typeof(IPipelineBehavior<,>), typeof(S.EarlyBehavior<,>));
+                }
+            });
+
+        S.Trace trace = provider.GetRequiredService<S.Trace>();
+        ISender sender = provider.GetRequiredService<ISender>();
+
+        for (int round = 0; round < 2; round++)
+        {
+            await sender.Send(new S.Ring(1));
+            (await sender.Send(new S.Ping("deep"))).ShouldBe("deep pong");
+        }
+
+        trace.Events.Count(entry => entry == "Early>").ShouldBe(4 * 70);
+        trace.Events.Count(entry => entry.StartsWith("PingPost", StringComparison.Ordinal)).ShouldBe(2);
+    }
+
+    [Fact]
+    public void A_built_in_slot_refuses_to_run_outside_the_generated_mediator()
+    {
+        global::Capar.Internal.PreProcessorSlot<S.Ping, string> slot = new();
+
+        Should.Throw<NotSupportedException>(() => slot.Handle(new S.Ping("x"), _ => Task.FromResult("y"), CancellationToken.None));
+    }
     private static ServiceProvider Build(Action<global::Capar.CaparOptions>? configure = null, Action<IServiceCollection>? before = null)
     {
         ServiceCollection services = new();

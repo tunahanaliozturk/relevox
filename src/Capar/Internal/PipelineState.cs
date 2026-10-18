@@ -17,11 +17,14 @@ namespace Capar.Internal;
 /// handler directly.
 /// </para>
 /// <para>
-/// A built-in behaviour with nothing to do for a request, such as the exception behaviour for a request no
-/// exception handler names, is left out. In MediatR it would still be there, outermost and <c>async</c>, so
-/// a handler that throws before returning a task would produce a faulted task rather than an exception out
-/// of <c>Send</c>. Requests that lost such a behaviour are remembered as asynchronous, with or without other
-/// behaviours left, and the generated code turns a synchronous throw into a faulted task for them.
+/// Built-in behaviours are registered as <see cref="BuiltInSlot{TRequest, TResponse}"/>s, which keep their
+/// place in the container's order and cost nothing to resolve. The first send of a request type works out
+/// which slots have something to do. The others are skipped by position, with a bit mask the pipeline reads,
+/// so a request whose built-ins are all idle pays for neither the behaviours nor a filtered copy of the array.
+/// In MediatR a skipped built-in would still be there, outermost and <c>async</c>, so a handler that throws
+/// before returning a task would produce a faulted task rather than an exception out of <c>Send</c>.
+/// Requests that skip one are remembered as asynchronous, and the generated code turns a synchronous throw
+/// into a faulted task for them.
 /// </para>
 /// <para>
 /// Registered as a singleton per generated mediator type, so each container gets its own answers. A race
@@ -36,9 +39,10 @@ public sealed class PipelineState<TMediator>
     private const byte Direct = 1;
     private const byte DirectButAsynchronous = 2;
     private const byte Pipeline = 3;
-    private const byte PipelineAsynchronousFiltered = 4;
+    private const byte PipelineWithSlots = 4;
 
     private readonly byte[] _requests;
+    private readonly SlotPlan?[] _plans;
     private readonly byte[] _streams;
     private readonly bool _builtInsForEveryRequest;
     private byte _everyRequest;
@@ -54,6 +58,7 @@ public sealed class PipelineState<TMediator>
     public PipelineState(int requests, int streams, bool builtInsForEveryRequest)
     {
         _requests = new byte[requests];
+        _plans = new SlotPlan?[requests];
         _streams = new byte[streams];
         _builtInsForEveryRequest = builtInsForEveryRequest;
     }
@@ -79,10 +84,37 @@ public sealed class PipelineState<TMediator>
     /// <param name="index">The request type's index in the generated mediator.</param>
     /// <param name="services">The container or scope to resolve from.</param>
     /// <param name="asynchronous">Whether a synchronous throw from the send must become a faulted task.</param>
+    /// <param name="skip">Positions in the returned array the pipeline must pass over, as a bit mask.</param>
     /// <returns>The behaviours, outermost first, or null.</returns>
-    public IPipelineBehavior<TRequest, TResponse>[]? Behaviors<TRequest, TResponse>(int index, IServiceProvider services, out bool asynchronous)
-        where TRequest : notnull =>
-        Resolve<IPipelineBehavior<TRequest, TResponse>>(_requests, index, services, out asynchronous);
+    public IPipelineBehavior<TRequest, TResponse>[]? Behaviors<TRequest, TResponse>(int index, IServiceProvider services, out bool asynchronous, out ulong skip)
+        where TRequest : notnull
+    {
+        skip = 0;
+        byte state = _requests[index];
+        if (state is Direct or DirectButAsynchronous)
+        {
+            asynchronous = state == DirectButAsynchronous;
+            return null;
+        }
+
+        IEnumerable<IPipelineBehavior<TRequest, TResponse>> resolved = services.GetServices<IPipelineBehavior<TRequest, TResponse>>();
+        IPipelineBehavior<TRequest, TResponse>[] behaviors = resolved as IPipelineBehavior<TRequest, TResponse>[] ?? [.. resolved];
+
+        if (state == Pipeline)
+        {
+            asynchronous = false;
+            return behaviors;
+        }
+
+        if (state == Unknown)
+        {
+            return Learn(index, behaviors, services, out asynchronous, out skip);
+        }
+
+        SlotPlan plan = Volatile.Read(ref _plans[index])!;
+        asynchronous = plan.Asynchronous;
+        return plan.Apply(behaviors, services, out skip);
+    }
 
     /// <summary>The stream behaviours for one stream request type, or null when it has none.</summary>
     /// <typeparam name="TRequest">The stream request type.</typeparam>
@@ -131,6 +163,62 @@ public sealed class PipelineState<TMediator>
         return _sequentialPublish == 2;
     }
 
+    /// <summary>
+    /// The first send of a request type: finds the slots, asks each whether its behaviour has anything to do,
+    /// and remembers the answer. The behaviours created to ask are the ones this send runs.
+    /// </summary>
+    private IPipelineBehavior<TRequest, TResponse>[]? Learn<TRequest, TResponse>(
+        int index,
+        IPipelineBehavior<TRequest, TResponse>[] behaviors,
+        IServiceProvider services,
+        out bool asynchronous,
+        out ulong skip)
+        where TRequest : notnull
+    {
+        List<int> active = [];
+        List<int> idle = [];
+        IPipelineBehavior<TRequest, TResponse>[]? running = null;
+        for (int position = 0; position < behaviors.Length; position++)
+        {
+            if (behaviors[position] is not BuiltInSlot<TRequest, TResponse> slot)
+            {
+                continue;
+            }
+
+            IPipelineBehavior<TRequest, TResponse> created = slot.Create(services);
+            if (created is Capar.Pipeline.IOptionalBehavior { IsEmpty: true })
+            {
+                idle.Add(position);
+                continue;
+            }
+
+            active.Add(position);
+            running ??= (IPipelineBehavior<TRequest, TResponse>[])behaviors.Clone();
+            running[position] = created;
+        }
+
+        if (active.Count == 0 && idle.Count == 0)
+        {
+            _requests[index] = Pipeline;
+            asynchronous = false;
+            skip = 0;
+            return behaviors;
+        }
+
+        SlotPlan plan = new([.. active], [.. idle], behaviors.Length);
+        asynchronous = plan.Asynchronous;
+        if (plan.Kept == 0)
+        {
+            _requests[index] = plan.Asynchronous ? DirectButAsynchronous : Direct;
+            skip = 0;
+            return null;
+        }
+
+        Volatile.Write(ref _plans[index], plan);
+        _requests[index] = PipelineWithSlots;
+        return plan.Finish(running ?? behaviors, out skip);
+    }
+
     private static T[]? Resolve<T>(byte[] states, int index, IServiceProvider services, out bool asynchronous)
     {
         byte state = states[index];
@@ -149,9 +237,10 @@ public sealed class PipelineState<TMediator>
             return behaviors;
         }
 
-        // A built-in behaviour with nothing to run for this request is left out: it would not change what
-        // happens, apart from making the send asynchronous, which the caller reproduces.
-        bool dropped = state == PipelineAsynchronousFiltered
+        // A behaviour with nothing to run for this request is left out: it would not change what happens, apart
+        // from making the send asynchronous, which the caller reproduces. Requests use slots instead; this path
+        // is for streams, where an application may still register such a behaviour itself.
+        bool dropped = state == PipelineWithSlots
             || (state == Unknown && Array.Exists(behaviors, static behavior => behavior is Capar.Pipeline.IOptionalBehavior { IsEmpty: true }));
         if (dropped)
         {
@@ -163,7 +252,7 @@ public sealed class PipelineState<TMediator>
         {
             states[index] = behaviors.Length == 0
                 ? dropped ? DirectButAsynchronous : Direct
-                : dropped ? PipelineAsynchronousFiltered : Pipeline;
+                : dropped ? PipelineWithSlots : Pipeline;
         }
 
         return behaviors.Length == 0 ? null : behaviors;
@@ -171,4 +260,74 @@ public sealed class PipelineState<TMediator>
 
     /// <summary>A request type that exists only to ask the container about open generic behaviours.</summary>
     private sealed class Probe : IRequest<Unit>;
+
+    /// <summary>What one request type's slots do, learned on its first send.</summary>
+    /// <param name="active">Positions of slots whose behaviour has work, replaced on every send.</param>
+    /// <param name="idle">Positions of slots with nothing to do, skipped.</param>
+    /// <param name="length">How many behaviours the container returns for the request.</param>
+    private sealed class SlotPlan(int[] active, int[] idle, int length)
+    {
+        // The pipeline reads skipped positions from a 64-bit mask. Past that, the idle slots are copied out.
+        private readonly bool _masked = length <= 64;
+        private readonly ulong _skip = Mask(idle, length);
+
+        public bool Asynchronous => idle.Length > 0;
+
+        public int Kept => length - idle.Length;
+
+        public IPipelineBehavior<TRequest, TResponse>[] Apply<TRequest, TResponse>(IPipelineBehavior<TRequest, TResponse>[] behaviors, IServiceProvider services, out ulong skip)
+            where TRequest : notnull
+        {
+            if (active.Length == 0 && _masked)
+            {
+                // Nothing to replace, so the container's array is used as it is: no copy, no allocation.
+                skip = _skip;
+                return behaviors;
+            }
+
+            // The container may hand out the same array again, so it is copied before anything is replaced.
+            IPipelineBehavior<TRequest, TResponse>[] running = (IPipelineBehavior<TRequest, TResponse>[])behaviors.Clone();
+            foreach (int position in active)
+            {
+                running[position] = ((BuiltInSlot<TRequest, TResponse>)running[position]).Create(services);
+            }
+
+            return Finish(running, out skip);
+        }
+
+        public T[] Finish<T>(T[] running, out ulong skip)
+        {
+            if (_masked)
+            {
+                skip = _skip;
+                return running;
+            }
+
+            skip = 0;
+            T[] kept = new T[Kept];
+            for (int position = 0, next = 0; position < running.Length; position++)
+            {
+                if (Array.IndexOf(idle, position) < 0)
+                {
+                    kept[next++] = running[position];
+                }
+            }
+
+            return kept;
+        }
+
+        private static ulong Mask(int[] positions, int length)
+        {
+            ulong mask = 0;
+            if (length <= 64)
+            {
+                foreach (int position in positions)
+                {
+                    mask |= 1UL << position;
+                }
+            }
+
+            return mask;
+        }
+    }
 }

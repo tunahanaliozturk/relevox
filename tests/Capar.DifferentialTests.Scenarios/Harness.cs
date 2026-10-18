@@ -82,6 +82,12 @@ public enum Profile
     /// so this profile only changes the MediatR side.
     /// </summary>
     GenericHandlers,
+
+    /// <summary>
+    /// An open behaviour registered with the container before the library's call, and a post-processor for
+    /// Ping only, so every request carries a built-in behaviour that has work for Ping and none for the rest.
+    /// </summary>
+    EarlyBehavior,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>

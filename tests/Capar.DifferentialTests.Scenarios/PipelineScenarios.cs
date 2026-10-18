@@ -49,4 +49,31 @@ public static partial class Scenarios
 
     private static Task<string> Pipeline(Func<IServiceProvider, Task<object?>> body) =>
         Run.Scenario(body, profile: Profile.Pipeline);
+
+    // A behaviour registered before the library's call is outside its built-in behaviours, in both.
+    public static Task<string> EarlyBehaviourAroundABuiltInWithWork() =>
+        Run.Scenario(async services => await services.GetRequiredService<ISender>().Send(new Ping("early")), profile: Profile.EarlyBehavior);
+
+    public static Task<string> EarlyBehaviourNextToAnIdleBuiltIn() =>
+        Run.Scenario(
+            async services =>
+            {
+                await services.GetRequiredService<ISender>().Send(new Ring(2));
+                return "done";
+            },
+            profile: Profile.EarlyBehavior);
+
+    public static Task<string> AnIdleBuiltInStillMakesTheSendAsynchronous() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send(new Explode())), profile: Profile.EarlyBehavior);
+
+    public static Task<string> AnIdleBuiltInSkippedTwiceRunsTheSameWay() =>
+        Run.Scenario(
+            async services =>
+            {
+                ISender sender = services.GetRequiredService<ISender>();
+                await sender.Send(new Ring(1));
+                await sender.Send(new Ring(1));
+                return await sender.Send(new Ping("again"));
+            },
+            profile: Profile.EarlyBehavior);
 }
