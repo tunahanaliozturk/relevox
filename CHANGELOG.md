@@ -43,6 +43,10 @@ All notable changes to this project are written down here. The format follows
 - A help page per diagnostic, linked from each rule.
 - CPR0006: an `AddCapar` call that binds to another project's generated method, which would register that
   project's handlers instead of this one's.
+- Generic handlers, closed at build time: notification handlers declared as `H<T> : INotificationHandler<T>`
+  over every notification the build sees, as MediatR's default does, and request and stream handlers over the
+  types that satisfy their constraints, as MediatR's `RegisterGenericHandlers` does. CPR0004 now says why a
+  generic handler could not be closed.
 - A migration guide, and an order service on MediatR 12.5 next to the same service moved to Çapar; CI fails
   if the two print different results.
 

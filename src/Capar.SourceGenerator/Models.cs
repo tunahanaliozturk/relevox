@@ -67,6 +67,11 @@ internal sealed record MessageShape(string Type, string Syntax, bool IsValueType
 /// Where the handler is declared. MediatR registers what its scan finds in metadata order, and that
 /// registration order is the order notification handlers, processors and exception handlers run in.
 /// </param>
+/// <param name="IsClosure">
+/// Closed by the generator from a generic handler, such as <c>Audit&lt;Shipped&gt;</c> from <c>Audit&lt;T&gt;</c>.
+/// MediatR registers open generic handlers after everything its scan closed itself, so they run last, and a
+/// handler someone wrote for the exact request wins over one closed from a generic.
+/// </param>
 /// <param name="Location">Where the handler is declared, when it is in source.</param>
 internal sealed record HandlerModel(
     HandlerKind Kind,
@@ -78,6 +83,7 @@ internal sealed record HandlerModel(
     EquatableArray<string> ResponseChain,
     bool IsPublic,
     DeclarationOrder Order,
+    bool IsClosure,
     LocationModel? Location);
 
 /// <summary>Where a type is declared, as the parts of a sort key that reproduces metadata order.</summary>

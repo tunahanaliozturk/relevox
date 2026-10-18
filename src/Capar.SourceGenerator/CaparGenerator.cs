@@ -50,12 +50,20 @@ public sealed class CaparGenerator : IIncrementalGenerator
                 Discovery.SeesAnotherRegistration(compilation)))
             .WithTrackingName(TrackingNames.References);
 
+        // Generic handlers are closed over types found anywhere in the compilation, so this step looks at the
+        // whole of it. Its output is value-equal from one edit to the next unless a generic handler or something
+        // it could be closed over changed.
+        IncrementalValueProvider<DiscoveryModel> closings = context.CompilationProvider
+            .Select(static (compilation, cancellationToken) => Discovery.CloseGenerics(compilation, cancellationToken))
+            .WithTrackingName(TrackingNames.Closings);
+
         IncrementalValueProvider<EmitPlan> plan = fromSource
             .Combine(fromReferences)
+            .Combine(closings)
             .Select(static (pair, _) => Planner.Build(
-                pair.Right.AssemblyName,
-                Discovery.Merge([pair.Left, pair.Right.Discovery]),
-                pair.Right.SeesAnotherRegistration))
+                pair.Left.Right.AssemblyName,
+                Discovery.Merge([pair.Left.Left, pair.Left.Right.Discovery, pair.Right]),
+                pair.Left.Right.SeesAnotherRegistration))
             .WithTrackingName(TrackingNames.Plan);
 
         // Diagnostics are reported by CaparAnalyzer, which has the syntax trees to put them in source.
@@ -73,5 +81,6 @@ internal static class TrackingNames
     public const string Source = "Source";
     public const string SourceMerged = "SourceMerged";
     public const string References = "References";
+    public const string Closings = "Closings";
     public const string Plan = "Plan";
 }

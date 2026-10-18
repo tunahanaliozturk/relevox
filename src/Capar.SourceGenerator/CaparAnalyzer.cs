@@ -84,7 +84,8 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
             start.RegisterCompilationEndAction(end =>
             {
                 DiscoveryModel references = Discovery.ScanReferences(end.Compilation, end.CancellationToken);
-                EmitPlan plan = Planner.Build(end.Compilation.AssemblyName ?? "Capar.Generated", Discovery.Merge([.. parts, references]));
+                DiscoveryModel closings = Discovery.CloseGenerics(end.Compilation, end.CancellationToken);
+                EmitPlan plan = Planner.Build(end.Compilation.AssemblyName ?? "Capar.Generated", Discovery.Merge([.. parts, references, closings]));
 
                 foreach (DiagnosticEntry entry in plan.Diagnostics)
                 {

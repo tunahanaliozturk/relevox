@@ -14,7 +14,7 @@ namespace Capar.SourceGenerator;
 /// handler behaves the same whichever project it lives in. That is the reason this is one class rather than
 /// two passes that could drift apart.
 /// </remarks>
-internal static class Discovery
+internal static partial class Discovery
 {
     private const string ContractsNamespace = "Capar";
     private const string PipelineNamespace = "Capar.Pipeline";
@@ -32,11 +32,20 @@ internal static class Discovery
         EquatableArray<OpenRegistration>.Empty,
         EquatableArray<string>.Empty);
 
+    /// <param name="symbol">The type.</param>
+    /// <param name="compilation">The compilation the generated code will be part of.</param>
+    /// <param name="fromSource">Whether the type is declared in that compilation.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <param name="closedFrom">
+    /// For a handler the generator closed from a generic one, that generic definition: it gives the order, and
+    /// a closing that cannot be used is dropped rather than reported, because nobody wrote it.
+    /// </param>
     public static DiscoveryModel Classify(
         INamedTypeSymbol symbol,
         Compilation compilation,
         bool fromSource,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        INamedTypeSymbol? closedFrom = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -51,7 +60,7 @@ internal static class Discovery
         List<OpenRegistration> open = [];
         HashSet<string> experimental = [];
 
-        LocationModel? location = fromSource ? ToLocationModel(symbol) : null;
+        LocationModel? location = fromSource && closedFrom is null ? ToLocationModel(symbol) : null;
         bool concrete = !symbol.IsAbstract;
         bool accessible = IsAccessible(symbol, compilation);
 
@@ -134,11 +143,12 @@ internal static class Discovery
                 return;
             }
 
+            bool unclosed = IsOpen(symbol);
+
             // A generic processor whose type parameters are exactly the contract's, such as
             // LoggingPreProcessor<T> : IRequestPreProcessor<T>, applies to every request. It is registered open
-            // and the container closes it, as MediatR's scan does. A generic handler has no such reading: it
-            // would have to be closed over requests the generator cannot enumerate.
-            if (symbol.IsGenericType
+            // and the container closes it, as MediatR's scan does.
+            if (unclosed
                 && kind is HandlerKind.PreProcessor or HandlerKind.PostProcessor or HandlerKind.ExceptionHandler or HandlerKind.ExceptionAction
                 && accessible
                 && contract.TypeArguments.Length == symbol.TypeParameters.Length
@@ -150,13 +160,10 @@ internal static class Discovery
                 return;
             }
 
-            if (symbol.IsGenericType)
+            // Any other generic handler is closed, or reported, by CloseGenerics, which can see every type it might
+            // be closed over.
+            if (unclosed)
             {
-                if (fromSource)
-                {
-                    skipped.Add(Skip(Diagnostics.GenericHandler.Id, location, Display(symbol)));
-                }
-
                 return;
             }
 
@@ -164,6 +171,11 @@ internal static class Discovery
 
             if (!accessible || named.Any(type => !IsAccessible(type, compilation)))
             {
+                if (closedFrom is not null)
+                {
+                    return;
+                }
+
                 string reason = fromSource
                     ? "is not accessible from the rest of this assembly"
                     : $"is internal to '{symbol.ContainingAssembly?.Name}'";
@@ -173,6 +185,11 @@ internal static class Discovery
 
             if (named.Any(IsObsoleteAsError))
             {
+                if (closedFrom is not null)
+                {
+                    return;
+                }
+
                 skipped.Add(Skip(Diagnostics.Inaccessible.Id, location, Display(symbol), "or a type it handles is marked [Obsolete] as an error"));
                 return;
             }
@@ -192,8 +209,20 @@ internal static class Discovery
                 kind == HandlerKind.PostProcessor && response is not null ? AssignableTo(response) : EquatableArray<string>.Empty,
                 symbol.DeclaredAccessibility == Accessibility.Public,
                 // Worked out here rather than for every type with a base list: it walks the syntax trees.
-                OrderOf(symbol, compilation, fromSource),
+                closedFrom is null
+                    ? OrderOf(symbol, compilation, fromSource)
+                    : OrderOf(closedFrom, compilation, closedFrom.Locations.Any(static candidate => candidate.IsInSource)),
+                IsClosure: closedFrom is not null,
                 location));
+
+            // A request closed from a generic handler, such as GetById<Customer>, is declared nowhere as such, so
+            // it gets its message here, the way a closed generic notification does below.
+            if (closedFrom is not null
+                && kind is HandlerKind.Request or HandlerKind.VoidRequest or HandlerKind.Stream
+                && message is INamedTypeSymbol closedRequest)
+            {
+                AddMessage(closedRequest, kind == HandlerKind.Stream ? MessageKind.Stream : MessageKind.Request, null, declaredHere: false);
+            }
 
             // A notification handler for a closed generic type, such as INotificationHandler<Created<Order>>,
             // names a message no declaration produces: Created<T> itself is generic and skipped below. Without
@@ -459,6 +488,20 @@ internal static class Discovery
         return type is IArrayTypeSymbol array
             ? IsAccessible(array.ElementType, compilation)
             : compilation.IsSymbolAccessibleWithin(type, compilation.Assembly);
+    }
+
+    /// <summary>Whether the type still has type parameters to fill in, its own or an enclosing type's.</summary>
+    private static bool IsOpen(INamedTypeSymbol symbol)
+    {
+        for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+        {
+            if (current.TypeArguments.Any(ContainsTypeParameters))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ContainsTypeParameters(ITypeSymbol type) =>

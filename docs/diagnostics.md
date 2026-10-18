@@ -64,11 +64,30 @@ not compile.
 
 **Generic handler cannot be registered.** Warning.
 
-A handler with type parameters of its own, such as `GetByIdHandler<T> : IRequestHandler<GetById<T>, T?>`,
-is closed over real types at run time by MediatR. The generator writes dispatch for the types it can see
-while building, so it cannot know which closed versions will be sent, and the handler is not registered.
+The generated code calls closed types, so a generic handler is registered by closing it while the project
+builds ([ADR 0008](adr/0008-generic-handlers.md)):
 
-**Fix:** make the generic handler `abstract` and declare one closed handler per request type:
+- A notification handler declared as `Audit<T> : INotificationHandler<T>` is closed over every notification
+  type the build can see that satisfies its constraints, as MediatR's container closes it at run time.
+- A request or stream handler such as `GetByIdHandler<T> : IRequestHandler<GetById<T>, string>
+  where T : IEntity` is closed over every type in the solution that satisfies its constraints, as MediatR does
+  with `RegisterGenericHandlers`.
+- A generic processor, exception handler or exception action whose type parameters are exactly the
+  interface's, such as `Logging<TRequest> : IRequestPreProcessor<TRequest>`, is registered open, as MediatR
+  registers it.
+
+The message says which of these a handler missed:
+
+| The message says | Because |
+|---|---|
+| has no constraint naming a type declared in this solution | An unconstrained type parameter, or one constrained only to a .NET type such as `IComparable<T>`, would mean closing it over every type there is. |
+| no type in this solution satisfies its constraints | Nothing to close it over yet. |
+| more than the 256 the generator will write | The constraints admit too many types, or too many combinations of them. |
+| declared as H&lt;T&gt; : INotificationHandler&lt;T&gt; | The notification is built from the type parameter, as in `INotificationHandler<Envelope<T>>`, so there is no single notification to close it for. |
+| nested in a generic type | The handler's own type parameters come from the type around it. |
+
+**Fix:** constrain the type parameter to an interface or base class declared in the solution, or make the
+generic handler `abstract` and declare one closed handler per request:
 
 ```csharp
 public abstract class GetByIdHandler<T>(Store store) : IRequestHandler<GetById<T>, T?>
@@ -79,10 +98,6 @@ public abstract class GetByIdHandler<T>(Store store) : IRequestHandler<GetById<T
 public sealed class GetCustomerById(Store store) : GetByIdHandler<Customer>(store);
 public sealed class GetOrderById(Store store) : GetByIdHandler<Order>(store);
 ```
-
-Generic pre-processors, post-processors, exception handlers and actions whose type parameters are exactly
-the interface's, such as `Logging<TRequest> : IRequestPreProcessor<TRequest>`, are not affected: they apply
-to every request and are registered open, as MediatR registers them.
 
 ## CPR0005
 

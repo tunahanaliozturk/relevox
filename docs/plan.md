@@ -324,6 +324,7 @@ mechanical change today and gets more expensive after the first release.
 - 0005 No `namespace MediatR` shim; a code fix later instead.
 - 0006 Clean-room rule and the use of MediatR 12.5.0 as a test oracle.
 - 0007 `AddCapar` declared in `Microsoft.Extensions.DependencyInjection`. Written in M5.
+- 0008 Generic handlers closed at build time.
 
 ## 10. Open questions
 
@@ -339,8 +340,9 @@ In rough order of value to someone migrating:
 
 - **A code fix for the migration.** An analyzer that offers to rewrite `using MediatR` and `AddMediatR`,
   promised by ADR 0005.
-- **Generic handlers.** MediatR 12 closes them at run time; Çapar reports them as CPR0004. Closing them over
-  the request types the build can see would cover most real uses.
+- ~~**Generic handlers.**~~ Done before the first release ([ADR 0008](adr/0008-generic-handlers.md)). Working on
+  it showed MediatR's default registers generic notification handlers, which Çapar had been skipping: a real
+  behaviour difference, now matched and covered by differential tests.
 - **Built-in behaviours created for nothing.** Once any processor or exception handler exists, the built-in
   behaviours are resolved on every pipelined send, even for requests none of them apply to.
 - **API compatibility checks.** Package validation against the 1.0.0 baseline, so a breaking change cannot

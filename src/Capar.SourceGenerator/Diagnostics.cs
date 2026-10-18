@@ -70,13 +70,13 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor GenericHandler = new(
         id: "CPR0004",
         title: "Generic handler cannot be registered",
-        messageFormat: "'{0}' is generic, and the generator only registers handlers whose type arguments are known at build time",
+        messageFormat: "'{0}' is a generic handler the generator cannot close: {1}",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
         helpLinkUri: Help + "cpr0004",
-        description: "MediatR can close a generic handler at run time. The generator cannot, because it writes dispatch for types it can see. Declare a closed handler per request instead.");
+        description: "The generator writes dispatch for closed types, so a generic handler is registered by closing it at build time: a notification handler declared as H<T> : INotificationHandler<T> over every notification it can see, and a request or stream handler over the types that satisfy its constraints. Anything else is reported here; declare a closed handler per request instead.");
 
     /// <summary>
     /// A warning, raised only when the other assembly exposes public handlers. A library that uses Çapar
