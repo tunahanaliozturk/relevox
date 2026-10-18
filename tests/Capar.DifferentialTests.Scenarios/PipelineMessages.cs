@@ -67,6 +67,18 @@ public sealed class InnerBehavior<TRequest, TResponse>(Trace trace) : IPipelineB
 }
 
 /// <summary>Registered straight into the container after the library's own registration call.</summary>
+public sealed class EarlyBehavior<TRequest, TResponse>(Trace trace) : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+{
+    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        trace.Add("Early>");
+        TResponse response = await next();
+        trace.Add("Early<");
+        return response;
+    }
+}
+
 public sealed class LateBehavior<TRequest, TResponse>(Trace trace) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {

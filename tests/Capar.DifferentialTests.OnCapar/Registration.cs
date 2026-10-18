@@ -7,6 +7,11 @@ public static partial class Library
 {
     static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile, Trace trace)
     {
+        if (profile == Profile.EarlyBehavior)
+        {
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(EarlyBehavior<,>));
+        }
+
         services.AddCapar(options =>
         {
             options.Lifetime = lifetime;
@@ -29,6 +34,11 @@ public static partial class Library
             if (profile == Profile.AllExceptions)
             {
                 options.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
+            }
+
+            if (profile == Profile.EarlyBehavior)
+            {
+                options.AddRequestPostProcessor<IRequestPostProcessor<Ping, string>, PingPost>();
             }
 
             if (profile == Profile.Pipeline)
