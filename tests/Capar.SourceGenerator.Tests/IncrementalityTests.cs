@@ -47,4 +47,24 @@ public sealed class IncrementalityTests
 
         steps[TrackingNames.Plan].ShouldContain(IncrementalStepRunReason.Modified);
     }
+
+    [Fact]
+    public void An_edit_unrelated_to_handlers_reuses_the_closings_of_a_generic_handler()
+    {
+        const string Generic = """
+            using Capar; using System.Threading; using System.Threading.Tasks;
+            public sealed record Shipped : INotification;
+            public sealed class Audit<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """;
+
+        var steps = GeneratorHarness.RunTwice(
+            [Generic, "public static class Util { public static int One() => 1; }"],
+            [Generic, "public static class Util { public static int One() => 2; }"]);
+
+        steps[TrackingNames.Closings].ShouldAllBe(reason => reason == IncrementalStepRunReason.Unchanged || reason == IncrementalStepRunReason.Cached);
+        steps[TrackingNames.Plan].ShouldAllBe(reason => reason == IncrementalStepRunReason.Cached || reason == IncrementalStepRunReason.Unchanged);
+    }
 }

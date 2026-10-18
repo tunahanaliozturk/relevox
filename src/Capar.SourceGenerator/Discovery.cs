@@ -37,15 +37,20 @@ internal static partial class Discovery
     /// <param name="fromSource">Whether the type is declared in that compilation.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
     /// <param name="closedFrom">
-    /// For a handler the generator closed from a generic one, that generic definition: it gives the order, and
-    /// a closing that cannot be used is dropped rather than reported, because nobody wrote it.
+    /// For a handler the generator closed from a generic one, that generic definition: it gives the order and
+    /// the location, and a closing that cannot be used is dropped rather than reported, because nobody wrote it.
+    /// </param>
+    /// <param name="closing">
+    /// For such a handler, the contracts being closed, by metadata name. A generic class can implement several;
+    /// only the one it is being closed for is registered, as MediatR's container closes only that one.
     /// </param>
     public static DiscoveryModel Classify(
         INamedTypeSymbol symbol,
         Compilation compilation,
         bool fromSource,
         CancellationToken cancellationToken,
-        INamedTypeSymbol? closedFrom = null)
+        INamedTypeSymbol? closedFrom = null,
+        ICollection<string>? closing = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -60,13 +65,14 @@ internal static partial class Discovery
         List<OpenRegistration> open = [];
         HashSet<string> experimental = [];
 
-        LocationModel? location = fromSource && closedFrom is null ? ToLocationModel(symbol) : null;
+        LocationModel? location = closedFrom is not null ? ToLocationModel(closedFrom) : fromSource ? ToLocationModel(symbol) : null;
         bool concrete = !symbol.IsAbstract;
         bool accessible = IsAccessible(symbol, compilation);
 
         foreach (INamedTypeSymbol contract in symbol.AllInterfaces)
         {
-            if (contract.ContainingAssembly?.Name != ContractsAssembly)
+            if (contract.ContainingAssembly?.Name != ContractsAssembly
+                || (closing is not null && !closing.Contains(contract.MetadataName)))
             {
                 continue;
             }

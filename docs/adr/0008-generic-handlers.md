@@ -27,18 +27,26 @@ handlers, so they are held to the same rules.
 - A notification handler declared as `H<T> : INotificationHandler<T>` is closed over every notification type
   the build can see whose type satisfies its constraints, and runs after every other handler for that
   notification. A closing does not make the notification count as handled for the catch-all rule, because
-  MediatR's scan decides that before the container closes anything.
+  MediatR's scan decides that before the container closes anything. A class that also implements another
+  handler interface is closed only as a notification handler, as the container closes only the interface it
+  is asked for.
 - A request or stream handler is closed over the types that satisfy its constraints, from this compilation
-  and the references that can see the constraint's assembly. Every type parameter needs a constraint naming a
-  type declared in the solution; a type from .NET, recognised by Microsoft's strong-name keys, does not count,
-  because everything implements `IComparable<T>`. More than 256 closings for one handler is reported.
-- A handler written for one closed request wins over the generic one, without CPR0002.
-- Anything else is reported as CPR0004, with the reason.
+  and the solution's other assemblies that can see the constraint. Every type parameter needs a constraint
+  naming a type from the solution, or another type parameter that has one. An assembly from .NET, recognised
+  by Microsoft's strong-name keys, or from a NuGet package, recognised by where the build found it, is not
+  the solution's: its types neither bound the search nor are closed over. More than 256 closings that
+  satisfy every constraint is reported.
+- A handler written for one closed request wins over the generic one, without CPR0002. Two generic handlers
+  that close over the same request are CPR0002, at the first one's declaration.
+- An inaccessible generic handler is CPR0003, as a written one is. Anything else is CPR0004, with the reason.
 
 ## Consequences
 
 - Generic notification handlers behave as they do under MediatR's default, which the differential tests now
-  hold Çapar to, ordering included.
+  hold Çapar to, ordering included. Getting the order right across sibling namespaces turned up an older bug:
+  the compiler writes sibling namespaces in the reverse of the order they are declared, and Çapar had assumed
+  the declaration order for every handler, written or not. Fixed here, with a scenario that spreads handlers
+  over several namespaces.
 - Generic request handlers work without `RegisterGenericHandlers`. The generator cannot read a run-time
   option, and registering them always means a send that failed under MediatR's default now works, which
   nobody depends on. `RegisterGenericHandlers` and its limits are deleted during migration.
@@ -47,9 +55,13 @@ handlers, so they are held to the same rules.
 - A generic notification handler reaches only notification types the build can see. `EntityCreated<Invoice>`
   published from code the build never compiled, and named by no handler, reaches it under MediatR and not
   under Çapar.
-- The closing step looks at every type in the compilation, and at the references, on each compilation. Its
-  output is value-equal between edits that change nothing it depends on, so nothing downstream reruns; the
-  references are walked once each and cached.
+- The closing step looks at every type in the compilation on each compilation; what each referenced assembly
+  offers is worked out once and cached. Its output is value-equal between edits that change nothing it
+  depends on, so nothing downstream reruns. Measured on a single project of 5,000 types, one run takes 7 ms
+  with no generic handler and 40 ms with forty generic request handlers sharing a constraint, whose candidate
+  list is worked out once.
+- Generic request handlers that MediatR's default never registered are live after the migration. Two of them
+  for the same request fail the build with CPR0002, which MediatR never had to decide.
 
 ## Alternatives considered
 

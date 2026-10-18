@@ -434,8 +434,9 @@ internal static class Planner
     /// <remarks>
     /// A referenced assembly's order is its TypeDef table, carried in <see cref="DeclarationOrder.Position"/>.
     /// For this compilation the compiler emits a namespace's own types, in declaration order, before any of its
-    /// child namespaces, and child namespaces in the order they were first declared. Without the declarations of
-    /// namespaces that hold no handler, "first declared" is approximated by the earliest handler inside each one.
+    /// child namespaces, and child namespaces in the reverse of the order they were first declared. Without the
+    /// declarations of namespaces that hold no handler, "first declared" is approximated by the earliest handler
+    /// inside each one.
     /// </remarks>
     private sealed class MetadataOrder : IComparer<DeclarationOrder>
     {
@@ -507,9 +508,12 @@ internal static class Planner
                 return 1;
             }
 
+            // Sibling namespaces come out in the reverse of the order they were first declared in: the compiler
+            // walks namespaces with a stack. A probe during the generic handler work found it; the differential
+            // scenario in NamespaceOrder.cs holds it.
             string leftChild = string.Join(".", left, 0, common + 1);
             string rightChild = string.Join(".", right, 0, common + 1);
-            return Compare(_firstInNamespace[leftChild], _firstInNamespace[rightChild]);
+            return Compare(_firstInNamespace[rightChild], _firstInNamespace[leftChild]);
         }
 
         private static int Compare((int Tree, int Position) x, (int Tree, int Position) y) =>
