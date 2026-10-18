@@ -50,6 +50,11 @@ All notable changes to this project are written down here. The format follows
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
 - A help page per diagnostic, linked from each rule.
+- Stack traces show handlers and behaviours without Çapar's dispatch code in between, and the debugger steps
+  through it into the handler.
+- The generator's cost per edit in a large project: 2,500 handlers went from about 300 ms to 114 ms, by not
+  walking every type's interfaces when there is no generic handler and not building every member to find
+  nested types ([measured](docs/benchmark-results/2026-10-18-ide.md)).
 - A web sample: an ASP.NET Core minimal API with scoped services in handlers, a validation behaviour, a
   pre-processor, problem details, a notification with two listeners and a streamed list, tested over HTTP in CI.
 - A migration of Jason Taylor's Clean Architecture template from MediatR 14.2.0, with its tests passing before

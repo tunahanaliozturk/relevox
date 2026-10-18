@@ -467,17 +467,20 @@ internal static partial class Discovery
         {
             INamespaceOrTypeSymbol current = pending.Pop();
 
-            foreach (ISymbol member in current.GetMembers())
+            // Types and namespaces only: asking for all members would make the compiler build every method and
+            // property of every type, which on a large project was most of a keystroke's cost.
+            if (current is INamespaceSymbol ns)
             {
-                if (member is INamespaceSymbol ns)
+                foreach (INamespaceSymbol child in ns.GetNamespaceMembers())
                 {
-                    pending.Push(ns);
+                    pending.Push(child);
                 }
-                else if (member is INamedTypeSymbol type)
-                {
-                    yield return type;
-                    pending.Push(type);
-                }
+            }
+
+            foreach (INamedTypeSymbol type in current.GetTypeMembers())
+            {
+                yield return type;
+                pending.Push(type);
             }
         }
     }
