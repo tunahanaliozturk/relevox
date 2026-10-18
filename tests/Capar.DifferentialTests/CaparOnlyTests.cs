@@ -132,6 +132,74 @@ public sealed class CaparOnlyTests
             : null;
     }
 
+    [Theory]
+    [InlineData(S.Profile.Plain)]
+    [InlineData(S.Profile.Pipeline)]
+    public async Task Stack_traces_show_handlers_and_behaviours_but_not_the_plumbing_between_them(S.Profile profile)
+    {
+        // What a developer reads first when something fails. The generated mediator and Capar.Internal are hidden
+        // from stack traces and stepped through by the debugger; handlers, behaviours and processors are not.
+        await using ServiceProvider provider = S.Library.Build(profile: profile);
+        using IServiceScope scope = provider.CreateScope();
+        ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        CaparMediator typed = scope.ServiceProvider.GetRequiredService<CaparMediator>();
+
+        string[] traces =
+        [
+            await StackOf(() => sender.Send(new S.Explode())),
+            await StackOf(() => typed.Send(new S.Explode())),
+            await StackOf(() => sender.Send((object)new S.Explode())),
+            await StackOf(() => scope.ServiceProvider.GetRequiredService<IPublisher>().Publish(new S.Boom())),
+            await StackOf(async () =>
+            {
+                await foreach (int item in sender.CreateStream(new S.Sputter()))
+                {
+                    _ = item;
+                }
+            }),
+        ];
+
+        traces[0].ShouldContain("ExplodeHandler.Handle");
+        traces[3].ShouldContain("BoomHandler.Handle");
+        traces[4].ShouldContain("SputterHandler.Handle");
+        foreach (string trace in traces)
+        {
+            trace.ShouldNotContain("Capar.Internal");
+        }
+
+        // The typed, interface and stream paths show nothing of the mediator. Send(object) and the default
+        // publisher keep one frame each: they are async methods, and .NET checks StackTraceHidden on the state
+        // machine the compiler generates, which no attribute can reach.
+        foreach (int path in new[] { 0, 1, 4 })
+        {
+            traces[path].ShouldNotContain("CaparMediator");
+        }
+
+        foreach (int path in new[] { 2, 3 })
+        {
+            traces[path].Split(Environment.NewLine).Count(line => line.Contains("CaparMediator", StringComparison.Ordinal)).ShouldBe(1);
+        }
+
+        if (profile == S.Profile.Pipeline)
+        {
+            traces[0].ShouldContain("OuterBehavior");
+        }
+    }
+
+    private static async Task<string> StackOf(Func<Task> call)
+    {
+        try
+        {
+            await call();
+        }
+        catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
+        {
+            return exception.StackTrace ?? string.Empty;
+        }
+
+        throw new InvalidOperationException("Expected the call to fail.");
+    }
+
     private static ServiceProvider Build(Action<global::Capar.CaparOptions>? configure = null, Action<IServiceCollection>? before = null)
     {
         ServiceCollection services = new();

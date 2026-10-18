@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel;
 
 namespace Capar.Internal;
@@ -26,6 +27,7 @@ namespace Capar.Internal;
 /// <typeparam name="TRequest">The stream request type.</typeparam>
 /// <typeparam name="TResponse">The item type.</typeparam>
 [EditorBrowsable(EditorBrowsableState.Never)]
+[StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
 public sealed class DeferredEnumerable<TState, TRequest, TResponse> : IAsyncEnumerable<TResponse>
 {
     private readonly TState _state;
@@ -54,6 +56,7 @@ public sealed class DeferredEnumerable<TState, TRequest, TResponse> : IAsyncEnum
     public IAsyncEnumerator<TResponse> GetAsyncEnumerator(CancellationToken cancellationToken = default) =>
         new Enumerator(this, cancellationToken);
 
+    [StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
     private sealed class Enumerator(DeferredEnumerable<TState, TRequest, TResponse> owner, CancellationToken enumeration) : IAsyncEnumerator<TResponse>
     {
         private IAsyncEnumerator<TResponse>? _inner;

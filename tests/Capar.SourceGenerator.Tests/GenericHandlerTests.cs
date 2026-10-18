@@ -44,7 +44,7 @@ public sealed class GenericHandlerTests
         run.Mediator.ShouldContain("global::FeedHandler<global::Bolt>");
         run.Mediator.ShouldContain("global::FeedHandler<global::Nut>");
         run.Mediator.ShouldNotContain("Fastener>", Case.Sensitive, "an abstract type can never be the runtime type argument of a sent request");
-        run.Mediator.ShouldNotContain("Hidden", Case.Sensitive, "the generated code cannot name a private type");
+        run.Mediator.ShouldNotContain("Holder.Hidden", Case.Sensitive, "the generated code cannot name a private type");
         run.CompilationErrors.ShouldBeEmpty();
     }
 

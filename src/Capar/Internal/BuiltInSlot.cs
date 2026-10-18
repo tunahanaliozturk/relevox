@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel;
 using Capar.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
@@ -99,6 +100,7 @@ public sealed class ExceptionActionSlot<TRequest, TResponse> : BuiltInSlot<TRequ
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TResponse">The response type.</typeparam>
+[StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
 internal sealed class AsyncPassThrough<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {

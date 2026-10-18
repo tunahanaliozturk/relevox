@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel;
 
 namespace Capar.Internal;
@@ -24,6 +25,7 @@ namespace Capar.Internal;
 /// </para>
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
+[StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
 public static class RequestPipeline
 {
     /// <summary>Runs the behaviours, outermost first, and then the handler.</summary>
@@ -52,6 +54,7 @@ public static class RequestPipeline
             : new Chain<TState, TRequest, TResponse>(state, request, behaviors, handler, cancellationToken).Invoke(0, cancellationToken);
     }
 
+    [StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
     private sealed class Chain<TState, TRequest, TResponse>(
         TState state,
         TRequest request,
@@ -97,6 +100,7 @@ public static class RequestPipeline
         private Task<TResponse> Step8(CancellationToken cancellationToken) => Invoke(8, Token(cancellationToken));
 
         /// <summary>A step beyond the eighth, which needs an object of its own to remember where it is.</summary>
+        [StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
         private sealed class Next(Chain<TState, TRequest, TResponse> chain, int index)
         {
             public Task<TResponse> Invoke(CancellationToken cancellationToken) =>

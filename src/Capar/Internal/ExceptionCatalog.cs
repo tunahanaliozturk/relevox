@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel;
 using Capar.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,7 @@ namespace Capar.Internal;
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TResponse">The response type.</typeparam>
 [EditorBrowsable(EditorBrowsableState.Never)]
+[StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
 public abstract class ExceptionCatalog<TRequest, TResponse>
     where TRequest : notnull
 {
