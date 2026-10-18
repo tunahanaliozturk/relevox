@@ -16,9 +16,9 @@
       floor of what can load it: 5.0.0 shipped with the first .NET 10 SDK, so every .NET 10 SDK can run it.
       Referencing 5.9 would refuse to load on the earlier 10.0 SDK bands. See ADR 0003.
     -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
   </ItemGroup>
 
   <ItemGroup Label="Testing and measurement">
