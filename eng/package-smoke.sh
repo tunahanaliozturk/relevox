@@ -24,8 +24,10 @@ for package in Capar Capar.Contracts; do
 done
 
 contents="$(unzip -l "$feed/Capar.$version.nupkg")"
-grep -q " analyzers/dotnet/cs/Capar.SourceGenerator.dll\$" <<<"$contents" \
-  || { echo "Capar.$version.nupkg has no generator under analyzers/" >&2; exit 1; }
+for analyzer in Capar.SourceGenerator.dll Capar.CodeFixes.dll; do
+  grep -q " analyzers/dotnet/cs/$analyzer\$" <<<"$contents" \
+    || { echo "Capar.$version.nupkg has no $analyzer under analyzers/" >&2; exit 1; }
+done
 
 dotnet run --project "$app" --configuration Release
 

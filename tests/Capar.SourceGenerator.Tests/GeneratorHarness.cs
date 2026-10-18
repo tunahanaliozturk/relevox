@@ -31,7 +31,7 @@ public sealed record GeneratorRun(
 public static class GeneratorHarness
 {
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Preview);
-    private static readonly ImmutableArray<MetadataReference> References = BuildReferences();
+    internal static readonly ImmutableArray<MetadataReference> References = BuildReferences();
 
     public static GeneratorRun Run(params string[] sources) => Run("Subject", [], sources);
 
