@@ -30,6 +30,14 @@ internal static class Emitter
     private const string Frozen = "global::System.Collections.Frozen";
     private const string DependencyInjection = "global::Microsoft.Extensions.DependencyInjection";
 
+    // On every generated type: hidden from stack traces, so a failure shows the handler and the behaviours
+    // around it rather than dispatch code nobody wrote, and stepped through by the debugger, so F11 on Send
+    // lands in the handler.
+    private const string Plumbing = "[global::System.Diagnostics.StackTraceHidden, global::System.Diagnostics.DebuggerNonUserCode, global::System.Diagnostics.DebuggerStepThrough]";
+
+    // The same for the lambdas the generated code hands to the runtime, which compile to methods of their own.
+    private const string Lambda = "[global::System.Diagnostics.StackTraceHidden, global::System.Diagnostics.DebuggerStepThrough] ";
+
     private static readonly string Version =
         typeof(Emitter).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
 
@@ -50,6 +58,7 @@ internal static class Emitter
         code.Line("/// its typed overloads call the handler directly, with nothing to look up.");
         code.Line("/// </remarks>");
         code.Line($"[global::System.CodeDom.Compiler.GeneratedCode(\"Capar\", \"{Version}\")]");
+        code.Line(Plumbing);
         code.Open("internal sealed partial class CaparMediator : global::Capar.IMediator");
 
         code.Line("private readonly global::System.IServiceProvider _services;");
@@ -334,6 +343,7 @@ internal static class Emitter
             string response = catalog.ResponseSyntax;
 
             code.Line();
+            code.Line(Plumbing);
             code.Open($"private sealed class ExceptionCatalog{index} : global::Capar.Internal.ExceptionCatalog<{request}, {response}>");
             code.Line($"public override bool HasHandlers => {(catalog.HandledExceptions.Length > 0 ? "true" : "false")};");
             code.Line();
@@ -418,8 +428,8 @@ internal static class Emitter
             // it to be constructed, as in MediatR. A request without a response runs through behaviours typed
             // over Unit, which is how MediatR 12 models it too.
             string pipeline = hasResponse
-                ? $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken)"
-                : $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken)";
+                ? $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, {Lambda}static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken)"
+                : $"global::Capar.Internal.RequestPipeline.Run(this, request, behaviors, {Lambda}static async (mediator, message, token) => {{ await (({contract})mediator.Handler{handler}()).Handle(message, token).ConfigureAwait(false); return global::Capar.Unit.Value; }}, cancellationToken)";
 
             // The send itself is kept to a byte read and a call so the JIT can inline it: a method with an
             // exception handler is never inlined, and the M2 benchmark showed the cost (a singleton send went
@@ -480,7 +490,7 @@ internal static class Emitter
             code.Open($"public {AsyncEnumerable}<{stream.ResponseSyntax}> CreateStream({stream.Request.Syntax} request, {Token} cancellationToken = default)");
             NullCheck(code, "request", stream.Request);
             RuntimeTypeCheck(code, "request", stream.Request, $"CreateStream<{stream.ResponseSyntax}>((global::Capar.IStreamRequest<{stream.ResponseSyntax}>)request, cancellationToken)");
-            code.Line($"return new global::Capar.Internal.DeferredEnumerable<CaparMediator, {stream.Request.Syntax}, {stream.ResponseSyntax}>(this, request, static (mediator, message, token) => mediator.OpenStream{index}(message, token), cancellationToken);");
+            code.Line($"return new global::Capar.Internal.DeferredEnumerable<CaparMediator, {stream.Request.Syntax}, {stream.ResponseSyntax}>(this, request, {Lambda}static (mediator, message, token) => mediator.OpenStream{index}(message, token), cancellationToken);");
             code.Close();
 
             // Called on the first MoveNextAsync, with the combined token: the handler is resolved when enumeration
@@ -491,7 +501,7 @@ internal static class Emitter
             code.Line($"global::Capar.IStreamPipelineBehavior<{stream.Request.Syntax}, {stream.ResponseSyntax}>[]? behaviors = _pipelines.StreamBehaviors<{stream.Request.Syntax}, {stream.ResponseSyntax}>({position}, _services);");
             code.Line("return behaviors is null");
             code.Line($"    ? (({contract})Handler{handler}()).Handle(request, cancellationToken)");
-            code.Line($"    : global::Capar.Internal.StreamPipeline.Run(this, request, behaviors, static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);");
+            code.Line($"    : global::Capar.Internal.StreamPipeline.Run(this, request, behaviors, {Lambda}static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);");
             code.Close();
         }
     }
@@ -787,11 +797,13 @@ internal static class Emitter
         code.Line("});");
 
         code.Line();
+        code.Line(Plumbing);
         code.Open("private abstract class RequestDispatcher");
         code.Line($"public abstract {Task}<object?> SendObject(CaparMediator mediator, object request, {Token} cancellationToken);");
         code.Close();
 
         code.Line();
+        code.Line(Plumbing);
         code.Open("private abstract class RequestDispatcher<TResponse> : RequestDispatcher");
         code.Line($"public abstract {Task}<TResponse> Send(CaparMediator mediator, global::Capar.IRequest<TResponse> request, {Token} cancellationToken);");
         code.Line();
@@ -800,6 +812,7 @@ internal static class Emitter
         code.Close();
 
         code.Line();
+        code.Line(Plumbing);
         code.Open("private abstract class VoidRequestDispatcher : RequestDispatcher");
         code.Line($"public abstract {Task} Send(CaparMediator mediator, global::Capar.IRequest request, {Token} cancellationToken);");
         code.Line();
@@ -812,11 +825,13 @@ internal static class Emitter
         code.Close();
 
         code.Line();
+        code.Line(Plumbing);
         code.Open("private abstract class StreamDispatcher");
         code.Line($"public abstract {AsyncEnumerable}<object?> CreateObject(CaparMediator mediator, object request, {Token} cancellationToken);");
         code.Close();
 
         code.Line();
+        code.Line(Plumbing);
         code.Open("private abstract class StreamDispatcher<TResponse> : StreamDispatcher");
         code.Line($"public abstract {AsyncEnumerable}<TResponse> Create(CaparMediator mediator, global::Capar.IStreamRequest<TResponse> request, {Token} cancellationToken);");
         code.Line();
@@ -834,6 +849,7 @@ internal static class Emitter
         code.Close();
 
         code.Line();
+        code.Line(Plumbing);
         code.Open("private abstract class NotificationDispatcher");
         code.Line($"public abstract {Task} Publish(CaparMediator mediator, object notification, {Token} cancellationToken);");
         code.Close();
@@ -844,11 +860,13 @@ internal static class Emitter
             code.Line();
             if (request.ResponseSyntax is null)
             {
+                code.Line(Plumbing);
                 code.Open($"private sealed class Request{index} : VoidRequestDispatcher");
                 code.Line($"public override {Task} Send(CaparMediator mediator, global::Capar.IRequest request, {Token} cancellationToken) =>");
             }
             else
             {
+                code.Line(Plumbing);
                 code.Open($"private sealed class Request{index} : RequestDispatcher<{request.ResponseSyntax}>");
                 code.Line($"public override {Task}<{request.ResponseSyntax}> Send(CaparMediator mediator, global::Capar.IRequest<{request.ResponseSyntax}> request, {Token} cancellationToken) =>");
             }
@@ -860,6 +878,7 @@ internal static class Emitter
         foreach ((StreamEntry stream, int index) in streams)
         {
             code.Line();
+            code.Line(Plumbing);
             code.Open($"private sealed class StreamDispatcher{index} : StreamDispatcher<{stream.ResponseSyntax}>");
             code.Line($"public override {AsyncEnumerable}<{stream.ResponseSyntax}> Create(CaparMediator mediator, global::Capar.IStreamRequest<{stream.ResponseSyntax}> request, {Token} cancellationToken) =>");
             code.Line($"    mediator.CreateStream(({stream.Request.Syntax})request, cancellationToken);");
@@ -869,6 +888,7 @@ internal static class Emitter
         for (int index = 0; index < plan.Notifications.Length; index++)
         {
             code.Line();
+            code.Line(Plumbing);
             code.Open($"private sealed class Notification{index} : NotificationDispatcher");
             code.Line($"public override {Task} Publish(CaparMediator mediator, object notification, {Token} cancellationToken) =>");
             code.Line($"    mediator.Publish(({plan.Notifications[index].Notification.Syntax})notification, cancellationToken);");

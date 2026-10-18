@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel;
 
 namespace Capar.Internal;
@@ -11,6 +12,7 @@ namespace Capar.Internal;
 /// every step receives the token the enumeration was started with, as in MediatR.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
+[StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
 public static class StreamPipeline
 {
     /// <summary>Composes the behaviours, outermost first, around the handler's stream.</summary>
@@ -37,6 +39,7 @@ public static class StreamPipeline
         return new Chain<TState, TRequest, TResponse>(state, request, behaviors, handler, cancellationToken).Invoke(0);
     }
 
+    [StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
     private sealed class Chain<TState, TRequest, TResponse>(
         TState state,
         TRequest request,
@@ -52,6 +55,7 @@ public static class StreamPipeline
                 ? handler(state, request, cancellationToken)
                 : behaviors[index].Handle(request, _links[index] ??= new Next(this, index + 1).Invoke, cancellationToken);
 
+        [StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
         private sealed class Next(Chain<TState, TRequest, TResponse> chain, int index)
         {
             public IAsyncEnumerable<TResponse> Invoke() => chain.Invoke(index);
