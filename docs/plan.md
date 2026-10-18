@@ -338,9 +338,9 @@ mechanical change today and gets more expensive after the first release.
 
 In rough order of value to someone migrating:
 
-- ~~**A code fix for the migration.**~~ Done before the first release. No analyzer was needed: after the
-  package swap the compiler already reports every `using MediatR` and `AddMediatR`, so the fix hangs off
-  those errors.
+- ~~**A code fix for the migration.**~~ Done before the first release, as CPR0007 and its fix. Hanging the
+  fix off the compiler's own errors looked enough until a review showed that an IDE's "Fix all" covers one
+  diagnostic id at a time, and the compiler gives MediatR leftovers four; CPR0007 is the one id.
 - ~~**Generic handlers.**~~ Done before the first release ([ADR 0008](adr/0008-generic-handlers.md)). Working on
   it showed MediatR's default registers generic notification handlers, which Çapar had been skipping: a real
   behaviour difference, now matched and covered by differential tests.

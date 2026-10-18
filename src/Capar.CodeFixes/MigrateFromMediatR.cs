@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
@@ -12,18 +13,20 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Capar.CodeFixes;
 
 /// <summary>
-/// Moves code from MediatR to Çapar where the compiler stops on it after the package swap.
+/// Moves code from MediatR to Çapar: the fix for CPR0007.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Once the MediatR package is gone, every <c>using MediatR;</c>, every name qualified with <c>MediatR.</c>
-/// and every <c>AddMediatR</c> call is already a compiler error. Fixing those errors is the whole migration, so
-/// this needs no analyzer of its own: it offers a fix on CS0246, CS0234 and CS1061 where they are about
-/// MediatR, and "Fix all in solution" does the lot in one go.
+/// CPR0007 points at three kinds of leftover, and this rewrites each: a name rooted at <c>MediatR</c> becomes
+/// one rooted at <c>Capar</c>, <c>MediatRServiceConfiguration</c> becomes <c>CaparOptions</c>, and an
+/// <c>AddMediatR</c> call becomes <c>AddCapar</c> without the settings that only drove MediatR's assembly
+/// scan, its licence check or its run-time closing of generic handlers. Because every kind shares the one id,
+/// "Fix all in solution" does the whole migration in one go.
 /// </para>
 /// <para>
-/// Only what has a Çapar counterpart is rewritten. <c>using MediatR.Registration;</c> and the other namespaces
-/// Çapar has no equivalent for are left alone, so the compiler keeps pointing at them.
+/// Where the configuration cannot be carried over without guessing, as when it is built as an object and
+/// passed in, no fix is offered and the compiler error stays. Removing code is done so that comments and
+/// preprocessor directives around it survive.
 /// </para>
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(MigrateFromMediatR))]
@@ -31,9 +34,6 @@ namespace Capar.CodeFixes;
 public sealed class MigrateFromMediatR : CodeFixProvider
 {
     private const string Title = "Move from MediatR to Capar";
-
-    // Namespaces under MediatR whose types Çapar has under the same name below Capar.
-    private static readonly HashSet<string> Mapped = new(System.StringComparer.Ordinal) { "Pipeline", "NotificationPublishers", "Entities" };
 
     // Configuration members that only drive MediatR's assembly scan, its run-time closing of generic handlers or
     // its licence, none of which exists in Çapar.
@@ -54,7 +54,7 @@ public sealed class MigrateFromMediatR : CodeFixProvider
     };
 
     /// <inheritdoc />
-    public override ImmutableArray<string> FixableDiagnosticIds { get; } = ["CS0246", "CS0234", "CS1061"];
+    public override ImmutableArray<string> FixableDiagnosticIds { get; } = ["CPR0007"];
 
     /// <inheritdoc />
     public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
@@ -63,7 +63,8 @@ public sealed class MigrateFromMediatR : CodeFixProvider
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
         SyntaxNode? root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        if (root is null)
+        SemanticModel? model = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (root is null || model is null)
         {
             return;
         }
@@ -71,9 +72,16 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         foreach (Diagnostic diagnostic in context.Diagnostics)
         {
             SyntaxNode node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-            (SyntaxNode Target, SyntaxNode Replacement)? edit = diagnostic.Id == "CS1061"
-                ? AddMediatRCall(node) is { } registration ? (registration, RewriteRegistration(registration)) : null
-                : RenameMediatR(node);
+            diagnostic.Properties.TryGetValue("Kind", out string? kind);
+
+            (SyntaxNode Target, SyntaxNode Replacement)? edit = (kind, node) switch
+            {
+                ("Name", IdentifierNameSyntax name) => (name, Renamed(name, "Capar")),
+                ("Configuration", IdentifierNameSyntax name) => (name, Renamed(name, "CaparOptions")),
+                ("Registration", SimpleNameSyntax method) when Registration(method) is { } call
+                    && Rewrite(call, method, model, context.CancellationToken) is { } rewritten => (call, rewritten),
+                _ => null,
+            };
 
             if (edit is not { } change)
             {
@@ -89,98 +97,163 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         }
     }
 
+    private static IdentifierNameSyntax Renamed(IdentifierNameSyntax name, string to) =>
+        name.WithIdentifier(SyntaxFactory.Identifier(to).WithTriviaFrom(name.Identifier));
+
+    private static InvocationExpressionSyntax? Registration(SimpleNameSyntax method) =>
+        method.Parent switch
+        {
+            MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax call } access when access.Name == method && call.Expression == access => call,
+            InvocationExpressionSyntax call when call.Expression == method => call,
+            _ => null,
+        };
+
     /// <summary>
-    /// The name to replace and its Çapar spelling, or null when the name is not MediatR's or has no Çapar
-    /// counterpart.
+    /// <c>AddMediatR(...)</c> as <c>AddCapar(...)</c>, or null when the configuration cannot be carried over.
     /// </summary>
-    private static (SyntaxNode Target, SyntaxNode Replacement)? RenameMediatR(SyntaxNode node)
+    private static InvocationExpressionSyntax? Rewrite(InvocationExpressionSyntax call, SimpleNameSyntax method, SemanticModel model, CancellationToken cancellationToken)
     {
-        if (node is IdentifierNameSyntax { Identifier.Text: "MediatRServiceConfiguration" } configuration)
+        IdentifierNameSyntax addCapar = SyntaxFactory.IdentifierName("AddCapar").WithTriviaFrom(method);
+        ExpressionSyntax expression = call.Expression switch
         {
-            return (configuration, configuration.WithIdentifier(SyntaxFactory.Identifier("CaparOptions").WithTriviaFrom(configuration.Identifier)));
+            // The static form, MediatRServiceCollectionExtensions.AddMediatR(services, ...), keeps its first
+            // argument and calls the generated class instead.
+            MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "MediatRServiceCollectionExtensions" } owner } access =>
+                access.WithExpression(SyntaxFactory.IdentifierName("CaparServiceCollectionExtensions").WithTriviaFrom(owner)).WithName(addCapar),
+            MemberAccessExpressionSyntax access => access.WithName(addCapar),
+            _ => addCapar,
+        };
+
+        bool staticForm = call.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "MediatRServiceCollectionExtensions" } };
+        List<ArgumentSyntax> kept = [];
+        for (int index = 0; index < call.ArgumentList.Arguments.Count; index++)
+        {
+            ArgumentSyntax argument = call.ArgumentList.Arguments[index];
+            if (staticForm && index == 0)
+            {
+                kept.Add(argument);
+                continue;
+            }
+
+            switch (Classify(argument.Expression, model, cancellationToken))
+            {
+                case Argument.Scan:
+                    break;
+                case Argument.Configuration:
+                    if (Trim((AnonymousFunctionExpressionSyntax)argument.Expression) is { } trimmed)
+                    {
+                        // The generated parameter is called configure, so a named argument would not bind.
+                        kept.Add(argument.WithNameColon(null).WithExpression(trimmed));
+                    }
+
+                    break;
+                case Argument.Delegate:
+                    kept.Add(argument.WithNameColon(null));
+                    break;
+                default:
+                    return null;
+            }
         }
 
-        // The diagnostic lands on the unresolved part: MediatR itself, or the whole qualified name.
-        NameSyntax? name = node as NameSyntax;
-        while (name?.Parent is QualifiedNameSyntax parent && parent.Left == name)
-        {
-            name = parent;
-        }
-
-        if (name is null)
+        if (kept.Count > (staticForm ? 2 : 1))
         {
             return null;
         }
 
-        string[] parts = name.ToString().Split('.');
-        if (parts[0] != "MediatR" || (parts.Length > 1 && !Mapped.Contains(parts[1]) && IsNamespaceUse(name)))
+        return call
+            .WithExpression(expression)
+            .WithArgumentList(call.ArgumentList.WithArguments(SyntaxFactory.SeparatedList(kept)));
+    }
+
+    private enum Argument
+    {
+        Unknown,
+
+        // Assemblies or types to scan, as in AddMediatR(typeof(Startup)) or the 11.x second argument.
+        Scan,
+
+        // A lambda or anonymous method configuring the options, trimmed and kept.
+        Configuration,
+
+        // A method group or delegate, kept as it is.
+        Delegate,
+    }
+
+    private static Argument Classify(ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
+    {
+        if (expression is AnonymousFunctionExpressionSyntax)
+        {
+            return Argument.Configuration;
+        }
+
+        ITypeSymbol? type = model.GetTypeInfo(expression, cancellationToken).Type;
+        if (type is IArrayTypeSymbol array)
+        {
+            type = array.ElementType;
+        }
+
+        if (type?.ToDisplayString() is "System.Type" or "System.Reflection.Assembly")
+        {
+            return Argument.Scan;
+        }
+
+        // A method group has no type of its own; a delegate does. An options object, built and filled in
+        // before the call, cannot be passed to AddCapar, which takes a delegate.
+        return type is null && model.GetSymbolInfo(expression, cancellationToken).CandidateSymbols.Concat([model.GetSymbolInfo(expression, cancellationToken).Symbol]).Any(static symbol => symbol is IMethodSymbol)
+            || type is INamedTypeSymbol { TypeKind: TypeKind.Delegate }
+                ? Argument.Delegate
+                : Argument.Unknown;
+    }
+
+    /// <summary>
+    /// The configuration function without the dropped members, or null when nothing worth keeping is left.
+    /// </summary>
+    private static AnonymousFunctionExpressionSyntax? Trim(AnonymousFunctionExpressionSyntax function)
+    {
+        // A dropped call in a chain hands its receiver on: options.RegisterServicesFromAssembly(a).AddOpenBehavior(b)
+        // becomes options.AddOpenBehavior(b).
+        AnonymousFunctionExpressionSyntax trimmed = function.ReplaceNodes(
+            function.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(static call =>
+                call.Expression is MemberAccessExpressionSyntax member && Dropped.Contains(member.Name.Identifier.ValueText)),
+            static (_, rewritten) => ((MemberAccessExpressionSyntax)rewritten.Expression).Expression.WithTriviaFrom(rewritten));
+
+        if (trimmed.ExpressionBody is { } body && IsLeftover(body))
         {
             return null;
         }
 
-        IdentifierNameSyntax? root = name.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().FirstOrDefault(static identifier => identifier.Identifier.Text == "MediatR");
-        return root is null
-            ? null
-            : (root, root.WithIdentifier(SyntaxFactory.Identifier("Capar").WithTriviaFrom(root.Identifier)));
-    }
-
-    // In a using directive the second part is a namespace, which must be one Çapar has. Elsewhere, as in
-    // MediatR.IRequest<int>, it is a type in MediatR's root namespace, which Çapar has under the same name.
-    private static bool IsNamespaceUse(NameSyntax name) => name.Parent is UsingDirectiveSyntax;
-
-    private static InvocationExpressionSyntax? AddMediatRCall(SyntaxNode node) =>
-        node.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().FirstOrDefault(static invocation =>
-            invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "AddMediatR" });
-
-    /// <summary>
-    /// <c>AddMediatR(...)</c> as <c>AddCapar(...)</c>, keeping every configuration call that still means
-    /// something and removing the ones that only drove the assembly scan.
-    /// </summary>
-    private static InvocationExpressionSyntax RewriteRegistration(InvocationExpressionSyntax invocation)
-    {
-        MemberAccessExpressionSyntax access = (MemberAccessExpressionSyntax)invocation.Expression;
-        MemberAccessExpressionSyntax renamed = access.WithName(SyntaxFactory.IdentifierName("AddCapar").WithTriviaFrom(access.Name));
-
-        ArgumentSyntax? kept = invocation.ArgumentList.Arguments.Count == 1
-            && invocation.ArgumentList.Arguments[0].Expression is LambdaExpressionSyntax lambda
-            && Trim(lambda) is { } trimmed
-                ? invocation.ArgumentList.Arguments[0].WithExpression(trimmed)
-                : null;
-
-        // Assembly or type arguments, as in the old AddMediatR(typeof(Startup)), only told MediatR where to scan.
-        ArgumentListSyntax arguments = kept is null
-            ? SyntaxFactory.ArgumentList().WithTriviaFrom(invocation.ArgumentList)
-            : invocation.ArgumentList.WithArguments(SyntaxFactory.SingletonSeparatedList(kept));
-
-        return invocation.WithExpression(renamed).WithArgumentList(arguments);
-    }
-
-    /// <summary>The configuration lambda without the dropped members, or null when nothing is left in it.</summary>
-    private static LambdaExpressionSyntax? Trim(LambdaExpressionSyntax lambda)
-    {
-        LambdaExpressionSyntax stripped = lambda.ReplaceNodes(
-            lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(static call =>
-                call.Expression is MemberAccessExpressionSyntax member && Dropped.Contains(member.Name.Identifier.Text)),
-            static (original, rewritten) => ((MemberAccessExpressionSyntax)rewritten.Expression).Expression.WithTriviaFrom(rewritten));
-
-        if (stripped.Body is BlockSyntax block)
+        // Statements left as a bare receiver, or assigning a dropped member, are removed one at a time, each in a
+        // way that keeps the code around it compiling and its comments and directives in place.
+        while (trimmed.DescendantNodes().FirstOrDefault(IsLeftoverStatement) is { } leftover)
         {
-            List<StatementSyntax> statements = [.. block.Statements.Where(static statement => !IsLeftover(statement))];
-            return statements.Count == 0 ? null : stripped.WithBody(block.WithStatements(SyntaxFactory.List(statements)));
+            trimmed = leftover switch
+            {
+                StatementSyntax { Parent: BlockSyntax } statement => trimmed.RemoveNode(statement, SyntaxRemoveOptions.KeepLeadingTrivia | SyntaxRemoveOptions.KeepDirectives)!,
+                StatementSyntax statement => trimmed.ReplaceNode(statement, SyntaxFactory.Block().WithTriviaFrom(statement)),
+                ExpressionSyntax { Parent: LambdaExpressionSyntax lambda } => trimmed.ReplaceNode(lambda, lambda.WithExpressionBody(null).WithBlock(SyntaxFactory.Block())),
+                _ => trimmed,
+            };
         }
 
-        // An expression body that was only a dropped call is now just the parameter, which is not a statement.
-        return stripped.Body is ExpressionSyntax body && IsLeftover(body) ? null : stripped;
+        return trimmed.Block is { Statements.Count: 0 } block && !HasCommentOrDirective(block) ? null : trimmed;
     }
 
-    private static bool IsLeftover(StatementSyntax statement) =>
-        statement is ExpressionStatementSyntax { Expression: var expression } && IsLeftover(expression);
+    // A statement or a nested lambda's expression body that a dropped member left with nothing to do.
+    private static bool IsLeftoverStatement(SyntaxNode node) => node switch
+    {
+        ExpressionStatementSyntax { Expression: var expression } => IsLeftover(expression),
+        ExpressionSyntax { Parent: LambdaExpressionSyntax lambda } body => lambda.ExpressionBody == body && IsLeftover(body),
+        _ => false,
+    };
 
     private static bool IsLeftover(ExpressionSyntax expression) => expression switch
     {
-        // What a dropped call in a chain leaves behind: the receiver on its own, as in `options;`.
-        IdentifierNameSyntax => true,
-        AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax member } => Dropped.Contains(member.Name.Identifier.Text),
+        // What a dropped call leaves behind: the receiver on its own, as in `options;`.
+        IdentifierNameSyntax or ThisExpressionSyntax => true,
+        AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax member } => Dropped.Contains(member.Name.Identifier.ValueText),
         _ => false,
     };
+
+    private static bool HasCommentOrDirective(BlockSyntax block) =>
+        block.DescendantTrivia().Any(static trivia => !trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia));
 }

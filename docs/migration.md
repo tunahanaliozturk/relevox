@@ -46,13 +46,14 @@ bind to the library's method, and the build warns with [CPR0006](diagnostics.md#
 
 ### In Visual Studio, Rider or VS Code
 
-Steps 2 and 3 are a code fix. Once the packages are swapped, every `using MediatR;` and every `AddMediatR`
-call is a compiler error, and each one offers **Move from MediatR to Capar**. Choose *Fix all occurrences in:
-Solution* on any of them and the IDE rewrites the `using` directives, names qualified with `MediatR.`,
-`MediatRServiceConfiguration` and the registration calls in one go, dropping the scanning, licence and
-generic-closing settings that steps 2 and 3 describe. Anything it leaves, such as `using MediatR.Registration;`,
-has no Çapar counterpart and stays an error for you to remove. The rest of this guide is what the fix does,
-for builds without an IDE and for reviewing its result.
+Steps 2 and 3 are a code fix. Once the packages are swapped, every piece of MediatR code is marked with
+[CPR0007](diagnostics.md#cpr0007), a suggestion that offers **Move from MediatR to Capar**. Choose *Fix all
+occurrences in: Solution* on any of them and the IDE rewrites the `using` directives, names rooted at
+`MediatR`, `MediatRServiceConfiguration` and the registration calls in one go, dropping the scanning, licence
+and generic-closing settings that steps 2 and 3 describe. What it leaves, such as `using
+MediatR.Registration;` or an options object passed to `AddMediatR`, stays a compiler error for you to decide
+about; the CPR0007 page lists those cases. The rest of this guide is what the fix does, for builds without an
+IDE and for reviewing its result.
 
 ## 2. `using` directives
 
