@@ -19,9 +19,11 @@ with it. That is what lets a library use Çapar privately. If such a project has
 build warns with `CPR0005`, because that is usually a project that meant to reference the contracts.
 
 Analyzers flow through project references, so projects below the one that calls `AddCapar`, such as an API or a
-test project referencing the application layer, run the generator too. A project that has no handlers of its
-own, does not call `AddCapar`, and references a project with a mediator generates nothing and reports nothing:
-it uses that project's mediator.
+test project referencing the application layer, run the generator too. A project that has no handlers or
+processors of its own, does not call `AddCapar`, and references a project with a mediator generates nothing and
+reports nothing about its references: it uses that project's mediator. The exception is a handler in a
+contracts-only reference that no referenced mediator can reach, because the mediator's project does not
+reference it. Then the project generates as before, and reports CPR0005, rather than drop that handler.
 
 `AddCapar` called a second time from the same project does nothing. Called after another project's
 `AddCapar`, it throws, because only one mediator can be `IMediator` and keeping the first silently would

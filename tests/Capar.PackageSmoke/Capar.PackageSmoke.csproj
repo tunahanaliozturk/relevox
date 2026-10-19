@@ -19,6 +19,11 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
 
+  <!-- Its own projects, built separately by the script. -->
+  <ItemGroup>
+    <Compile Remove="Layered/**" />
+  </ItemGroup>
+
   <!-- Built only by the second step of the script, which expects the packaged analyzer to report CPR0001. -->
   <ItemGroup Condition="'$(SmokeUnhandled)' != 'true'">
     <Compile Remove="Unhandled.cs" />

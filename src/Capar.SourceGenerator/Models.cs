@@ -170,8 +170,8 @@ internal sealed record DiscoveryModel(
 /// <param name="AssemblyName">Names the generated namespace.</param>
 /// <param name="Discovery">Handlers and messages found in references.</param>
 /// <param name="SeesAnotherRegistration">Whether a reference's generated <c>AddCapar</c> is visible here.</param>
-/// <param name="ReferencesAMediator">Whether a reference has a generated mediator of its own.</param>
-internal sealed record ReferenceModel(string AssemblyName, DiscoveryModel Discovery, bool SeesAnotherRegistration, bool ReferencesAMediator);
+/// <param name="MediatorCoversReferences">Whether a referenced mediator owns everything the references contribute.</param>
+internal sealed record ReferenceModel(string AssemblyName, DiscoveryModel Discovery, bool SeesAnotherRegistration, bool MediatorCoversReferences);
 
 /// <summary>A source location reduced to values, because <c>Location</c> holds the syntax tree.</summary>
 internal sealed record LocationModel(

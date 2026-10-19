@@ -427,4 +427,94 @@ public sealed class EdgeCaseTests
         api.Diagnostics.ShouldBeEmpty();
         api.CompilationErrors.ShouldBeEmpty();
     }
+
+    [Fact]
+    public void A_downstream_project_stays_quiet_about_what_the_mediator_already_reported()
+    {
+        // A contracts-only library with an open processor and an internal handler, under an application that
+        // calls AddCapar. The application owns both and reports the internal handler; the API below it says
+        // nothing, rather than complaining of a second mediator or repeating CPR0003.
+        MetadataReference contracts = ContractsOnly();
+        MetadataReference application = Application([contracts]);
+
+        GeneratorRun api = GeneratorHarness.Run("Shop.Api", [contracts, application], Program);
+
+        api.Sources.ShouldBeEmpty();
+        api.Diagnostics.ShouldBeEmpty();
+        api.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_handler_no_mediator_can_see_makes_the_downstream_project_generate_after_all()
+    {
+        // The application does not reference the contracts-only library, so its mediator cannot dispatch to the
+        // handler in it. Generating nothing in the API would drop that handler without a word.
+        MetadataReference contracts = ContractsOnly(handlerOnly: true);
+        MetadataReference application = Application([]);
+
+        GeneratorRun api = GeneratorHarness.Run("Shop.Api", [contracts, application], Program);
+
+        api.Sources.ShouldNotBeEmpty();
+        api.Ids.ShouldContain("CPR0005");
+    }
+
+    [Fact]
+    public void A_conditional_AddCapar_call_counts_as_a_call()
+    {
+        MetadataReference application = Application([]);
+
+        GeneratorRun api = GeneratorHarness.Run("Shop.Api", [application], """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Shop.Api;
+            public static class Program
+            {
+                public static IServiceCollection? Configure(IServiceCollection? services) => services?.AddCapar();
+            }
+            """);
+
+        api.Sources.ShouldNotBeEmpty();
+        api.CompilationErrors.ShouldBeEmpty();
+    }
+
+    private const string Program = """
+        public static class Program
+        {
+            public static void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services) => Shop.Application.Setup.AddApplication(services);
+        }
+        """;
+
+    private static MetadataReference ContractsOnly(bool handlerOnly = false) => GeneratorHarness.Library("Shop.Contracts", Usings + """
+        namespace Shop.Contracts;
+        public sealed record Audited : IRequest<int>;
+        public sealed class AuditedHandler : IRequestHandler<Audited, int>
+        {
+            public Task<int> Handle(Audited request, CancellationToken cancellationToken) => Task.FromResult(2);
+        }
+        """ + (handlerOnly ? "" : """
+        public sealed record Hidden : IRequest<int>;
+        internal sealed class HiddenHandler : IRequestHandler<Hidden, int>
+        {
+            public Task<int> Handle(Hidden request, CancellationToken cancellationToken) => Task.FromResult(3);
+        }
+        public sealed class Stamp<TRequest> : Capar.Pipeline.IRequestPreProcessor<TRequest>
+            where TRequest : notnull
+        {
+            public Task Process(TRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+        """));
+
+    private static MetadataReference Application(IEnumerable<MetadataReference> extra) =>
+        GeneratorHarness.Library("Shop.Application", extra, withGenerator: true, Usings + """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Shop.Application;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public static class Setup
+            {
+                public static IServiceCollection AddApplication(IServiceCollection services) => services.AddCapar();
+            }
+            """);
 }

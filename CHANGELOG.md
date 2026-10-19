@@ -50,17 +50,22 @@ All notable changes to this project are written down here. The format follows
   and check that the packaged analyzer reports CPR0001.
 - Package icon and a package README.
 - A help page per diagnostic, linked from each rule.
-- Stack traces show handlers and behaviours without Çapar's dispatch code in between, and the debugger steps
-  through it into the handler.
-- The generator's cost per edit in a large project: 2,500 handlers went from about 300 ms to 114 ms, by not
-  walking every type's interfaces when there is no generic handler and not building every member to find
-  nested types ([measured](docs/benchmark-results/2026-10-18-ide.md)).
+- The generated mediator and `Capar.Internal` are hidden from stack traces, and the debugger steps through them
+  into the handler. Where the dispatch code is an async method, `Send(object)`, the default publisher and a
+  request with no response that has behaviours, one frame of it is left: .NET does not hide an async state machine. An argument error
+  from `Send(object)` now shows the caller as the top frame.
+- The generator's cost per edit in a large project with no generic handler: 2,500 handlers went from about
+  300 ms to about 100 ms, by not walking every type's interfaces when there is no generic handler and not
+  building every member to find nested types ([measured](docs/benchmark-results/2026-10-18-ide.md)). A project
+  with a generic handler still walks the interfaces.
 - A web sample: an ASP.NET Core minimal API with scoped services in handlers, a validation behaviour, a
   pre-processor, problem details, a notification with two listeners and a streamed list, tested over HTTP in CI.
 - A migration of Jason Taylor's Clean Architecture template from MediatR 14.2.0, with its tests passing before
   and after: [docs/migration-trial.md](docs/migration-trial.md).
-- A project that has no handlers of its own, does not call `AddCapar`, and references a project with a mediator
-  generates nothing, so the projects below an application layer no longer warn with CPR0005.
+- A project that has no handlers or processors of its own, does not call `AddCapar`, and references a project
+  with a mediator generates nothing and reports nothing about its references, so the projects below an
+  application layer no longer warn with CPR0005. It still generates when a handler in its references sits where
+  no referenced mediator can reach it, so that handler is not dropped without a word.
 - The migration analyzer and code fix ship in `Capar.Contracts`, so library projects get them too, and run from
   the command line with `dotnet format analyzers --diagnostics CPR0007 --severity info`.
 - CPR0007 and its code fix, **Move from MediatR to Capar**: every piece of MediatR code left after the package

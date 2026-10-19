@@ -43,7 +43,9 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
     {
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        // Analyzed but not reported on: the generator reads files marked as generated too, such as a *.g.cs on
+        // disk, and the two have to agree on what is a handler and whether AddCapar is called.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(static start =>
         {
@@ -107,7 +109,8 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
                 EmitPlan plan = Planner.Build(
                     end.Compilation.AssemblyName ?? "Capar.Generated",
                     Discovery.Merge([.. parts, references, closings]),
-                    referencesAMediator: Discovery.ReferencesAMediator(end.Compilation, end.CancellationToken),
+                    mediatorCoversReferences: Discovery.MediatorCoversReferences(end.Compilation, end.CancellationToken),
+                    ownOpenProcessors: parts.Any(static part => part.Open.Length > 0),
                     callsAddCapar: Volatile.Read(ref callsAddCapar) == 1);
 
                 foreach (DiagnosticEntry entry in plan.Diagnostics)

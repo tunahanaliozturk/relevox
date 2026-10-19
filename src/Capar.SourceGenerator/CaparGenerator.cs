@@ -48,7 +48,7 @@ public sealed class CaparGenerator : IIncrementalGenerator
                 compilation.AssemblyName ?? "Capar.Generated",
                 Discovery.ScanReferences(compilation, cancellationToken),
                 Discovery.SeesAnotherRegistration(compilation),
-                Discovery.ReferencesAMediator(compilation, cancellationToken)))
+                Discovery.MediatorCoversReferences(compilation, cancellationToken)))
             .WithTrackingName(TrackingNames.References);
 
         // Generic handlers are closed over types found anywhere in the compilation, so this step looks at the
@@ -74,8 +74,9 @@ public sealed class CaparGenerator : IIncrementalGenerator
                 pair.Left.Left.Right.AssemblyName,
                 Discovery.Merge([pair.Left.Left.Left, pair.Left.Left.Right.Discovery, pair.Left.Right]),
                 pair.Left.Left.Right.SeesAnotherRegistration,
-                pair.Left.Left.Right.ReferencesAMediator,
-                pair.Right))
+                pair.Left.Left.Right.MediatorCoversReferences,
+                pair.Right,
+                ownOpenProcessors: pair.Left.Left.Left.Open.Length > 0))
             .WithTrackingName(TrackingNames.Plan);
 
         // Diagnostics are reported by CaparAnalyzer, which has the syntax trees to put them in source.
@@ -91,11 +92,16 @@ public sealed class CaparGenerator : IIncrementalGenerator
         });
     }
 
-    /// <summary>A call to a method named <c>AddCapar</c>, as <c>services.AddCapar()</c> or <c>AddCapar(services)</c>.</summary>
+    /// <summary>
+    /// A call to a method named <c>AddCapar</c>: <c>services.AddCapar()</c>, <c>services?.AddCapar()</c> or
+    /// <c>AddCapar(services)</c>.
+    /// </summary>
     internal static bool IsAddCaparCall(SyntaxNode node) =>
         node is InvocationExpressionSyntax
         {
-            Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AddCapar" } or IdentifierNameSyntax { Identifier.ValueText: "AddCapar" },
+            Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AddCapar" }
+                or MemberBindingExpressionSyntax { Name.Identifier.ValueText: "AddCapar" }
+                or IdentifierNameSyntax { Identifier.ValueText: "AddCapar" },
         };
 }
 

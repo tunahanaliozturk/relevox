@@ -157,19 +157,21 @@ public sealed class CaparOnlyTests
                     _ = item;
                 }
             }),
+            await StackOf(() => sender.Send(new S.Fizzle())),
         ];
 
         traces[0].ShouldContain("ExplodeHandler.Handle");
         traces[3].ShouldContain("BoomHandler.Handle");
         traces[4].ShouldContain("SputterHandler.Handle");
+        traces[5].ShouldContain("FizzleHandler.Handle");
         foreach (string trace in traces)
         {
             trace.ShouldNotContain("Capar.Internal");
         }
 
-        // The typed, interface and stream paths show nothing of the mediator. Send(object) and the default
-        // publisher keep one frame each: they are async methods, and .NET checks StackTraceHidden on the state
-        // machine the compiler generates, which no attribute can reach.
+        // The typed, interface and stream paths show nothing of the mediator. Send(object), the default publisher
+        // and a request with no response through behaviours keep one frame each: they are async methods, and .NET
+        // checks StackTraceHidden on the state machine the compiler generates, which no attribute can reach.
         foreach (int path in new[] { 0, 1, 4 })
         {
             traces[path].ShouldNotContain("CaparMediator");
@@ -177,14 +179,19 @@ public sealed class CaparOnlyTests
 
         foreach (int path in new[] { 2, 3 })
         {
-            traces[path].Split(Environment.NewLine).Count(line => line.Contains("CaparMediator", StringComparison.Ordinal)).ShouldBe(1);
+            MediatorFrames(traces[path]).ShouldBe(1, traces[path]);
         }
+
+        MediatorFrames(traces[5]).ShouldBe(profile == S.Profile.Pipeline ? 1 : 0, traces[5]);
 
         if (profile == S.Profile.Pipeline)
         {
             traces[0].ShouldContain("OuterBehavior");
         }
     }
+
+    private static int MediatorFrames(string trace) =>
+        trace.Split(Environment.NewLine).Count(line => line.Contains("CaparMediator", StringComparison.Ordinal));
 
     private static async Task<string> StackOf(Func<Task> call)
     {

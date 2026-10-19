@@ -27,7 +27,7 @@ in the template's own dependencies that have nothing to do with the mediator.
    dotnet format analyzers CleanArchitecture.slnx --diagnostics CPR0007 --severity info
    ```
 
-   It changed eight files across all six projects: seven `using` directives and the registration, which lost
+   It changed seven source files: six `using` directives and the registration, which lost
    its `RegisterServicesFromAssembly` line and kept the pre-processor and the four behaviours.
 3. Nothing else. The solution built with warnings as errors and no warnings.
 
@@ -49,8 +49,9 @@ The first attempt did not go that smoothly, and each problem was Çapar's, fixed
 - **Every project below the application layer failed to build.** NuGet analyzers flow through project
   references, so Infrastructure, Web and the test projects ran the generator too, each produced an empty
   mediator of its own, and each reported Application's handlers as CPR0005, an error with warnings as errors.
-  A project that has no handlers of its own, does not call `AddCapar`, and references a project with a
-  mediator now generates nothing and reports nothing: it uses that project's mediator.
+  A project that has no handlers or processors of its own, does not call `AddCapar`, and references a project
+  with a mediator now generates nothing and reports nothing about its references: it uses that project's
+  mediator.
 - **Removed lines left the next one indented twice.** The code fix carried a removed statement's indentation
   onto the next line. It now keeps only comments and directives.
 - **`dotnet format` runs the fix.** Not a problem, a discovery: the command above migrates a solution without

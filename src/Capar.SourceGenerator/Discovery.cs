@@ -415,20 +415,43 @@ internal static partial class Discovery
     }
 
     /// <summary>Whether a referenced assembly that can hold handlers has a generated mediator of its own.</summary>
-    public static bool ReferencesAMediator(Compilation compilation, CancellationToken cancellationToken)
+    /// <summary>
+    /// Whether a referenced project has a mediator, and every handler this project can see in its other
+    /// references belongs to one: that is, sits in an assembly a mediator-owning reference also references.
+    /// </summary>
+    /// <remarks>
+    /// A handler in a contracts-only library that no mediator can see would otherwise vanish without a word when
+    /// this project generates nothing, so its presence makes this project generate, and report, as before.
+    /// </remarks>
+    public static bool MediatorCoversReferences(Compilation compilation, CancellationToken cancellationToken)
     {
         Dictionary<IAssemblySymbol, bool> reachesContracts = new(SymbolEqualityComparer.Default);
+        List<IAssemblySymbol> owners = [];
+        List<IAssemblySymbol> contributors = [];
         foreach (IAssemblySymbol assembly in compilation.SourceModule.ReferencedAssemblySymbols)
         {
-            if (assembly.Name is not (ContractsAssembly or "Capar")
-                && ReachesContracts(assembly, reachesContracts)
-                && ScanAssembly(assembly, compilation, cancellationToken).OwnsMediator)
+            if (assembly.Name is ContractsAssembly or "Capar" || !ReachesContracts(assembly, reachesContracts))
             {
-                return true;
+                continue;
+            }
+
+            (DiscoveryModel[] parts, bool ownsMediator) = ScanAssembly(assembly, compilation, cancellationToken);
+            if (ownsMediator)
+            {
+                owners.Add(assembly);
+            }
+            else if (parts.Any(static part => part.Handlers.Length > 0 || part.Open.Length > 0 || part.Skipped.Length > 0))
+            {
+                contributors.Add(assembly);
             }
         }
 
-        return false;
+        return owners.Count > 0
+            && contributors.All(contributor =>
+            {
+                Dictionary<IAssemblySymbol, bool> memo = new(SymbolEqualityComparer.Default);
+                return owners.Any(owner => Reaches(owner, contributor, memo));
+            });
     }
 
     /// <summary>
