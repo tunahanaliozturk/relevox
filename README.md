@@ -55,8 +55,13 @@ that is the trade [ADR 0002](docs/adr/0002-task-not-valuetask.md) explains.
 
 ## Quick start
 
-The application references `Capar`. Projects that only declare requests and handlers reference
-`Capar.Contracts`, which has no dependencies.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/project-layout-dark.png">
+  <img src="docs/images/project-layout-light.png" alt="The API and test projects reference the application, which references Capar and calls AddCapar; libraries below it reference only Capar.Contracts" width="800">
+</picture>
+
+The project that calls `AddCapar` references `Capar` and gets the one mediator. Libraries reference only
+`Capar.Contracts`, which has no dependencies. Projects above the application use its mediator.
 
 ```csharp
 using Capar;
@@ -88,16 +93,14 @@ builder.Services.AddCapar(options =>
 
 ## Moving from MediatR
 
-1. Replace the `MediatR` package with `Capar` in the application and `Capar.Contracts` everywhere else.
-2. Replace `using MediatR` with `using Capar`, including `.Pipeline` and the other sub-namespaces.
-3. Replace `AddMediatR` with `AddCapar` and delete the `RegisterServicesFrom...` calls.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/migration-dark.png">
+  <img src="docs/images/migration-light.png" alt="Swap the packages, run dotnet format analyzers with CPR0007, build. Tried on Clean Architecture and eShop with every test passing" width="880">
+</picture>
 
-In Visual Studio, Rider or VS Code, steps 2 and 3 are one code fix: after the package swap, apply **Move from
-MediatR to Capar** to the whole solution. From the command line it is
-`dotnet format analyzers --diagnostics CPR0007 --severity info`. A real Clean Architecture solution on MediatR 14
-moved over that way: ten files, eleven lines added and twelve removed, 33 tests passing before and after. So did
-Microsoft's eShop on MediatR 13: eight files, 54 tests passing before and after
-([migration-trial.md](docs/migration-trial.md)).
+The command rewrites `using MediatR`, `AddMediatR` and the scanning settings. In an IDE the same fix is
+**Move from MediatR to Capar**, applied to the whole solution. Both trials are written up in
+[migration-trial.md](docs/migration-trial.md).
 
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.
 [samples/Migration](samples/Migration) holds the same order service on both libraries; CI runs the two and
@@ -107,13 +110,13 @@ drive it over HTTP.
 
 ## How it works
 
-The generator reads every handler in the application and the projects it references and writes one mediator
-class into the application, as plain C#. Each request gets a typed `Send` overload that resolves its handler
-from the container and calls it directly, with no type lookup, delegate or `await` in between. `ISender.Send` looks the
-request's runtime type up once in a frozen dictionary and calls a small dispatcher for that type, so its cost
-does not grow with the number of requests. `AddCapar` registers every handler by its concrete type, with no
-scanning. Behaviours are still resolved from the container on each send, as in MediatR, and a request that has
-none skips the pipeline entirely.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/how-it-works-dark.png">
+  <img src="docs/images/how-it-works-light.png" alt="At build time the generator reads the handlers and writes CaparMediator, AddCapar and diagnostics. At send time a typed overload or ISender goes to the handler, through behaviours when there are any" width="760">
+</picture>
+
+Nothing is scanned at run time. `ISender.Send` costs one frozen-dictionary lookup, however many requests there
+are, and a request with no behaviours skips the pipeline entirely.
 
 ## Decisions
 
@@ -137,6 +140,9 @@ dotnet run --project tests/Capar.DifferentialTests       # every scenario on Med
 bash eng/package-smoke.sh                                # pack, install into a new app, run it
 dotnet run --project tools/Capar.LicenseAudit -- .       # every dependency permissively licensed
 ```
+
+The diagrams in this file are drawn by `tools/diagrams.py`; `CHROME=<path to Chrome or Edge> python tools/diagrams.py`
+renders them again after a change.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the ground rules, including the clean-room rule: no code from
 MediatR 13 or later.
