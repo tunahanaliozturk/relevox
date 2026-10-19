@@ -138,7 +138,13 @@ internal static class Emitter
         code.Line("    return services;");
         code.Line("}");
         code.Line();
-        code.Line("if (existing.ServiceType == typeof(global::Relevox.IMediator))");
+        // Every generated AddRelevox registers a PipelineState for its mediator, so one for another mediator means a
+        // second project's AddRelevox already ran: only one mediator can be IMediator, and keeping the first
+        // silently would leave this project's handlers out. An IMediator registered any other way, such as a test
+        // double, is the application's own and is kept, as MediatR keeps it.
+        code.Line("if (existing.ServiceType.IsGenericType");
+        code.Line("    && existing.ServiceType.GetGenericTypeDefinition() == typeof(global::Relevox.Internal.PipelineState<>)");
+        code.Line($"    && existing.ServiceType != typeof(global::Relevox.Internal.PipelineState<{mediator}>))");
         code.Line("{");
         code.Line("    throw new global::System.InvalidOperationException(");
         code.Line($"        \"IMediator is already registered, probably by AddRelevox from another project. Call AddRelevox once, from the project whose handlers it should reach (usually the host), and have the other projects reference Relevox.Contracts rather than Relevox. This call came from '{plan.Namespace}'.\");");
@@ -301,7 +307,10 @@ internal static class Emitter
         code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Relevox.IMediator", "global::Relevox.ISender", "global::Relevox.IPublisher" })
         {
-            code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<{mediator}>(provider), lifetime));");
+            code.Line($"if (registered.Add(typeof({contract})))");
+            code.Line("{");
+            code.Line($"    services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({contract}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<{mediator}>(provider), lifetime));");
+            code.Line("}");
         }
 
         code.Line("return services;");

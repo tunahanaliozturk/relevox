@@ -61,13 +61,44 @@ public sealed class RelevoxOnlyTests
     }
 
     [Fact]
-    public void AddRelevox_refuses_to_run_after_another_mediator_was_registered()
+    public void AddRelevox_refuses_to_run_after_another_generated_mediator_was_registered()
     {
+        // What a second project's AddRelevox leaves behind: its mediator's pipeline state.
         ServiceCollection services = new();
-        services.AddSingleton<global::Relevox.IMediator>(_ => throw new NotSupportedException());
+        services.AddSingleton(_ => new global::Relevox.Internal.PipelineState<RelevoxOnlyTests>(1, 0, builtInsForEveryRequest: false));
 
         InvalidOperationException refused = Should.Throw<InvalidOperationException>(() => Registration.AddRelevox(services));
         refused.Message.ShouldContain("Relevox.Contracts");
+    }
+
+    [Fact]
+    public async Task An_IMediator_the_application_registered_first_is_kept()
+    {
+        // A test double for IMediator, registered before AddRelevox, as MediatR keeps it. ISender, which the
+        // application did not register, still comes from the generated mediator.
+        await using ServiceProvider provider = Build(before: services => services.AddSingleton<global::Relevox.IMediator, Stand>());
+
+        provider.GetRequiredService<global::Relevox.IMediator>().ShouldBeOfType<Stand>();
+        (await provider.GetRequiredService<ISender>().Send(new S.Ping("real"))).ShouldBe("real pong");
+    }
+
+    private sealed class Stand : global::Relevox.IMediator
+    {
+        public Task<TResponse> Send<TResponse>(global::Relevox.IRequest<TResponse> request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default)
+            where TRequest : global::Relevox.IRequest => throw new NotSupportedException();
+
+        public Task<object?> Send(object request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(global::Relevox.IStreamRequest<TResponse> request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task Publish(object notification, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
+            where TNotification : global::Relevox.INotification => throw new NotSupportedException();
     }
 
     [Fact]
