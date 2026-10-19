@@ -34,9 +34,14 @@ anything:
 
 ## How fast
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/benchmarks-dark.png">
+  <img src="docs/images/benchmarks-light.png" alt="Relevox's time as a share of MediatR 12.5's, from 0.03 for registering and sending once to 0.57 for a stream of 100 items" width="760">
+</picture>
+
 Measured with BenchmarkDotNet 0.15.8 on an Intel Core Ultra 7 255H, .NET 10.0.13, Windows 11. Full tables,
 and what each number does and does not show, are in
-[docs/benchmark-results/2026-10-17-m4.md](docs/benchmark-results/2026-10-17-m4.md).
+[docs/benchmark-results/2026-10-17-m4.md](docs/benchmark-results/2026-10-17-m4.md). With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
 |---|---:|---:|---:|
