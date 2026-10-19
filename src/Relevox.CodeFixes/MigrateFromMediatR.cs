@@ -138,32 +138,58 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         ];
 
         // A file that already had `using Relevox;` next to `using MediatR;` would end up with it twice, which is a
-        // compiler warning, and an error under warnings as errors. The renamed copy goes, unless it carries a
-        // comment or directive that would go with it.
-        HashSet<string> seen = new(
-            renamed.Where((directive, index) => directive.IsEquivalentTo(usings[index])).Select(Identity),
-            System.StringComparer.Ordinal);
-        List<UsingDirectiveSyntax> unique = [];
-        List<UsingDirectiveSyntax> originals = [];
+        // compiler warning, and an error under warnings as errors. The renamed copy goes. A comment at the end of
+        // its line moves to the copy that stays; a copy with a comment or directive above it, or one whose comment
+        // has nowhere to go, stays rather than lose it.
+        Dictionary<string, int> kept = new(System.StringComparer.Ordinal);
         for (int index = 0; index < renamed.Length; index++)
         {
-            bool wasRenamed = !renamed[index].IsEquivalentTo(usings[index]);
-            bool plain = renamed[index].GetLeadingTrivia().All(static trivia => trivia.IsKind(SyntaxKind.WhitespaceTrivia) || trivia.IsKind(SyntaxKind.EndOfLineTrivia));
-            if (wasRenamed && plain && !seen.Add(Identity(renamed[index])))
+            if (renamed[index].IsEquivalentTo(usings[index]) && !kept.ContainsKey(Identity(renamed[index])))
+            {
+                kept[Identity(renamed[index])] = index;
+            }
+        }
+
+        bool[] dropped = new bool[renamed.Length];
+        for (int index = 0; index < renamed.Length; index++)
+        {
+            if (renamed[index].IsEquivalentTo(usings[index]))
             {
                 continue;
             }
 
-            unique.Add(renamed[index]);
-            originals.Add(usings[index]);
+            string identity = Identity(renamed[index]);
+            if (!kept.TryGetValue(identity, out int keeper))
+            {
+                kept[identity] = index;
+                continue;
+            }
+
+            if (!IsPlain(renamed[index].GetLeadingTrivia()))
+            {
+                continue;
+            }
+
+            if (!IsPlain(renamed[index].GetTrailingTrivia()))
+            {
+                if (!IsPlain(renamed[keeper].GetTrailingTrivia()))
+                {
+                    continue;
+                }
+
+                renamed[keeper] = renamed[keeper].WithTrailingTrivia(renamed[index].GetTrailingTrivia());
+            }
+
+            dropped[index] = true;
         }
 
-        renamed = [.. unique];
-        usings = SyntaxFactory.List(originals);
+        usings = SyntaxFactory.List(usings.Where((_, index) => !dropped[index]));
+        renamed = [.. renamed.Where((_, index) => !dropped[index])];
 
         // Each position keeps its own trivia, so a file header, a blank line or a missing final newline stays where
         // it was.
-        UsingDirectiveSyntax[] moved = IsInOrder(usings)
+        // A comment at the end of a using's line is about that using, and would stay at its position if it moved.
+        UsingDirectiveSyntax[] moved = IsInOrder(usings) && renamed.All(static directive => IsPlain(directive.GetTrailingTrivia()))
             ? [
                 .. renamed.OrderBy(static directive => directive, UsingOrder.Instance).Select((directive, index) => directive
                     .WithLeadingTrivia(renamed[index].GetLeadingTrivia())
@@ -178,6 +204,9 @@ public sealed class MigrateFromMediatR : CodeFixProvider
             _ => block,
         };
     }
+
+    private static bool IsPlain(SyntaxTriviaList trivia) =>
+        trivia.All(static item => item.IsKind(SyntaxKind.WhitespaceTrivia) || item.IsKind(SyntaxKind.EndOfLineTrivia));
 
     // What makes two using directives the same one: kind, alias and the name, ignoring trivia.
     private static string Identity(UsingDirectiveSyntax directive) =>

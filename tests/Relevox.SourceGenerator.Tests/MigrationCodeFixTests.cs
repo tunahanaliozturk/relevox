@@ -181,6 +181,36 @@ public sealed class MigrationCodeFixTests
     }
 
     [Fact]
+    public async Task A_comment_on_a_using_stays_with_it()
+    {
+        // The comment on the MediatR using moves to the Relevox one it duplicates, rather than going with the
+        // copy that is dropped. In the second file a comment at the end of a line keeps the block from being
+        // sorted, which would leave the comment on whichever using took that position.
+        string[] fixedSources = await Migrate(
+            Handlers,
+            """
+            using MediatR; // the mediator
+            using Relevox;
+
+            namespace Shop;
+
+            public sealed record Pong : IRequest<int>;
+            """,
+            """
+            using MediatR; // the mediator
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop.Other;
+
+            public sealed record Ping2 : IRequest<int>;
+            """);
+
+        fixedSources[1].ReplaceLineEndings("\n").ShouldStartWith("using Relevox; // the mediator\n\n");
+        fixedSources[2].ReplaceLineEndings("\n").ShouldStartWith("using Relevox; // the mediator\nusing Microsoft.Extensions.DependencyInjection;\n");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
     public async Task Sorted_usings_stay_sorted_and_unsorted_ones_stay_put()
     {
         // MediatR sorts before Microsoft and Relevox after it, so a rename in place would leave a file that fails
