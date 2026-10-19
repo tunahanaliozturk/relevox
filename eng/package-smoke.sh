@@ -67,14 +67,16 @@ echo "A host below the application layer built clean and dispatched through the 
 leftover="$(mktemp -d)"
 trap 'rm -rf "$leftover"' EXIT
 feed_path="$(cygpath -m "$feed" 2>/dev/null || echo "$feed")"
-cp "$layered/Directory.Build.props" "$layered/Leftover/Leftover.cs" "$leftover/"
+cp "$root/global.json" "$layered/Directory.Build.props" "$layered/Leftover/Leftover.cs" "$leftover/"
 sed "s/\$(CaparVersion)/$version/" "$layered/Leftover/Leftover.csproj" >"$leftover/Leftover.csproj"
 sed "s#../../artifacts/smoke-feed#$feed_path#" "$app/nuget.config" >"$leftover/nuget.config"
 
-if dotnet build "$leftover" --configuration Release >/dev/null 2>&1; then
+if output="$(dotnet build "$leftover" --configuration Release 2>&1)"; then
   echo "A library with using MediatR built before the fix." >&2
   exit 1
 fi
+
+grep -q "CS0246" <<<"$output" || { echo "$output" >&2; echo "The library failed to build, but not for want of MediatR." >&2; exit 1; }
 
 # From inside the copy: dotnet format only touches files below the directory it runs in.
 (cd "$leftover" && dotnet format analyzers Leftover.csproj --diagnostics CPR0007 --severity info)

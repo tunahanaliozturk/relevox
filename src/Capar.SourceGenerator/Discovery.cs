@@ -414,20 +414,24 @@ internal static partial class Discovery
         return reaches;
     }
 
-    /// <summary>Whether a referenced assembly that can hold handlers has a generated mediator of its own.</summary>
     /// <summary>
     /// Whether a referenced project has a mediator, and every handler this project can see in its other
-    /// references belongs to one: that is, sits in an assembly a mediator-owning reference also references.
+    /// references belongs to one.
     /// </summary>
     /// <remarks>
-    /// A handler in a contracts-only library that no mediator can see would otherwise vanish without a word when
-    /// this project generates nothing, so its presence makes this project generate, and report, as before.
+    /// A handler in a contracts-only library that no mediator dispatches to would otherwise vanish without a word
+    /// when this project generates nothing, so its presence makes this project generate, and report, as before.
+    /// A mediator that dispatches to a handler, processor or generic handler names its type, so the assembly
+    /// holding it is a direct reference of the mediator's; being reachable through some other reference proves
+    /// nothing. A library with nothing but skipped types only has to be reachable: nothing in it is dispatched,
+    /// and the mediator's project, which reported the skips, need not reference it directly.
     /// </remarks>
     public static bool MediatorCoversReferences(Compilation compilation, CancellationToken cancellationToken)
     {
         Dictionary<IAssemblySymbol, bool> reachesContracts = new(SymbolEqualityComparer.Default);
         List<IAssemblySymbol> owners = [];
-        List<IAssemblySymbol> contributors = [];
+        List<IAssemblySymbol> dispatched = [];
+        List<IAssemblySymbol> skippedOnly = [];
         foreach (IAssemblySymbol assembly in compilation.SourceModule.ReferencedAssemblySymbols)
         {
             if (assembly.Name is ContractsAssembly or "Capar" || !ReachesContracts(assembly, reachesContracts))
@@ -440,17 +444,23 @@ internal static partial class Discovery
             {
                 owners.Add(assembly);
             }
-            else if (parts.Any(static part => part.Handlers.Length > 0 || part.Open.Length > 0 || part.Skipped.Length > 0))
+            else if (parts.Any(static part => part.Handlers.Length > 0 || part.Open.Length > 0) || HasGenericHandlers(assembly, compilation))
             {
-                contributors.Add(assembly);
+                dispatched.Add(assembly);
+            }
+            else if (parts.Any(static part => part.Skipped.Length > 0))
+            {
+                skippedOnly.Add(assembly);
             }
         }
 
         return owners.Count > 0
-            && contributors.All(contributor =>
+            && dispatched.All(library => owners.Any(owner => owner.Modules.Any(module =>
+                module.ReferencedAssemblySymbols.Contains(library, SymbolEqualityComparer.Default))))
+            && skippedOnly.All(library =>
             {
                 Dictionary<IAssemblySymbol, bool> memo = new(SymbolEqualityComparer.Default);
-                return owners.Any(owner => Reaches(owner, contributor, memo));
+                return owners.Any(owner => Reaches(owner, library, memo));
             });
     }
 

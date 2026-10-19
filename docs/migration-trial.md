@@ -68,7 +68,7 @@ The first attempt did not go that smoothly, and each problem was Çapar's, fixed
 ### The project
 
 - Upstream commit `913acea`, 2026-10-15, .NET 10, Aspire.
-- MediatR **13.1.0**, the first commercially licensed version. eShop sets no licence key.
+- MediatR **13.1.0**, on the commercially licensed 13.x line. eShop sets no licence key.
 - The ordering service is the part that uses MediatR. Domain declares seven domain events as `INotification`.
   Infrastructure publishes them through `IMediator` from its `DbContext`. Ordering.API holds nine command and
   query handlers, seven domain event handlers, three open behaviours (logging, validation, a database
@@ -100,6 +100,10 @@ the MAUI client, which needs workloads this machine does not have, so the comman
 | Ordering unit tests | 43 passed | 43 passed |
 | Ordering functional tests, Postgres | 11 passed | 11 passed |
 | Files changed | | 8, +9 / -9 lines |
+
+The count leaves out the local package feed added to `nuget.config` for the trial, which a real migration
+would not need. The fix does not touch project files, so a `<!-- Before license change -->` comment in
+`Directory.Packages.props` was left sitting above the `Capar` line.
 
 Only Ordering.API generates a mediator. The two test projects reference it, run the generator because analyzers
 flow through project references, and generate nothing, as the consumer rule from the first trial intends.

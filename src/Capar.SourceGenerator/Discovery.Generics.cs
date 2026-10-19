@@ -67,6 +67,14 @@ internal static partial class Discovery
         return closer.Definitions.Count == 0 ? Empty : closer.Run();
     }
 
+    /// <summary>
+    /// Whether a referenced assembly declares a generic handler this project could close. Classifying a type
+    /// skips these, since they only become handlers once closed, so they are looked for separately.
+    /// </summary>
+    private static bool HasGenericHandlers(IAssemblySymbol assembly, Compilation compilation) =>
+        FactsCache.GetValue(assembly, static key => TypeFacts.Of(AllTypes(key.GlobalNamespace))).Definitions
+            .Any(definition => compilation.IsSymbolAccessibleWithin(definition, compilation.Assembly));
+
     private static IEnumerable<INamedTypeSymbol> HandlerContracts(INamedTypeSymbol type) =>
         type.AllInterfaces.Where(static contract =>
             contract.ContainingAssembly?.Name == ContractsAssembly

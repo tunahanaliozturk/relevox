@@ -91,7 +91,7 @@ internal static class Planner
             && !callsAddCapar
             && !ownOpenProcessors
             && discovery.Handlers.All(static handler => handler.Order.Assembly != 0)
-            && !discovery.Skipped.Any(static skipped => skipped.Location is not null && skipped.Rule != SourceGenerator.Diagnostics.NoHandler.Id);
+            && !discovery.Skipped.Any(static skipped => skipped.Location is not null);
         List<DiagnosticEntry> diagnostics = [];
         MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order));
 

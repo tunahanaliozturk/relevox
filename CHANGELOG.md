@@ -65,8 +65,11 @@ All notable changes to this project are written down here. The format follows
 - CPR0007's fix no longer leaves a blank line at the top of a registration whose first statement it removed.
 - A project that has no handlers or processors of its own, does not call `AddCapar`, and references a project
   with a mediator generates nothing and reports nothing about its references, so the projects below an
-  application layer no longer warn with CPR0005. It still generates when a handler in its references sits where
-  no referenced mediator can reach it, so that handler is not dropped without a word.
+  application layer no longer warn with CPR0005. It still generates when a handler, processor or generic handler
+  in its references sits in a library no referenced mediator's project references, so that handler is not
+  dropped without a word.
+- Handlers in generated code are left out by the generator as well as the analyzer, by the compiler's rules for
+  generated code, so the two agree; a request whose only handler is generated is reported with CPR0001.
 - The migration analyzer and code fix ship in `Capar.Contracts`, so library projects get them too, and run from
   the command line with `dotnet format analyzers --diagnostics CPR0007 --severity info`.
 - CPR0007 and its code fix, **Move from MediatR to Capar**: every piece of MediatR code left after the package

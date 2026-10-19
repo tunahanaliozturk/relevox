@@ -151,7 +151,8 @@ fix **Move from MediatR to Capar** can be applied to all of it with a single *Fi
 
 **Fix:** apply the code fix. It renames `MediatR` to `Capar` and `MediatRServiceConfiguration` to `CaparOptions`,
 and turns `AddMediatR` into `AddCapar`, removing the settings that only drove MediatR's assembly scan, its licence
-check or its run-time closing of generic handlers, and keeping comments and `#if` blocks around them. It leaves
+check or its run-time closing of generic handlers, and keeping comments and `#if` blocks around them. A comment
+at the end of a removed line goes with it, since it was about that line. It leaves
 alone, for a person to decide:
 
 - an options object built before the call and passed to `AddMediatR`, which `AddCapar` cannot take;
