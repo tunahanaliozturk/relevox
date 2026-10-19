@@ -82,6 +82,8 @@ jobs:
           VERSION: ${{ needs.pack.outputs.version }}
         run: |
           awk -v header="## [$VERSION]" 'index($0, header) == 1 { found = 1; next } found && /^## \[/ { exit } found' CHANGELOG.md > notes.md
+          # Links in the CHANGELOG are relative to the repository, which a release page is not.
+          sed -i -E "s#\]\((docs/[^)]*)\)#](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/\1)#g" notes.md
           prerelease=""
           [[ "$VERSION" == *-* ]] && prerelease="--prerelease"
           gh release create "$GITHUB_REF_NAME" packages/* --title "Relevox $VERSION" --notes-file notes.md $prerelease

@@ -13,8 +13,10 @@ signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 The name joins *relevo*, the relay race in Spanish and Portuguese, and *vox*, Latin for voice: the message
 handed from runner to runner. A request goes the same way, through each behaviour to its handler.
 
-> **Status: feature complete for 1.0, not released yet.** Nothing is on NuGet. To try it, pack the two
-> projects into a local feed the way [`eng/package-smoke.sh`](eng/package-smoke.sh) does.
+```bash
+dotnet add package Relevox             # the application, which calls AddRelevox
+dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
+```
 
 ## Why
 
@@ -41,7 +43,8 @@ anything:
 
 Measured with BenchmarkDotNet 0.15.8 on an Intel Core Ultra 7 255H, .NET 10.0.13, Windows 11. Full tables,
 and what each number does and does not show, are in
-[docs/benchmark-results/2026-10-17-m4.md](docs/benchmark-results/2026-10-17-m4.md). With allocations:
+[docs/benchmark-results/2026-10-17-m4.md](docs/benchmark-results/2026-10-17-m4.md), measured at commit `b79d6b2`.
+With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
 |---|---:|---:|---:|
