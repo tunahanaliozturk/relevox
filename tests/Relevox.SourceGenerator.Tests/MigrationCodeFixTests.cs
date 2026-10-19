@@ -134,6 +134,53 @@ public sealed class MigrationCodeFixTests
     }
 
     [Fact]
+    public async Task Configuration_found_through_the_dependency_injection_namespace_still_compiles()
+    {
+        // MediatR declares its configuration types in Microsoft.Extensions.DependencyInjection, so a Program.cs
+        // that configures it often has no using for MediatR at all. RelevoxOptions lives there too; the strategy
+        // enum cannot, and is written with its namespace.
+        string[] fixedSources = await Migrate(Handlers, """
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop;
+
+            public static class Startup
+            {
+                public static IServiceCollection Configure(IServiceCollection services)
+                {
+                    void Options(MediatRServiceConfiguration options) =>
+                        options.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
+                    return services.AddMediatR(options =>
+                    {
+                        options.RegisterServicesFromAssembly(typeof(Startup).Assembly);
+                        Options(options);
+                    });
+                }
+            }
+            """);
+
+        fixedSources[1].ShouldContain("void Options(RelevoxOptions options)");
+        fixedSources[1].ShouldContain("= Relevox.RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_file_already_using_Relevox_keeps_one_using_for_it()
+    {
+        string[] fixedSources = await Migrate(Handlers, """
+            using MediatR;
+            using Relevox;
+
+            namespace Shop;
+
+            public sealed record Pong : IRequest<int>;
+            """);
+
+        fixedSources[1].Split("using Relevox;").Length.ShouldBe(2);
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
     public async Task Sorted_usings_stay_sorted_and_unsorted_ones_stay_put()
     {
         // MediatR sorts before Microsoft and Relevox after it, so a rename in place would leave a file that fails

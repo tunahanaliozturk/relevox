@@ -173,7 +173,7 @@ public static class GeneratorHarness
             }
         }
 
-        foreach (Type anchor in (Type[])[typeof(IRequest<>), typeof(RelevoxOptions), typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection)])
+        foreach (Type anchor in (Type[])[typeof(IRequest<>), typeof(Microsoft.Extensions.DependencyInjection.RelevoxOptions), typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection)])
         {
             if (seen.Add(anchor.Assembly.Location))
             {

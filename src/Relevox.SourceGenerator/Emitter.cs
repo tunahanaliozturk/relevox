@@ -130,7 +130,7 @@ internal static class Emitter
         code.Line("/// <param name=\"services\">The service collection.</param>");
         code.Line("/// <param name=\"configure\">Adjusts the options, such as the handler lifetime.</param>");
         code.Line("/// <returns>The same service collection.</returns>");
-        code.Open($"public static {DependencyInjection}.IServiceCollection AddRelevox(this {DependencyInjection}.IServiceCollection services, global::System.Action<global::Relevox.RelevoxOptions>? configure = null)");
+        code.Open($"public static {DependencyInjection}.IServiceCollection AddRelevox(this {DependencyInjection}.IServiceCollection services, global::System.Action<global::Microsoft.Extensions.DependencyInjection.RelevoxOptions>? configure = null)");
         code.Line("global::System.ArgumentNullException.ThrowIfNull(services);");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor existing in services)");
         code.Line($"if (existing.ServiceType == typeof({mediator}))");
@@ -145,7 +145,7 @@ internal static class Emitter
         code.Line("}");
         code.Close();
         code.Line();
-        code.Line("global::Relevox.RelevoxOptions options = new();");
+        code.Line("global::Microsoft.Extensions.DependencyInjection.RelevoxOptions options = new();");
         code.Line("configure?.Invoke(options);");
         code.Line($"{DependencyInjection}.ServiceLifetime lifetime = options.Lifetime;");
         code.Line($"{DependencyInjection}.ServiceLifetime handlerLifetime = options.HandlerLifetime;");

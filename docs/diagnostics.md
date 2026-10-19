@@ -152,6 +152,9 @@ The compiler already reports the same code as errors, under several ids. RVX0007
 fix **Move from MediatR to Relevox** can be applied to all of it with a single *Fix all occurrences in: Solution*.
 
 **Fix:** apply the code fix. It renames `MediatR` to `Relevox` and `MediatRServiceConfiguration` to `RelevoxOptions`,
+which lives in `Microsoft.Extensions.DependencyInjection` as MediatR's configuration does, writes
+`RequestExceptionActionProcessorStrategy` as `Relevox.RequestExceptionActionProcessorStrategy`, drops a
+`using Relevox;` the rename would repeat,
 and turns `AddMediatR` into `AddRelevox`, removing the settings that only drove MediatR's assembly scan, its licence
 check or its run-time closing of generic handlers, and keeping comments and `#if` blocks around them. A comment
 at the end of a removed line goes with it, since it was about that line. It leaves

@@ -1,7 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
+using Relevox;
 
-namespace Relevox;
+// In MediatR's namespace for its configuration, so code that configured MediatR without a using for it keeps
+// compiling after the migration fix renames the type.
+namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>Settings passed to the generated <c>AddRelevox</c>.</summary>
 /// <remarks>
@@ -92,10 +94,10 @@ public sealed class RelevoxOptions
     /// <summary>Registers several open generic behaviours, in order, each with its own lifetime.</summary>
     /// <param name="openBehaviors">The behaviours.</param>
     /// <returns>These options, for chaining.</returns>
-    public RelevoxOptions AddOpenBehaviors(IEnumerable<Entities.OpenBehavior> openBehaviors)
+    public RelevoxOptions AddOpenBehaviors(IEnumerable<Relevox.Entities.OpenBehavior> openBehaviors)
     {
         ArgumentNullException.ThrowIfNull(openBehaviors);
-        foreach (Entities.OpenBehavior openBehavior in openBehaviors)
+        foreach (Relevox.Entities.OpenBehavior openBehavior in openBehaviors)
         {
             AddOpenBehavior(openBehavior.OpenBehaviorType, openBehavior.ServiceLifetime);
         }
@@ -208,14 +210,14 @@ public sealed class RelevoxOptions
     }
 
     /// <summary>
-    /// The publisher used for notifications, as an instance. A <see cref="NotificationPublishers.ForeachAwaitPublisher"/>
+    /// The publisher used for notifications, as an instance. A <see cref="Relevox.NotificationPublishers.ForeachAwaitPublisher"/>
     /// by default.
     /// </summary>
     /// <remarks>
     /// With the default, the generated mediator runs handlers itself, one after another, without building an
     /// executor per handler. Any other publisher is handed the handlers the way MediatR hands them over.
     /// </remarks>
-    public INotificationPublisher NotificationPublisher { get; set; } = new NotificationPublishers.ForeachAwaitPublisher();
+    public INotificationPublisher NotificationPublisher { get; set; } = new Relevox.NotificationPublishers.ForeachAwaitPublisher();
 
     /// <summary>
     /// The publisher used for notifications, as a type the container creates with <see cref="Lifetime"/>. Takes
@@ -258,7 +260,7 @@ public sealed class RelevoxOptions
     /// <returns>These options, for chaining.</returns>
     public RelevoxOptions AddRequestPreProcessor([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
-        AddClosed(RequestPreProcessorsToRegister, implementationType, typeof(Pipeline.IRequestPreProcessor<>), serviceLifetime);
+        AddClosed(RequestPreProcessorsToRegister, implementationType, typeof(Relevox.Pipeline.IRequestPreProcessor<>), serviceLifetime);
         return this;
     }
 
@@ -286,7 +288,7 @@ public sealed class RelevoxOptions
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type openBehaviorType,
         ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
-        RequestPreProcessorsToRegister.Add(new ServiceDescriptor(typeof(Pipeline.IRequestPreProcessor<>), RequireOpen(openBehaviorType, typeof(Pipeline.IRequestPreProcessor<>)), serviceLifetime));
+        RequestPreProcessorsToRegister.Add(new ServiceDescriptor(typeof(Relevox.Pipeline.IRequestPreProcessor<>), RequireOpen(openBehaviorType, typeof(Relevox.Pipeline.IRequestPreProcessor<>)), serviceLifetime));
         return this;
     }
 
@@ -315,7 +317,7 @@ public sealed class RelevoxOptions
     /// <returns>These options, for chaining.</returns>
     public RelevoxOptions AddRequestPostProcessor([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
-        AddClosed(RequestPostProcessorsToRegister, implementationType, typeof(Pipeline.IRequestPostProcessor<,>), serviceLifetime);
+        AddClosed(RequestPostProcessorsToRegister, implementationType, typeof(Relevox.Pipeline.IRequestPostProcessor<,>), serviceLifetime);
         return this;
     }
 
@@ -343,7 +345,7 @@ public sealed class RelevoxOptions
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type openBehaviorType,
         ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
-        RequestPostProcessorsToRegister.Add(new ServiceDescriptor(typeof(Pipeline.IRequestPostProcessor<,>), RequireOpen(openBehaviorType, typeof(Pipeline.IRequestPostProcessor<,>)), serviceLifetime));
+        RequestPostProcessorsToRegister.Add(new ServiceDescriptor(typeof(Relevox.Pipeline.IRequestPostProcessor<,>), RequireOpen(openBehaviorType, typeof(Relevox.Pipeline.IRequestPostProcessor<,>)), serviceLifetime));
         return this;
     }
 
