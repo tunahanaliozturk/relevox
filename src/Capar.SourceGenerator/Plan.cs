@@ -72,19 +72,26 @@ internal sealed record EmitPlan(
 internal static class Planner
 {
     /// <remarks>
-    /// A project with no handlers of its own that references a project with a mediator, and does not call
-    /// <c>AddCapar</c> itself, is a consumer of that mediator: an API or a test project downstream of the
-    /// application layer that calls <c>AddCapar</c>.
+    /// A project with no handlers or processors of its own, that does not call <c>AddCapar</c>, and whose
+    /// references put every handler it can see under a referenced project's mediator, is a consumer of that
+    /// mediator: an API or a test project downstream of the application layer that calls <c>AddCapar</c>.
     /// Analyzers flow to it through the project reference, so the generator runs there too; it writes nothing
     /// and does not report the upstream project's handlers as CPR0005. A real migration found this: every
     /// project below the application layer warned, and with warnings as errors, failed.
     /// </remarks>
-    public static EmitPlan Build(string assemblyName, DiscoveryModel discovery, bool seesAnotherRegistration = false, bool referencesAMediator = false, bool callsAddCapar = false)
+    public static EmitPlan Build(
+        string assemblyName,
+        DiscoveryModel discovery,
+        bool seesAnotherRegistration = false,
+        bool mediatorCoversReferences = false,
+        bool callsAddCapar = false,
+        bool ownOpenProcessors = false)
     {
-        bool consumer = referencesAMediator
+        bool consumer = mediatorCoversReferences
             && !callsAddCapar
+            && !ownOpenProcessors
             && discovery.Handlers.All(static handler => handler.Order.Assembly != 0)
-            && discovery.Open.Length == 0;
+            && !discovery.Skipped.Any(static skipped => skipped.Location is not null && skipped.Rule != SourceGenerator.Diagnostics.NoHandler.Id);
         List<DiagnosticEntry> diagnostics = [];
         MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order));
 
@@ -263,7 +270,8 @@ internal static class Planner
         (ServiceRegistration[] exceptionRegistrations, ExceptionCatalogEntry[] catalogs) = PlanExceptions(discovery, messages, requests, order);
 
         foreach (SkippedModel skipped in discovery.Skipped
-            .Where(skipped => !(consumer && skipped.Rule == SourceGenerator.Diagnostics.OwnMediator.Id))
+            // A consumer says nothing about its references; what it says about its own source still stands.
+            .Where(skipped => !(consumer && skipped.Location is null))
             .OrderBy(static skipped => skipped.Rule, StringComparer.Ordinal)
             .ThenBy(static skipped => string.Join("|", skipped.Arguments), StringComparer.Ordinal))
         {

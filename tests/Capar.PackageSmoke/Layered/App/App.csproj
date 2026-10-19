@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Capar" Version="$(CaparVersion)" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <ProjectReference Include="../Contracts/Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

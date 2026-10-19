@@ -52,6 +52,14 @@ public sealed class ExplodeHandler(Trace trace) : IRequestHandler<Explode, int>
     }
 }
 
+public sealed record Fizzle : IRequest;
+
+public sealed class FizzleHandler : IRequestHandler<Fizzle>
+{
+    public Task Handle(Fizzle request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("a request with no response");
+}
+
 public sealed record Stamp : IRequest<int>;
 
 public sealed class StampHandler(Trace trace) : IRequestHandler<Stamp, int>

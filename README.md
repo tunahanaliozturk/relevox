@@ -95,7 +95,7 @@ builder.Services.AddCapar(options =>
 In Visual Studio, Rider or VS Code, steps 2 and 3 are one code fix: after the package swap, apply **Move from
 MediatR to Capar** to the whole solution. From the command line it is
 `dotnet format analyzers --diagnostics CPR0007 --severity info`. A real Clean Architecture solution on MediatR 14
-moved over that way, ten files and twenty lines, with its 33 tests passing before and after
+moved over that way, ten files with eleven lines added and twelve removed, with its 33 tests passing before and after
 ([migration-trial.md](docs/migration-trial.md)).
 
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.

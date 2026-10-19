@@ -62,6 +62,10 @@ The same fix runs without an IDE, after the package swap and a restore:
 dotnet format analyzers YourSolution.slnx --diagnostics CPR0007 --severity info
 ```
 
+Run it from the solution's directory: `dotnet format` only changes files below the directory it runs in. A
+`dotnet build` before the fix shows the compiler's errors for the missing `MediatR` namespace and not CPR0007,
+because the compiler does not run analyzers once there are errors; the IDE and `dotnet format` do.
+
 That is how a real Clean Architecture solution was migrated, with its tests passing before and after; see
 [migration-trial.md](migration-trial.md). The rest of this guide is what the fix does, for reviewing its result
 and for doing it by hand.

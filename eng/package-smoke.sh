@@ -12,7 +12,9 @@ app="$root/tests/Capar.PackageSmoke"
 # The release workflow passes the version it is about to publish; anything else tests a throwaway one.
 version="${CAPAR_VERSION:-0.0.0-smoke}"
 
-rm -rf "$feed" "$app/bin" "$app/obj"
+layered="$app/Layered"
+
+rm -rf "$feed" "$app/bin" "$app/obj" "$layered/obj" "$layered"/*/bin "$layered"/*/obj
 
 dotnet pack "$root/src/Capar.Contracts" --configuration Release --output "$feed" -p:Version="$version"
 dotnet pack "$root/src/Capar" --configuration Release --output "$feed" -p:Version="$version"
@@ -49,3 +51,33 @@ fi
 
 grep -q "CPR0001" <<<"$output" || { echo "$output" >&2; echo "The build failed, but not with CPR0001." >&2; exit 1; }
 echo "The packaged analyzer reported CPR0001 for a request with no handler."
+
+# A contracts-only library, an application layer that calls AddCapar, and a host below it, as the migration
+# trials were laid out. The host runs the generator too and must build clean with warnings as errors.
+output="$(dotnet run --project "$layered/Host" --configuration Release -p:CaparVersion="$version")"
+grep -q "answer 42" <<<"$output" \
+  || { echo "$output" >&2; echo "The layered host did not dispatch through the application's mediator." >&2; exit 1; }
+echo "A host below the application layer built clean and dispatched through the application's mediator."
+
+# MediatR code left in a contracts-only library: the code fix Capar.Contracts carries has to run from the command
+# line and leave a library that builds. The compiler skips analyzers once there are errors, so the build alone
+# only shows CS0246; dotnet format runs the analyzer and the fix regardless. It works on a copy outside the
+# repository, because dotnet format left the copy alone when it sat under obj, and it takes no MSBuild
+# properties, so the version and the feed are written in.
+leftover="$(mktemp -d)"
+trap 'rm -rf "$leftover"' EXIT
+feed_path="$(cygpath -m "$feed" 2>/dev/null || echo "$feed")"
+cp "$layered/Directory.Build.props" "$layered/Leftover/Leftover.cs" "$leftover/"
+sed "s/\$(CaparVersion)/$version/" "$layered/Leftover/Leftover.csproj" >"$leftover/Leftover.csproj"
+sed "s#../../artifacts/smoke-feed#$feed_path#" "$app/nuget.config" >"$leftover/nuget.config"
+
+if dotnet build "$leftover" --configuration Release >/dev/null 2>&1; then
+  echo "A library with using MediatR built before the fix." >&2
+  exit 1
+fi
+
+# From inside the copy: dotnet format only touches files below the directory it runs in.
+(cd "$leftover" && dotnet format analyzers Leftover.csproj --diagnostics CPR0007 --severity info)
+grep -q "^using Capar;" "$leftover/Leftover.cs" || { cat "$leftover/Leftover.cs" >&2; echo "CPR0007's fix did not run." >&2; exit 1; }
+dotnet build "$leftover" --configuration Release
+echo "The packaged migration fix moved a contracts-only library off MediatR from the command line."
