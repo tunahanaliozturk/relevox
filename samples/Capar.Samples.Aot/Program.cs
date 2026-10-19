@@ -42,6 +42,10 @@ Check("notification, second handler", journal.Contains("invoiced 3"), true);
 await publisher.Publish(Events.Created(new Customer("Ada")));
 Check("generic handler, notification type the build never saw", journal.Contains("audited Created`1"), true);
 
+// The same with a handler no type the build saw satisfies, so nothing closed it at build time.
+await publisher.Publish(Events.Renamed(new Customer("Grace")));
+Check("generic handler with no build-time closing", journal.Contains("recorded Renamed`1"), true);
+
 List<int> items = [];
 await foreach (int item in sender.CreateStream(new Countdown(3)))
 {
@@ -154,6 +158,22 @@ namespace Capar.Samples.Aot
     public static class Events
     {
         public static INotification Created<T>(T entity) => new Created<T>(entity);
+
+        public static INotification Renamed<T>(T entity) => new Renamed<T>(entity);
+    }
+
+    public interface IDomainEvent : INotification;
+
+    public sealed record Renamed<T>(T Entity) : IDomainEvent;
+
+    public sealed class DomainLog<T>(Journal journal) : INotificationHandler<T>
+        where T : IDomainEvent
+    {
+        public Task Handle(T notification, CancellationToken cancellationToken)
+        {
+            journal.Write($"recorded {typeof(T).Name}");
+            return Task.CompletedTask;
+        }
     }
 
     public sealed class AuditLog<T>(Journal journal) : INotificationHandler<T>

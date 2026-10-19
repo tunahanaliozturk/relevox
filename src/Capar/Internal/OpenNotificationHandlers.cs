@@ -47,6 +47,11 @@ public sealed class OpenNotificationHandlers
     public Task Publish(IServiceProvider services, INotification notification, INotificationPublisher? publisher, CancellationToken cancellationToken)
     {
         Closing closing = _closings.GetOrAdd(notification.GetType(), Close, _definitions);
+        if (closing.Failure is { } failure)
+        {
+            throw failure;
+        }
+
         if (closing.Handlers.Length == 0)
         {
             // A configured publisher is still called with no handlers, as MediatR calls it.
@@ -85,7 +90,7 @@ public sealed class OpenNotificationHandlers
     }
 
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Structs are skipped where code cannot be generated; a closing over a reference type uses the handler's shared code.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "The definitions are named with typeof in generated code, and registered with the container, which keeps them.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "The warning is about a type argument meeting [DynamicallyAccessedMembers] on the definition's type parameter; the generator leaves any definition with such a parameter out of this list.")]
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "The invoker's constructor is kept by the DynamicDependency below.")]
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor, typeof(Invoker<>))]
     private static Closing Close(Type notification, Type[] definitions)
@@ -107,6 +112,15 @@ public sealed class OpenNotificationHandlers
                 // The notification does not satisfy the handler's constraints, so the container would not close
                 // it either.
             }
+            catch (NotSupportedException exception)
+            {
+                // NativeAOT has no code for this closing: nothing in the build closed the handler over a reference
+                // type, so the compiler kept no shared code to build it from. Skipping it would change which
+                // handlers run without a word, so every publish of this type says so instead.
+                return new Closing([], null, new NotSupportedException(
+                    $"'{definition}' could not be closed over '{notification}' in this NativeAOT build. Handle '{notification}' in a handler the build can see, so the handler is closed while the project builds.",
+                    exception));
+            }
         }
 
         return handlers.Count == 0
@@ -114,7 +128,7 @@ public sealed class OpenNotificationHandlers
             : new Closing([.. handlers], (Invoker)Activator.CreateInstance(typeof(Invoker<>).MakeGenericType(notification))!);
     }
 
-    private sealed record Closing(Type[] Handlers, Invoker? Invoker)
+    private sealed record Closing(Type[] Handlers, Invoker? Invoker, NotSupportedException? Failure = null)
     {
         public static Closing None { get; } = new([], null);
     }

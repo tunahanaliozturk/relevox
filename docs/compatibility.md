@@ -83,7 +83,9 @@ order notification handlers, processors and exception handlers run in. For a ref
 TypeDef table, which Çapar reads directly. For the project being built it is what the compiler will emit: a
 namespace's own types in declaration order, then its child namespaces, the one first declared last. A
 handler in a nested namespace therefore runs after the handlers of its parent namespace even when
-its file comes first. Every trace in the differential tests is compared in order, not as a set.
+its file comes first. A handler class nested in another class comes after every top-level type in the
+project, and one nested two deep after all of those. Every trace in the differential tests is compared in
+order, not as a set.
 
 ## The pipeline
 

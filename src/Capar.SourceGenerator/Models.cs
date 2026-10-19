@@ -90,7 +90,15 @@ internal sealed record HandlerModel(
 /// <param name="Assembly">0 for this compilation; for a reference, one more than its position among the references.</param>
 /// <param name="Namespace">For source, the containing namespace, empty for the global one.</param>
 /// <param name="Tree">For source, the syntax tree's index in the compilation.</param>
-/// <param name="Position">For source, the declaration's start in its tree; for metadata, its TypeDef token.</param>
+/// <param name="Position">
+/// For source, the start of the declaration, or of the top-level type a nested type is declared in; for
+/// metadata, its TypeDef token.
+/// </param>
+/// <param name="Nesting">
+/// For a nested type in source, the start of each type from the top-level one's member down to this one. The
+/// compiler writes every top-level type before any nested one, then each level of nesting in its parents'
+/// order, so depth comes first.
+/// </param>
 /// <remarks>
 /// Metadata order for a referenced assembly is simply its TypeDef table, which the token gives. For this
 /// compilation it has to be reconstructed: the compiler emits a namespace's own types, in declaration order,
@@ -98,7 +106,7 @@ internal sealed record HandlerModel(
 /// nested namespace declared in the first file, which still runs last. The planner does the reconstruction,
 /// because it needs every handler's namespace to order sibling namespaces.
 /// </remarks>
-internal sealed record DeclarationOrder(int Assembly, string Namespace, int Tree, int Position);
+internal sealed record DeclarationOrder(int Assembly, string Namespace, int Tree, int Position, EquatableArray<int> Nesting = default);
 
 /// <summary>Which contract a message implements.</summary>
 internal enum MessageKind

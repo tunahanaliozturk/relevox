@@ -95,6 +95,7 @@ internal static class Planner
             && !callsAddCapar
             && !ownOpenProcessors
             && discovery.Handlers.All(static handler => handler.Order.Assembly != 0)
+            && discovery.OpenNotifications.All(static open => open.Order.Assembly != 0)
             && !discovery.Skipped.Any(static skipped => skipped.Location is not null);
         List<DiagnosticEntry> diagnostics = [];
         MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order)
@@ -519,6 +520,24 @@ internal static class Planner
                 return x.Position.CompareTo(y.Position);
             }
 
+            // Every top-level type is written before any nested one, then each level in its parents' order: a
+            // probe of DefinedTypes found it, and the differential scenario in NamespaceOrder.cs holds it.
+            if (x.Nesting.Length != y.Nesting.Length)
+            {
+                return x.Nesting.Length.CompareTo(y.Nesting.Length);
+            }
+
+            int outer = CompareTopLevel(x, y);
+            for (int level = 0; outer == 0 && level < x.Nesting.Length; level++)
+            {
+                outer = x.Nesting[level].CompareTo(y.Nesting[level]);
+            }
+
+            return outer;
+        }
+
+        private int CompareTopLevel(DeclarationOrder x, DeclarationOrder y)
+        {
             if (x.Namespace == y.Namespace)
             {
                 return Compare((x.Tree, x.Position), (y.Tree, y.Position));

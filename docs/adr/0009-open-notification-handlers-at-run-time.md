@@ -30,22 +30,34 @@ The build-time closings stay as they are, and each generic notification handler 
   and remembers the result per type. It resolves the handlers from the container and runs them, one after
   another or through the configured publisher, the same way it runs the handlers the build knew about.
 
-Types the build did see never take this path. Their closings were written at build time, and so were their
-entries.
+A type the generated mediator has an entry for never takes this path: its closings were written at build time,
+along with the entry. Every type without one does, including a type the build saw but no handler names, which
+usually finds nothing and is remembered as having nothing.
+
+A generic handler whose type parameter carries `[DynamicallyAccessedMembers]` is left off the list. A type
+closed at run time cannot promise the trimmer kept those members.
 
 ## Consequences
 
-- A generic notification handler reaches every notification type its constraints admit, as under MediatR.
-  The differential tests hold this for a closed generic notification built from a type parameter, published
+- A generic notification handler reaches every notification type its constraints admit, as under MediatR,
+  within what Çapar registers at all: not an internal handler in another project (CPR0003), nor a handler in
+  a NuGet package, which MediatR's scan of the application's assemblies would not find either. The
+  differential tests hold this for a closed generic notification built from a type parameter, published
   as `INotification`, as `object`, and under `TaskWhenAllPublisher`, and for a struct its constraints rule
   out.
 - This is the one place Çapar closes a type at run time. The cost is paid once per notification type: an
   exception for each definition whose constraints fail, then a dictionary lookup. Nothing changes for a
   project with no generic notification handler; its generated code is the same as before.
-- Under NativeAOT a closing over a reference type works, using the shared code the compiler already has for
-  the handler, and the AOT sample in CI checks it. A closing over a struct needs code generated at run time,
-  so under NativeAOT it is skipped, which leaves such a struct where ADR 0008 left every unseen type.
-  Microsoft's container refuses open generics over structs under NativeAOT for the same reason.
+- Under NativeAOT a closing over a reference type works, and the AOT sample in CI checks two: a handler
+  the build also closed over other notifications, and one nothing at build time closed. A closing over a
+  struct needs code generated at run time, so under NativeAOT it is skipped, which leaves such a struct where
+  ADR 0008 left every unseen type. Microsoft's container refuses open generics over structs under NativeAOT
+  for the same reason. Should the compiler still have no code for a closing, publishing that type throws a
+  `NotSupportedException` that says which handler and how to fix it, rather than quietly running fewer
+  handlers.
+- The closings are kept in a static cache keyed by type, which holds on to those types. An application that
+  unloads plugins through a collectible `AssemblyLoadContext` and publishes their notification types through
+  this path will keep those contexts alive.
 - Catch-all handlers, written for a base type or for `INotification`, still do not run for an unseen type.
   That is MediatR's behaviour too. Its scan registers them only under the notification types it found, and
   Microsoft's container does not apply variance.

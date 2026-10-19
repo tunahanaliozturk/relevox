@@ -91,5 +91,10 @@ All notable changes to this project are written down here. The format follows
 
 ### Fixed
 
+- A handler in the application for a request or notification declared in a library with its own mediator is
+  dispatched again, as MediatR's scan registers it; the message had no entry, so the handler never ran.
+- Handler classes nested in other classes run after every top-level handler, one level at a time, the order
+  the compiler writes them into metadata and MediatR runs them in.
+
 - `AddCapar` is declared in `Microsoft.Extensions.DependencyInjection`, so a top-level `Program.cs` finds it
   without a `using` for the project's namespace.

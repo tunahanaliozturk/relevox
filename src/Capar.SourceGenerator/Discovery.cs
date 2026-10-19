@@ -223,22 +223,21 @@ internal static partial class Discovery
                 IsClosure: closedFrom is not null,
                 location));
 
-            // A request closed from a generic handler, such as GetById<Customer>, is declared nowhere as such, so
-            // it gets its message here, the way a closed generic notification does below.
-            if (closedFrom is not null
-                && kind is HandlerKind.Request or HandlerKind.VoidRequest or HandlerKind.Stream
-                && message is INamedTypeSymbol closedRequest)
+            // The message a handler names gets a dispatch entry whether or not its declaration is scanned. Some are
+            // declared nowhere as such: a request closed from a generic handler, such as GetById<Customer>, or a
+            // closed generic notification, such as Created<Order>, whose definition is skipped below. Others are
+            // declared in an assembly whose messages are not scanned, such as a library with a mediator of its own,
+            // while this project's handler for them still has to run, as MediatR's scan registers it.
+            if (kind is HandlerKind.Request or HandlerKind.VoidRequest or HandlerKind.Stream or HandlerKind.Notification
+                && message is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct } handled)
             {
-                AddMessage(closedRequest, kind == HandlerKind.Stream ? MessageKind.Stream : MessageKind.Request, null, declaredHere: false);
-            }
-
-            // A notification handler for a closed generic type, such as INotificationHandler<Created<Order>>,
-            // names a message no declaration produces: Created<T> itself is generic and skipped below. Without
-            // this, Created<Order> would get no dispatch entry and publishing it would silently reach nothing.
-            if (kind == HandlerKind.Notification
-                && message is INamedTypeSymbol { IsGenericType: true, IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } constructed)
-            {
-                AddMessage(constructed, MessageKind.Notification, null, declaredHere: false);
+                MessageKind messageKind = kind switch
+                {
+                    HandlerKind.Stream => MessageKind.Stream,
+                    HandlerKind.Notification => MessageKind.Notification,
+                    _ => MessageKind.Request,
+                };
+                AddMessage(handled, messageKind, null, declaredHere: false);
             }
         }
 
@@ -653,10 +652,12 @@ internal static partial class Discovery
             return new DeclarationOrder(assembly, string.Empty, 0, symbol.MetadataToken);
         }
 
-        // A nested type is ordered by the top-level type it is declared in.
+        // A nested type is placed by the top-level type it is declared in, then by its own position at each level.
         INamedTypeSymbol outer = symbol;
+        List<int> nesting = [];
         while (outer.ContainingType is { } containing)
         {
+            nesting.Insert(0, outer.Locations.FirstOrDefault(static candidate => candidate.IsInSource)?.SourceSpan.Start ?? 0);
             outer = containing;
         }
 
@@ -664,7 +665,7 @@ internal static partial class Discovery
             ? containingNamespace.ToDisplayString()
             : string.Empty;
 
-        Location? location = symbol.Locations.FirstOrDefault(static candidate => candidate.IsInSource);
+        Location? location = outer.Locations.FirstOrDefault(static candidate => candidate.IsInSource);
         int tree = int.MaxValue;
         if (location?.SourceTree is { } declared)
         {
@@ -681,7 +682,7 @@ internal static partial class Discovery
             }
         }
 
-        return new DeclarationOrder(0, ns, tree, location?.SourceSpan.Start ?? 0);
+        return new DeclarationOrder(0, ns, tree, location?.SourceSpan.Start ?? 0, nesting.ToEquatableArray());
     }
 
     private static EquatableArray<string> Chain(ITypeSymbol type)

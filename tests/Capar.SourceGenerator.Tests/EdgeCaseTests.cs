@@ -565,6 +565,61 @@ public sealed class EdgeCaseTests
         api.Ids.ShouldContain("CPR0005");
     }
 
+    [Fact]
+    public void Handlers_here_for_messages_from_a_library_with_its_own_mediator_are_dispatched()
+    {
+        // MediatR's scan registers this project's handlers whatever assembly declares the message. The library's
+        // messages are not scanned here, since it keeps its own, so the handlers have to bring them.
+        MetadataReference library = GeneratorHarness.Library("Lib.Own", [], withGenerator: true, Usings + """
+            namespace Lib.Own;
+            public sealed record OwnEvent : INotification;
+            public sealed record OwnQuery : IRequest<int>;
+            public sealed record Internal : IRequest<int>;
+            public sealed class InternalHandler : IRequestHandler<Internal, int>
+            {
+                public Task<int> Handle(Internal request, CancellationToken cancellationToken) => Task.FromResult(0);
+            }
+            """);
+
+        GeneratorRun app = GeneratorHarness.Run("Shop.App", [library], Usings + """
+            public sealed class OwnEventHandler : INotificationHandler<Lib.Own.OwnEvent>
+            {
+                public Task Handle(Lib.Own.OwnEvent notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class OwnQueryHandler : IRequestHandler<Lib.Own.OwnQuery, int>
+            {
+                public Task<int> Handle(Lib.Own.OwnQuery request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed class Audit<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        app.Mediator.ShouldContain("Publish(global::Lib.Own.OwnEvent notification");
+        app.Mediator.ShouldContain("Send(global::Lib.Own.OwnQuery request");
+        app.Mediator.ShouldContain("global::Audit<global::Lib.Own.OwnEvent>");
+        app.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_downstream_project_whose_only_handler_is_an_unclosed_generic_one_still_generates()
+    {
+        // No notification the build sees satisfies the constraint, so nothing is closed, but the handler is kept
+        // open for types the build never saw and has to be registered by this project.
+        MetadataReference application = Application([]);
+
+        GeneratorRun api = GeneratorHarness.Run("Shop.Api", [application], Program, Usings + """
+            public interface IAudited : INotification;
+            public sealed class Audit<T> : INotificationHandler<T> where T : IAudited
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        api.Sources.ShouldNotBeEmpty();
+    }
+
     /// <summary>A generator that writes one fixed file, standing in for Razor or any other.</summary>
     private sealed class Writes(string source) : IIncrementalGenerator
     {
