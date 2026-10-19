@@ -55,7 +55,7 @@ and one registration call; the [migration guide](docs/migration.md) covers it, a
 ### Performance
 
 Measured against MediatR 12.5.0 and published with the hardware named in
-[docs/benchmark-results](docs/benchmark-results). A send through the generated mediator takes about a quarter of
+[docs/benchmark-results](docs/benchmark-results/2026-10-17-m4.md). A send through the generated mediator takes about a quarter of
 MediatR's time, through `ISender` under half, and registering and sending once about a thirtieth.
 
 ### Tried on real projects
