@@ -147,6 +147,15 @@ public sealed class MigrateFromMediatR : CodeFixProvider
 
     private static bool IsInOrder(SyntaxList<UsingDirectiveSyntax> usings)
     {
+        // A directive such as #if belongs to the usings around it, so moving them would change what compiles: a
+        // block with one is left in its order. A comment between usings is left alone for the same reason; only
+        // the first using's, a file header, stays at the top.
+        if (usings.Any(static directive => directive.GetLeadingTrivia().Any(static trivia => trivia.IsDirective))
+            || usings.Skip(1).Any(static directive => directive.GetLeadingTrivia().Any(static trivia => !trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia))))
+        {
+            return false;
+        }
+
         for (int index = 1; index < usings.Count; index++)
         {
             if (UsingOrder.Instance.Compare(usings[index - 1], usings[index]) > 0)

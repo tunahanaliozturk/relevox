@@ -163,12 +163,26 @@ public sealed class MigrationCodeFixTests
             namespace Shop.Other;
 
             public sealed record Pong : IRequest<int>;
+            """,
+            """
+            using System;
+            #if DEBUG
+            using MediatR;
+            #endif
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop.Debug;
+
+            public sealed record Probe : IRequest<int>;
             """);
 
         fixedSources[0].ReplaceLineEndings("\n").ShouldBe("// Copyright header.\nglobal using System.Linq;\nglobal using Microsoft.Extensions.DependencyInjection;\nglobal using Relevox;");
         fixedSources[1].ReplaceLineEndings("\n").ShouldStartWith(
             "// Copyright header.\nusing System;\nusing Microsoft.Extensions.DependencyInjection;\nusing Relevox;\nusing Relevox.Pipeline;\n");
         fixedSources[2].ReplaceLineEndings("\n").ShouldStartWith("using Microsoft.Extensions.DependencyInjection;\nusing Relevox;\n");
+
+        // Sorting would move Microsoft under the #if and Relevox out of it, which changes what compiles.
+        fixedSources[3].ReplaceLineEndings("\n").ShouldStartWith("using System;\n#if DEBUG\nusing Relevox;\n#endif\nusing Microsoft.Extensions.DependencyInjection;\n");
     }
 
     [Fact]
