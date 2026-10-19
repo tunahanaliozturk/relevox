@@ -26,35 +26,35 @@ jobs:
           global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore Capar.slnx
+        run: dotnet restore Relevox.slnx
 
       # Warnings are errors, and EnforceCodeStyleInBuild puts analyzer style into this step too.
       - name: Build
-        run: dotnet build Capar.slnx --configuration Release --no-restore
+        run: dotnet build Relevox.slnx --configuration Release --no-restore
 
       # Whitespace and style only. The analyzer pass of dotnet format builds its own workspace without
       # running source generators, so it reports generated types as missing; the build above already
       # enforces analyzer style.
       - name: Verify formatting
         run: |
-          dotnet format whitespace Capar.slnx --verify-no-changes --no-restore
-          dotnet format style Capar.slnx --verify-no-changes --no-restore
+          dotnet format whitespace Relevox.slnx --verify-no-changes --no-restore
+          dotnet format style Relevox.slnx --verify-no-changes --no-restore
 
       # Drives the generator through CSharpGeneratorDriver: diagnostics, emitted code that has to compile,
       # determinism, discovery across project references, and whether the incremental cache is really hit.
       - name: Generator tests
-        run: dotnet run --project tests/Capar.SourceGenerator.Tests --configuration Release --no-build
+        run: dotnet run --project tests/Relevox.SourceGenerator.Tests --configuration Release --no-build
 
-      # The same scenario source compiled against MediatR 12.5.0 and against Capar, outcomes compared.
+      # The same scenario source compiled against MediatR 12.5.0 and against Relevox, outcomes compared.
       - name: Differential tests against MediatR 12.5.0
-        run: dotnet run --project tests/Capar.DifferentialTests --configuration Release --no-build
+        run: dotnet run --project tests/Relevox.DifferentialTests --configuration Release --no-build
 
-      # An ASP.NET Core minimal API on Capar, driven over HTTP in process: a scope per request, scoped services in
+      # An ASP.NET Core minimal API on Relevox, driven over HTTP in process: a scope per request, scoped services in
       # handlers and behaviours, problem details from exceptions, a streamed response, concurrent requests.
       - name: Web sample tests
-        run: dotnet run --project tests/Capar.Samples.Web.Tests --configuration Release --no-build
+        run: dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build
 
-      # The same order service on MediatR 12.5 and moved to Capar by following docs/migration.md. Both print
+      # The same order service on MediatR 12.5 and moved to Relevox by following docs/migration.md. Both print
       # what they did; any difference in the transcripts fails the build.
       - name: Migration sample prints the same before and after
         run: |
@@ -74,13 +74,13 @@ jobs:
           global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore Capar.slnx
+        run: dotnet restore Relevox.slnx
 
       # Reads the licence terms of every package in the tree, at every depth, from the restored packages on
       # disk. MediatR 13 and later would fail here, which is the point: the 12.5.0 baseline is pinned on
       # purpose and this keeps it that way.
       - name: Audit
-        run: dotnet run --project tools/Capar.LicenseAudit --configuration Release -- .
+        run: dotnet run --project tools/Relevox.LicenseAudit --configuration Release -- .
 
   nativeaot:
     name: NativeAOT sample
@@ -95,17 +95,17 @@ jobs:
       - name: Native toolchain
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
-      # Publishing with NativeAOT runs the trim and AOT analysis over Capar's runtime and the code the generator
+      # Publishing with NativeAOT runs the trim and AOT analysis over Relevox's runtime and the code the generator
       # wrote for the sample. Warnings are errors, so any reflection left on a dispatch path fails here.
       - name: Publish
-        run: dotnet publish samples/Capar.Samples.Aot --configuration Release --runtime linux-x64 --output aot
+        run: dotnet publish samples/Relevox.Samples.Aot --configuration Release --runtime linux-x64 --output aot
 
       # The binary checks every kind of dispatch and exits non-zero on a wrong answer.
       - name: Run
-        run: ./aot/Capar.Samples.Aot
+        run: ./aot/Relevox.Samples.Aot
 
       - name: Binary size
-        run: ls -l aot/Capar.Samples.Aot
+        run: ls -l aot/Relevox.Samples.Aot
 
   package:
     name: package smoke test
@@ -143,7 +143,7 @@ jobs:
       # Shared runners are far too noisy for nanosecond claims; real numbers come from named hardware and
       # are committed under docs/benchmark-results.
       - name: Sanity
-        run: dotnet run -c Release --project benchmarks/Capar.Benchmarks -- --sanity
+        run: dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --sanity
 
       - name: Dry run
-        run: dotnet run -c Release --project benchmarks/Capar.Benchmarks -- --filter '*' --job Dry
+        run: dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --filter '*' --job Dry

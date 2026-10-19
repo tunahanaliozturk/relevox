@@ -34,8 +34,8 @@ Keep `Task<T>` and `Task`, with MediatR's method names and parameter order.
 ## Revisited after M4
 
 The M4 numbers did not make the case for a `ValueTask` interface. With transient handlers in both libraries,
-which is the default in MediatR and Çapar, Çapar's typed send takes 9.5 ns and allocates 24 B, the handler
+which is the default in MediatR and Relevox, Relevox's typed send takes 9.5 ns and allocates 24 B, the handler
 itself; Mediator 3.0, whose handlers return `ValueTask`, takes 28.3 ns and allocates 88 B. Where Mediator is
-faster, the difference comes from holding handlers as singletons, which Çapar also does when asked to. The
+faster, the difference comes from holding handlers as singletons, which Relevox also does when asked to. The
 `Task` a synchronous handler allocates is real, and small next to what both libraries spend elsewhere. See
 [the M4 results](../benchmark-results/2026-10-17-m4.md).

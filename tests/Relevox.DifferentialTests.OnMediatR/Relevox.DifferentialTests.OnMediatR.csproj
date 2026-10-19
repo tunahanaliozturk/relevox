@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The shared scenarios, compiled against MediatR 12.5.0, the behaviour Relevox is held to. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="MediatR" />
+    <Using Include="MediatR.Pipeline" />
+    <Using Include="MediatR.NotificationPublishers" />
+    <Compile Include="../Relevox.DifferentialTests.Scenarios/*.cs" LinkBase="Scenarios" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+</Project>

@@ -1,10 +1,10 @@
-using Capar;
-using Capar.Pipeline;
+using Relevox;
+using Relevox.Pipeline;
 
 namespace Shop.Orders;
 
-// The order service from samples/Migration/Before, moved from MediatR 12.5 to Capar. Only the usings at the
-// top of this file changed; the project file now references Capar.Contracts instead of MediatR.
+// The order service from samples/Migration/Before, moved from MediatR 12.5 to Relevox. Only the usings at the
+// top of this file changed; the project file now references Relevox.Contracts instead of MediatR.
 
 public sealed record OrderView(int Id, string Customer, int Quantity, bool Cancelled)
 {

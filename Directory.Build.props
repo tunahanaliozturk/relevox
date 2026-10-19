@@ -13,11 +13,11 @@
 
   <PropertyGroup Label="Package metadata">
     <Authors>Tunahan Ali Ozturk</Authors>
-    <Product>Capar</Product>
+    <Product>Relevox</Product>
     <Copyright>Copyright (c) 2026 Tunahan Ali Ozturk</Copyright>
-    <RepositoryUrl>https://github.com/tunahanaliozturk/capar</RepositoryUrl>
+    <RepositoryUrl>https://github.com/tunahanaliozturk/relevox</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/tunahanaliozturk/capar</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/tunahanaliozturk/relevox</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -37,7 +37,7 @@
     its own short README: nuget.org does not render the repository README's relative SVG images.
   -->
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
-    <None Include="$(MSBuildThisFileDirectory)docs/brand/capar-icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)docs/brand/relevox-icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)docs/package-readme.md" Pack="true" PackagePath="README.md" Visible="false" />
   </ItemGroup>
 

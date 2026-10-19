@@ -1,0 +1,31 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Relevox.Contracts/Relevox.Contracts.csproj" />
+    <Project Path="src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj" />
+    <Project Path="src/Relevox.CodeFixes/Relevox.CodeFixes.csproj" />
+    <Project Path="src/Relevox.Migration/Relevox.Migration.csproj" />
+    <Project Path="src/Relevox/Relevox.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Relevox.SourceGenerator.Tests/Relevox.SourceGenerator.Tests.csproj" />
+    <Project Path="tests/Relevox.DifferentialTests.OnRelevox/Relevox.DifferentialTests.OnRelevox.csproj" />
+    <Project Path="tests/Relevox.DifferentialTests.OnMediatR/Relevox.DifferentialTests.OnMediatR.csproj" />
+    <Project Path="tests/Relevox.DifferentialTests/Relevox.DifferentialTests.csproj" />
+    <Project Path="tests/Relevox.Samples.Web.Tests/Relevox.Samples.Web.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Relevox.Samples.Aot/Relevox.Samples.Aot.csproj" />
+    <Project Path="samples/Relevox.Samples.Web/Relevox.Samples.Web.csproj" />
+    <Project Path="samples/Migration/Before/Orders/Before.Orders.csproj" />
+    <Project Path="samples/Migration/Before/App/Before.App.csproj" />
+    <Project Path="samples/Migration/After/Orders/After.Orders.csproj" />
+    <Project Path="samples/Migration/After/App/After.App.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Relevox.Benchmarks/Relevox.Benchmarks.csproj" />
+    <Project Path="benchmarks/Relevox.Benchmarks.Scale/Relevox.Benchmarks.Scale.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Relevox.LicenseAudit/Relevox.LicenseAudit.csproj" />
+  </Folder>
+</Solution>

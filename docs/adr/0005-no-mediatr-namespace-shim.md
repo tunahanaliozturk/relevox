@@ -11,15 +11,15 @@ that.
 
 ## Decision
 
-Çapar's types live in `Capar`. Migration means changing the package reference and the `using` directives.
-A code fix in the `Capar` package rewrites the directives and the registration call (added before the first
-release, as `Capar.CodeFixes`).
+Relevox's types live in `Relevox`. Migration means changing the package reference and the `using` directives.
+A code fix in the `Relevox` package rewrites the directives and the registration call (added before the first
+release, as `Relevox.CodeFixes`).
 
 ## Consequences
 
 - One extra mechanical step for the user, done once with the code fix, or with find and replace outside an
   IDE.
-- A project can reference MediatR and Çapar at the same time during a gradual migration, which a shim
+- A project can reference MediatR and Relevox at the same time during a gradual migration, which a shim
   would make impossible: the two would declare the same type names in the same namespace.
 - Nobody reading a stack trace has to wonder which library they are actually running.
 

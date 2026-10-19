@@ -5,7 +5,7 @@ namespace Shop.Orders;
 
 // A small order service written against MediatR 12.5, the way such code usually looks: commands, queries, a
 // notification with two listeners, a stream, a validation behaviour, a pre-processor and an exception handler.
-// samples/Migration/After holds the same code moved to Capar; diff the two folders to see the migration.
+// samples/Migration/After holds the same code moved to Relevox; diff the two folders to see the migration.
 
 public sealed record OrderView(int Id, string Customer, int Quantity, bool Cancelled)
 {

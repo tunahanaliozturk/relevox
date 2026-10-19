@@ -1,7 +1,7 @@
 # Migrating real projects
 
 Every other test in this repository runs code written for it. This page is about code that was not: two widely
-used .NET applications on MediatR, moved to Çapar the way the [migration guide](migration.md) says, with their
+used .NET applications on MediatR, moved to Relevox the way the [migration guide](migration.md) says, with their
 own tests run before and after.
 
 - Jason Taylor's [Clean Architecture template](https://github.com/jasontaylordev/CleanArchitecture) (MIT), on
@@ -25,19 +25,19 @@ in the template's own dependencies that have nothing to do with the mediator.
 
 ### What the migration took
 
-1. In `Directory.Packages.props`, `MediatR` became `Capar` and `MediatR.Contracts` became `Capar.Contracts`; the
+1. In `Directory.Packages.props`, `MediatR` became `Relevox` and `MediatR.Contracts` became `Relevox.Contracts`; the
    two project files changed the same names. Four lines.
 2. One command for everything else:
 
    ```bash
-   dotnet format analyzers CleanArchitecture.slnx --diagnostics CPR0007 --severity info
+   dotnet format analyzers CleanArchitecture.slnx --diagnostics RVX0007 --severity info
    ```
 
    It changed seven source files: six `using` directives and the registration, which lost
    its `RegisterServicesFromAssembly` line and kept the pre-processor and the four behaviours.
 3. Nothing else. The solution built with warnings as errors and no warnings.
 
-| | MediatR 14.2.0 | Çapar |
+| | MediatR 14.2.0 | Relevox |
 |---|---:|---:|
 | Domain unit tests | 6 passed | 6 passed |
 | Application unit tests | 8 passed | 8 passed |
@@ -46,16 +46,16 @@ in the template's own dependencies that have nothing to do with the mediator.
 
 ### What it found
 
-The first attempt did not go that smoothly, and each problem was Çapar's, fixed before this page was written.
+The first attempt did not go that smoothly, and each problem was Relevox's, fixed before this page was written.
 
 - **The fix never reached the domain project.** The analyzer behind the code fix shipped with the generator in
-  the `Capar` package, and Domain, like most library projects, references only `Capar.Contracts`. The analyzer
-  and the fix now ship in `Capar.Contracts`, which `Capar` depends on, so every project with MediatR code gets
+  the `Relevox` package, and Domain, like most library projects, references only `Relevox.Contracts`. The analyzer
+  and the fix now ship in `Relevox.Contracts`, which `Relevox` depends on, so every project with MediatR code gets
   them.
 - **Every project below the application layer failed to build.** NuGet analyzers flow through project
   references, so Infrastructure, Web and the test projects ran the generator too, each produced an empty
-  mediator of its own, and each reported Application's handlers as CPR0005, an error with warnings as errors.
-  A project that has no handlers or processors of its own, does not call `AddCapar`, and references a project
+  mediator of its own, and each reported Application's handlers as RVX0005, an error with warnings as errors.
+  A project that has no handlers or processors of its own, does not call `AddRelevox`, and references a project
   with a mediator now generates nothing and reports nothing about its references: it uses that project's
   mediator.
 - **Removed lines left the next one indented twice.** The code fix carried a removed statement's indentation
@@ -82,20 +82,20 @@ the MAUI client, which needs workloads this machine does not have, so the comman
 
 ### What the migration took
 
-1. In `Directory.Packages.props`, `MediatR` became `Capar` and `Capar.Contracts`. Ordering.Domain's project
-   file changed `MediatR` to `Capar.Contracts`, and Ordering.API, which had MediatR only through Domain, got
-   an explicit reference to `Capar`, since the generator has to run where `AddCapar` is called.
+1. In `Directory.Packages.props`, `MediatR` became `Relevox` and `Relevox.Contracts`. Ordering.Domain's project
+   file changed `MediatR` to `Relevox.Contracts`, and Ordering.API, which had MediatR only through Domain, got
+   an explicit reference to `Relevox`, since the generator has to run where `AddRelevox` is called.
 2. The same command:
 
    ```bash
-   dotnet format analyzers eShop.Web.slnf --diagnostics CPR0007 --severity info
+   dotnet format analyzers eShop.Web.slnf --diagnostics RVX0007 --severity info
    ```
 
    It changed five source files in 26 seconds: four global `using` directives and the registration, which lost
    its `RegisterServicesFromAssemblyContaining` line and kept the three behaviours.
 3. Nothing else. eShop builds with warnings as errors, and it built with none.
 
-| | MediatR 13.1.0 | Çapar |
+| | MediatR 13.1.0 | Relevox |
 |---|---:|---:|
 | Ordering unit tests | 43 passed | 43 passed |
 | Ordering functional tests, Postgres | 11 passed | 11 passed |
@@ -103,7 +103,7 @@ the MAUI client, which needs workloads this machine does not have, so the comman
 
 The count leaves out the local package feed added to `nuget.config` for the trial, which a real migration
 would not need. The fix does not touch project files, so a `<!-- Before license change -->` comment in
-`Directory.Packages.props` was left sitting above the `Capar` line.
+`Directory.Packages.props` was left sitting above the `Relevox` line.
 
 Only Ordering.API generates a mediator. The two test projects reference it, run the generator because analyzers
 flow through project references, and generate nothing, as the consumer rule from the first trial intends.
@@ -115,7 +115,7 @@ Less than the first one, which is the point of doing a second.
 - **A blank line at the top of the registration.** The scan call was the first statement in the lambda and a
   blank line followed it; removing the call left the block opening with that blank line. The fix now drops
   blank lines that would open a block. The table above is from the fixed version.
-- **The build does not show CPR0007.** Not a bug, but worth saying: after the package swap, `dotnet build` shows
+- **The build does not show RVX0007.** Not a bug, but worth saying: after the package swap, `dotnet build` shows
   only the compiler's errors for the missing `MediatR` namespace, because the compiler does not run analyzers
   once there are errors. The IDE and `dotnet format` do, which the guide now says.
 - **`dotnet format` only changes files below the directory it runs in.** Found writing the package smoke test,
@@ -123,6 +123,6 @@ Less than the first one, which is the point of doing a second.
 
 ## Why bother
 
-None of what the first trial found showed up in the repository's own tests, which reference Çapar's projects
+None of what the first trial found showed up in the repository's own tests, which reference Relevox's projects
 directly rather than its packages, and which were written by the same people who wrote the code. That is the
 case for doing this before a release, and for doing it on more than one project.

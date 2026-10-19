@@ -7,7 +7,7 @@
 
   <!-- A library with handlers references the contracts only. The application's mediator finds them. -->
   <ItemGroup>
-    <ProjectReference Include="../../../../src/Capar.Contracts/Capar.Contracts.csproj" />
+    <ProjectReference Include="../../../../src/Relevox.Contracts/Relevox.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

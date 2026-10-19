@@ -5,11 +5,11 @@
 You need the .NET 10 SDK. Nothing else.
 
 ```bash
-dotnet build Capar.slnx
-dotnet run --project tests/Capar.SourceGenerator.Tests
-dotnet run --project tests/Capar.DifferentialTests
-dotnet run -c Release --project benchmarks/Capar.Benchmarks -- --sanity
-dotnet run --project tools/Capar.LicenseAudit -- .
+dotnet build Relevox.slnx
+dotnet run --project tests/Relevox.SourceGenerator.Tests
+dotnet run --project tests/Relevox.DifferentialTests
+dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --sanity
+dotnet run --project tools/Relevox.LicenseAudit -- .
 bash eng/package-smoke.sh
 ```
 

@@ -10,12 +10,12 @@
   </ItemGroup>
 
   <!--
-    An application would write <PackageReference Include="Capar" />, which brings the generator with it. Inside
+    An application would write <PackageReference Include="Relevox" />, which brings the generator with it. Inside
     this repository the same thing takes two project references.
   -->
   <ItemGroup>
-    <ProjectReference Include="../../../../src/Capar/Capar.csproj" />
-    <ProjectReference Include="../../../../src/Capar.SourceGenerator/Capar.SourceGenerator.csproj"
+    <ProjectReference Include="../../../../src/Relevox/Relevox.csproj" />
+    <ProjectReference Include="../../../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Orders/After.Orders.csproj" />

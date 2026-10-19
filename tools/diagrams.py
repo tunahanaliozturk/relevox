@@ -16,24 +16,24 @@ CHROME = os.environ.get("CHROME", "google-chrome")
 
 THEMES = {
     "light": {
-        "ink": "#0F172A",
-        "muted": "#475569",
-        "line": "#CBD5E1",
-        "fill": "#F8FAFC",
-        "lane": "#94A3B8",
-        "accent": "#3B82F6",
-        "chip": "#DBEAFE",
-        "chipink": "#1E40AF",
+        "ink": "#18181B",
+        "muted": "#52525B",
+        "line": "#D4D4D8",
+        "fill": "#FAFAFA",
+        "lane": "#A1A1AA",
+        "accent": "#CA9A04",
+        "chip": "#FEF3C7",
+        "chipink": "#713F12",
     },
     "dark": {
-        "ink": "#E2E8F0",
-        "muted": "#94A3B8",
-        "line": "#334155",
-        "fill": "#111827",
-        "lane": "#475569",
-        "accent": "#60A5FA",
-        "chip": "#1E3A8A",
-        "chipink": "#DBEAFE",
+        "ink": "#F4F4F5",
+        "muted": "#A1A1AA",
+        "line": "#3F3F46",
+        "fill": "#18181B",
+        "lane": "#52525B",
+        "accent": "#FACC15",
+        "chip": "#422006",
+        "chipink": "#FDE68A",
     },
 }
 
@@ -109,9 +109,9 @@ def how_it_works(t):
         lane(t, 10, 10, 840, 196, "While the project builds"),
         box(t, 30, 64, 210, 106, "Your code", ["requests and notifications", "handlers, here and in the", "projects it references"]),
         box(t, 290, 64, 210, 106, "Generator", ["reads every handler", "writes plain C# into", "this project"]),
-        box(t, 560, 38, 270, 46, "CaparMediator.g.cs"),
-        box(t, 560, 94, 270, 46, "AddCapar()"),
-        box(t, 560, 150, 270, 46, "CPR0001 to CPR0007", strong=True),
+        box(t, 560, 38, 270, 46, "RelevoxMediator.g.cs"),
+        box(t, 560, 94, 270, 46, "AddRelevox()"),
+        box(t, 560, 150, 270, 46, "RVX0001 to RVX0007", strong=True),
         arrow(t, "M240 117 H284"),
         arrow(t, "M500 117 H526 V61 H554"),
         arrow(t, "M500 117 H554"),
@@ -132,9 +132,9 @@ def how_it_works(t):
 
 def project_layout(t):
     return [
-        box(t, 20, 30, 250, 112, "API, tests", ["reference the application", "use its mediator", "and generate nothing"], chip="no Capar"),
-        box(t, 360, 30, 260, 112, "Application", ["handlers and behaviours", "calls AddCapar()", "owns the one mediator"], strong=True, chip="Capar"),
-        box(t, 710, 30, 270, 112, "Libraries", ["requests, notifications", "and handlers of their own", "no generated code"], chip="Capar.Contracts"),
+        box(t, 20, 30, 250, 112, "API, tests", ["reference the application", "use its mediator", "and generate nothing"], chip="no Relevox"),
+        box(t, 360, 30, 260, 112, "Application", ["handlers and behaviours", "calls AddRelevox()", "owns the one mediator"], strong=True, chip="Relevox"),
+        box(t, 710, 30, 270, 112, "Libraries", ["requests, notifications", "and handlers of their own", "no generated code"], chip="Relevox.Contracts"),
         arrow(t, "M270 86 H354", "references", (312, 76)),
         arrow(t, "M620 86 H704", "references", (662, 76)),
     ]
@@ -142,8 +142,8 @@ def project_layout(t):
 
 def migration(t):
     return [
-        box(t, 20, 30, 230, 112, "Swap packages", ["MediatR to Capar in the app", "Capar.Contracts elsewhere"], badge="1"),
-        box(t, 290, 30, 280, 112, "Run one command", ["dotnet format analyzers", "  --diagnostics CPR0007", "  --severity info"], badge="2", mono_lines=True),
+        box(t, 20, 30, 230, 112, "Swap packages", ["MediatR to Relevox in the app", "Relevox.Contracts elsewhere"], badge="1"),
+        box(t, 290, 30, 280, 112, "Run one command", ["dotnet format analyzers", "  --diagnostics RVX0007", "  --severity info"], badge="2", mono_lines=True),
         box(t, 610, 30, 170, 112, "Build", ["nothing else", "to change"], badge="3"),
         box(t, 820, 18, 250, 136, "Tried on", ["Clean Architecture, MediatR 14", "10 files, 33 of 33 tests", "eShop, MediatR 13", "8 files, 54 of 54 tests"], strong=True),
         arrow(t, "M250 86 H284"),

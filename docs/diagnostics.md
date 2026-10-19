@@ -1,21 +1,21 @@
 # Diagnostics
 
-Çapar decides dispatch while the project builds, so the mistakes a reflection-based mediator finds when a
+Relevox decides dispatch while the project builds, so the mistakes a reflection-based mediator finds when a
 request is first sent, usually in production, are reported by the compiler instead. Each rule below is
-reported by the analyzer in the `Capar` package, at the declaration it is about, so `#pragma warning
+reported by the analyzer in the `Relevox` package, at the declaration it is about, so `#pragma warning
 disable` and `.editorconfig` severities work as they do for any other analyzer.
 
 | Rule | Default | In short |
 |---|---|---|
-| [CPR0001](#cpr0001) | Warning | A request has no handler |
-| [CPR0002](#cpr0002) | Error | A request has more than one handler |
-| [CPR0003](#cpr0003) | Error | A handler cannot be called from the generated code |
-| [CPR0004](#cpr0004) | Warning | A generic handler cannot be registered |
-| [CPR0005](#cpr0005) | Warning | A referenced project has its own mediator |
-| [CPR0006](#cpr0006) | Warning | An `AddCapar` call registers another project's mediator |
-| [CPR0007](#cpr0007) | Info | MediatR code to move to Capar |
+| [RVX0001](#rvx0001) | Warning | A request has no handler |
+| [RVX0002](#rvx0002) | Error | A request has more than one handler |
+| [RVX0003](#rvx0003) | Error | A handler cannot be called from the generated code |
+| [RVX0004](#rvx0004) | Warning | A generic handler cannot be registered |
+| [RVX0005](#rvx0005) | Warning | A referenced project has its own mediator |
+| [RVX0006](#rvx0006) | Warning | An `AddRelevox` call registers another project's mediator |
+| [RVX0007](#rvx0007) | Info | MediatR code to move to Relevox |
 
-## CPR0001
+## RVX0001
 
 **Request has no handler.** Warning.
 
@@ -29,17 +29,17 @@ halfway through a change. A build that treats warnings as errors still stops on 
 the request is sent only from another application that has the handler, suppress the warning for that type:
 
 ```csharp
-#pragma warning disable CPR0001 // handled by the billing service, which sends it over the bus
+#pragma warning disable RVX0001 // handled by the billing service, which sends it over the bus
 public sealed record ChargeCard(Guid OrderId) : IRequest<Receipt>;
-#pragma warning restore CPR0001
+#pragma warning restore RVX0001
 ```
 
-## CPR0002
+## RVX0002
 
 **Request has more than one handler.** Error.
 
 A request is handled by exactly one handler. With two there is no right answer: MediatR keeps whichever its
-assembly scan registered first, which depends on type order in metadata, and Çapar refuses to guess. Neither
+assembly scan registered first, which depends on type order in metadata, and Relevox refuses to guess. Neither
 handler is dispatched until the conflict is gone.
 
 This includes a concrete handler and a concrete subclass of it, which MediatR registers as two handlers for
@@ -48,20 +48,20 @@ the same request.
 **Fix:** remove one, or make the base handler `abstract`. If several pieces of code really should all react,
 the message is a notification: implement `INotification` and `INotificationHandler<T>` instead.
 
-## CPR0003
+## RVX0003
 
 **Handler cannot be called from generated code.** Error.
 
-The generated mediator is ordinary C# compiled into the project that calls `AddCapar`, so it can only call
+The generated mediator is ordinary C# compiled into the project that calls `AddRelevox`, so it can only call
 handlers that project can see. The message says why this one cannot: the handler, or a type it handles, is
 `internal` to another project, or `private`, or nested in a `private` type. A handler whose type, or whose
 request or response type, is marked `[Obsolete]` as an error is reported here too, because calling it would
 not compile.
 
-**Fix:** make the handler `public`, or give the project that calls `AddCapar` access with
+**Fix:** make the handler `public`, or give the project that calls `AddRelevox` access with
 `[assembly: InternalsVisibleTo("YourApp")]` in the project that declares the handler.
 
-## CPR0004
+## RVX0004
 
 **Generic handler cannot be registered.** Warning.
 
@@ -90,7 +90,7 @@ The message says which of these a handler missed:
 | nested in a generic type | The handler's own type parameters come from the type around it. |
 
 An inaccessible generic handler, such as a `private` nested one or an `internal` one in another project, is
-reported as [CPR0003](#cpr0003), like a written one.
+reported as [RVX0003](#rvx0003), like a written one.
 
 **Fix:** constrain the type parameter to an interface or base class declared in the solution, or make the
 generic handler `abstract` and declare one closed handler per request:
@@ -105,58 +105,58 @@ public sealed class GetCustomerById(Store store) : GetByIdHandler<Customer>(stor
 public sealed class GetOrderById(Store store) : GetByIdHandler<Order>(store);
 ```
 
-## CPR0005
+## RVX0005
 
 **Referenced project has its own mediator.** Warning.
 
-A project this one references also references the `Capar` package, so its build generated a mediator of its
-own, and its handlers belong to that mediator rather than to this one. That is how a library uses Çapar
+A project this one references also references the `Relevox` package, so its build generated a mediator of its
+own, and its handlers belong to that mediator rather than to this one. That is how a library uses Relevox
 privately. The warning appears only when that project declares public handlers, which usually means it was
 meant to contribute handlers to the application and referenced the wrong package.
 
-**Fix:** in the referenced project, replace the `Capar` package with `Capar.Contracts`. Only the project that
-calls `AddCapar`, usually the host, references `Capar`. If the library really does keep its own mediator,
+**Fix:** in the referenced project, replace the `Relevox` package with `Relevox.Contracts`. Only the project that
+calls `AddRelevox`, usually the host, references `Relevox`. If the library really does keep its own mediator,
 make its handlers `internal` and the warning goes away.
 
-## CPR0006
+## RVX0006
 
-**AddCapar call registers another project's mediator.** Warning.
+**AddRelevox call registers another project's mediator.** Warning.
 
-Every project that references the `Capar` package gets an `AddCapar` of its own, which registers that
-project's mediator and the handlers it found. When another project's `AddCapar` is visible too, because that
+Every project that references the `Relevox` package gets an `AddRelevox` of its own, which registers that
+project's mediator and the handlers it found. When another project's `AddRelevox` is visible too, because that
 project gives this one `InternalsVisibleTo`, a call can bind to the other one. It compiles, and this project's
 handlers are never registered: the first request sent fails with "no handler".
 
-The usual cases are a test project that references `Capar` and the application it tests, and a library that
-uses Çapar privately and grants the host access to its internals.
+The usual cases are a test project that references `Relevox` and the application it tests, and a library that
+uses Relevox privately and grants the host access to its internals.
 
 **Fix:** call this project's method by its full name, which the message gives:
 
 ```csharp
-global::Shop.Tests.CaparServiceCollectionExtensions.AddCapar(services);
+global::Shop.Tests.RelevoxServiceCollectionExtensions.AddRelevox(services);
 ```
 
 If registering the other project's mediator is what you meant, suppress the warning at that call.
 
-## CPR0007
+## RVX0007
 
-**MediatR code to move to Capar.** Info.
+**MediatR code to move to Relevox.** Info.
 
 Reported once the MediatR package is gone, on each piece of MediatR code the compiler can no longer resolve: a
 name rooted at `MediatR`, in a `using` directive, an alias, a `using static`, a type or an expression such as
 `MediatR.Unit.Value`; `MediatRServiceConfiguration`; and every `AddMediatR` call. Nothing is reported while the
 MediatR package is still referenced, so a project can move over when it is ready.
 
-The compiler already reports the same code as errors, under several ids. CPR0007 gives it one, so that the code
-fix **Move from MediatR to Capar** can be applied to all of it with a single *Fix all occurrences in: Solution*.
+The compiler already reports the same code as errors, under several ids. RVX0007 gives it one, so that the code
+fix **Move from MediatR to Relevox** can be applied to all of it with a single *Fix all occurrences in: Solution*.
 
-**Fix:** apply the code fix. It renames `MediatR` to `Capar` and `MediatRServiceConfiguration` to `CaparOptions`,
-and turns `AddMediatR` into `AddCapar`, removing the settings that only drove MediatR's assembly scan, its licence
+**Fix:** apply the code fix. It renames `MediatR` to `Relevox` and `MediatRServiceConfiguration` to `RelevoxOptions`,
+and turns `AddMediatR` into `AddRelevox`, removing the settings that only drove MediatR's assembly scan, its licence
 check or its run-time closing of generic handlers, and keeping comments and `#if` blocks around them. A comment
 at the end of a removed line goes with it, since it was about that line. It leaves
 alone, for a person to decide:
 
-- an options object built before the call and passed to `AddMediatR`, which `AddCapar` cannot take;
-- names in MediatR namespaces Çapar has no counterpart for, such as `MediatR.Registration`;
+- an options object built before the call and passed to `AddMediatR`, which `AddRelevox` cannot take;
+- names in MediatR namespaces Relevox has no counterpart for, such as `MediatR.Registration`;
 - a namespace of your own called `MediatR`, which resolves and so is not reported: rename it first;
 - `MediatR` names in XML documentation `cref`s.

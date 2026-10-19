@@ -1,11 +1,11 @@
-# Moving from MediatR 12 to Çapar
+# Moving from MediatR 12 to Relevox
 
-Çapar keeps MediatR 12's handler signatures, so a migration changes package references, `using` directives
+Relevox keeps MediatR 12's handler signatures, so a migration changes package references, `using` directives
 and one registration call. Handlers, behaviours, processors, exception handlers and the code that sends
 requests stay as they are.
 
 [`samples/Migration`](../samples/Migration) is a worked example: the same order service on MediatR 12.5
-(`Before`) and on Çapar (`After`). CI runs both and fails if what they print differs. Comparing the two
+(`Before`) and on Relevox (`After`). CI runs both and fails if what they print differs. Comparing the two
 folders shows every change this guide describes:
 
 ```bash
@@ -14,56 +14,56 @@ diff -ru --exclude=bin --exclude=obj samples/Migration/Before samples/Migration/
 
 ## Before you start
 
-- **.NET 10.** Çapar targets `net10.0` only ([ADR 0003](adr/0003-net10-only.md)).
+- **.NET 10.** Relevox targets `net10.0` only ([ADR 0003](adr/0003-net10-only.md)).
 - **MediatR 12.x.** MediatR 13 and 14 have the same request and handler types as 12.5, so this guide applies
   to them too; also delete the `LicenseKey` line from the registration in step 3.
-- **Know where your handlers are.** Çapar finds them while the application builds: in the application
+- **Know where your handlers are.** Relevox finds them while the application builds: in the application
   itself and in every project it references, directly or not. Handlers in an assembly loaded at run time,
   such as a plugin, are not found. See [Not supported](compatibility.md#not-supported).
 
 ## 1. Packages
 
-The project that calls `AddMediatR`, usually the host, references `Capar`, which brings the source generator.
-Every other project that declares requests or handlers references `Capar.Contracts`, which has no
+The project that calls `AddMediatR`, usually the host, references `Relevox`, which brings the source generator.
+Every other project that declares requests or handlers references `Relevox.Contracts`, which has no
 dependencies.
 
 ```diff
  <!-- the host -->
 -<PackageReference Include="MediatR" Version="12.5.0" />
-+<PackageReference Include="Capar" Version="..." />
++<PackageReference Include="Relevox" Version="..." />
 
  <!-- a library with requests and handlers -->
 -<PackageReference Include="MediatR" Version="12.5.0" />
-+<PackageReference Include="Capar.Contracts" Version="..." />
++<PackageReference Include="Relevox.Contracts" Version="..." />
 ```
 
 Remove `MediatR.Contracts` and `MediatR.Extensions.Microsoft.DependencyInjection` too, if they are referenced.
 
-Getting this split wrong is reported: a library that references `Capar` instead of `Capar.Contracts` gets a
-mediator of its own, and the host's build warns with [CPR0005](diagnostics.md#cpr0005) when the library has
-public handlers. If that library also gives the host `InternalsVisibleTo`, the host's `AddCapar()` call can
-bind to the library's method, and the build warns with [CPR0006](diagnostics.md#cpr0006).
+Getting this split wrong is reported: a library that references `Relevox` instead of `Relevox.Contracts` gets a
+mediator of its own, and the host's build warns with [RVX0005](diagnostics.md#rvx0005) when the library has
+public handlers. If that library also gives the host `InternalsVisibleTo`, the host's `AddRelevox()` call can
+bind to the library's method, and the build warns with [RVX0006](diagnostics.md#rvx0006).
 
 ### In Visual Studio, Rider or VS Code
 
 Steps 2 and 3 are a code fix. Once the packages are swapped, every piece of MediatR code is marked with
-[CPR0007](diagnostics.md#cpr0007), a suggestion that offers **Move from MediatR to Capar**. Choose *Fix all
+[RVX0007](diagnostics.md#rvx0007), a suggestion that offers **Move from MediatR to Relevox**. Choose *Fix all
 occurrences in: Solution* on any of them and the IDE rewrites the `using` directives, names rooted at
 `MediatR`, `MediatRServiceConfiguration` and the registration calls in one go, dropping the scanning, licence
 and generic-closing settings that steps 2 and 3 describe. What it leaves, such as `using
 MediatR.Registration;` or an options object passed to `AddMediatR`, stays a compiler error for you to decide
-about; the CPR0007 page lists those cases.
+about; the RVX0007 page lists those cases.
 
 ### From the command line
 
 The same fix runs without an IDE, after the package swap and a restore:
 
 ```bash
-dotnet format analyzers YourSolution.slnx --diagnostics CPR0007 --severity info
+dotnet format analyzers YourSolution.slnx --diagnostics RVX0007 --severity info
 ```
 
 Run it from the solution's directory: `dotnet format` only changes files below the directory it runs in. A
-`dotnet build` before the fix shows the compiler's errors for the missing `MediatR` namespace and not CPR0007,
+`dotnet build` before the fix shows the compiler's errors for the missing `MediatR` namespace and not RVX0007,
 because the compiler does not run analyzers once there are errors; the IDE and `dotnet format` do.
 
 That is how a Clean Architecture solution and Microsoft's eShop were migrated, with their tests passing before
@@ -72,33 +72,33 @@ and for doing it by hand.
 
 ## 2. `using` directives
 
-| MediatR | Çapar |
+| MediatR | Relevox |
 |---|---|
-| `using MediatR;` | `using Capar;` |
-| `using MediatR.Pipeline;` | `using Capar.Pipeline;` |
-| `using MediatR.NotificationPublishers;` | `using Capar.NotificationPublishers;` |
-| `using MediatR.Entities;` | `using Capar.Entities;` |
+| `using MediatR;` | `using Relevox;` |
+| `using MediatR.Pipeline;` | `using Relevox.Pipeline;` |
+| `using MediatR.NotificationPublishers;` | `using Relevox.NotificationPublishers;` |
+| `using MediatR.Entities;` | `using Relevox.Entities;` |
 
 The type names inside them are the same. A find and replace over the solution does it, with GNU `grep` and
 `sed` (Linux, or Git Bash on Windows):
 
 ```bash
 pattern='using MediatR(\.Pipeline|\.NotificationPublishers|\.Entities)?;'
-grep -rlZE --include=*.cs "$pattern" . | xargs -0 -r sed -i -E "s/$pattern/using Capar\1;/"
+grep -rlZE --include=*.cs "$pattern" . | xargs -0 -r sed -i -E "s/$pattern/using Relevox\1;/"
 ```
 
 It rewrites only the four namespaces in the table, `global using` lines included. Any other `MediatR`
-namespace left behind, such as `MediatR.Registration`, has no Çapar counterpart and shows up as a compile
+namespace left behind, such as `MediatR.Registration`, has no Relevox counterpart and shows up as a compile
 error. Check `<Using Include="MediatR" />` items in project files as well.
 
 ## 3. Registration
 
-`AddMediatR` becomes `AddCapar`. It is declared in `Microsoft.Extensions.DependencyInjection`, as
-`AddMediatR` is, so no new `using` is needed ([ADR 0007](adr/0007-addcapar-namespace.md)).
+`AddMediatR` becomes `AddRelevox`. It is declared in `Microsoft.Extensions.DependencyInjection`, as
+`AddMediatR` is, so no new `using` is needed ([ADR 0007](adr/0007-addrelevox-namespace.md)).
 
 ```diff
 -services.AddMediatR(options =>
-+services.AddCapar(options =>
++services.AddRelevox(options =>
  {
 -    options.RegisterServicesFromAssemblyContaining<PlaceOrder>();
      options.AddOpenBehavior(typeof(Validation<,>));
@@ -109,7 +109,7 @@ error. Check `<Using Include="MediatR" />` items in project files as well.
 Delete the scanning calls, because there is nothing to scan: `RegisterServicesFromAssembly`,
 `RegisterServicesFromAssemblies`, `RegisterServicesFromAssemblyContaining`, `AssembliesToRegister` and
 `TypeEvaluator`. Delete `MediatorImplementationType` too: the mediator is generated, so there is no class to
-swap. Everything else on MediatR's configuration exists on `CaparOptions` with the same name and number of
+swap. Everything else on MediatR's configuration exists on `RelevoxOptions` with the same name and number of
 parameters: behaviours,
 stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `NotificationPublisherType`,
 `AutoRegisterRequestProcessors` and `RequestExceptionActionProcessorStrategy`. A test compares the two types
@@ -117,37 +117,37 @@ member by member. Delete `RegisterGenericHandlers` and the limits that go with i
 (`MaxGenericTypeParameters`, `MaxGenericTypeRegistrations`, `MaxTypesClosing`, `RegistrationTimeout`): generic
 handlers are closed while the project builds, whatever they said ([ADR 0008](adr/0008-generic-handlers.md)).
 A generic request handler that MediatR's default never registered is live after the migration, and two of
-them for the same request fail the build with [CPR0002](diagnostics.md#cpr0002).
+them for the same request fail the build with [RVX0002](diagnostics.md#rvx0002).
 
-If you named the configuration type, `MediatRServiceConfiguration` is `CaparOptions`.
+If you named the configuration type, `MediatRServiceConfiguration` is `RelevoxOptions`.
 
 ### Test projects
 
-A test project that only resolves the application's services needs nothing: it does not reference `Capar`,
-so it has no `AddCapar` of its own, and if the application gives it `InternalsVisibleTo` it can call the
+A test project that only resolves the application's services needs nothing: it does not reference `Relevox`,
+so it has no `AddRelevox` of its own, and if the application gives it `InternalsVisibleTo` it can call the
 application's.
 
-A test project that references `Capar` itself, to declare test handlers, gets its own `AddCapar` in its own
-namespace when the application's is visible to it ([ADR 0007](adr/0007-addcapar-namespace.md)). Code inside
+A test project that references `Relevox` itself, to declare test handlers, gets its own `AddRelevox` in its own
+namespace when the application's is visible to it ([ADR 0007](adr/0007-addrelevox-namespace.md)). Code inside
 the test project's namespace reaches its own; anywhere else a call can reach the application's, and the build
-warns with [CPR0006](diagnostics.md#cpr0006). Calling it by its full name always works:
+warns with [RVX0006](diagnostics.md#rvx0006). Calling it by its full name always works:
 
 ```csharp
-global::Shop.Tests.CaparServiceCollectionExtensions.AddCapar(services);
+global::Shop.Tests.RelevoxServiceCollectionExtensions.AddRelevox(services);
 ```
 
 ## 4. Build, and read what it reports
 
 The first build tells you what MediatR would only have told you at run time:
 
-- [CPR0001](diagnostics.md#cpr0001): a request with no handler. MediatR would throw when it was sent.
-- [CPR0002](diagnostics.md#cpr0002): a request with two handlers. MediatR silently used one of them.
-- [CPR0003](diagnostics.md#cpr0003): a handler the application cannot see, usually `internal` in a library.
+- [RVX0001](diagnostics.md#rvx0001): a request with no handler. MediatR would throw when it was sent.
+- [RVX0002](diagnostics.md#rvx0002): a request with two handlers. MediatR silently used one of them.
+- [RVX0003](diagnostics.md#rvx0003): a handler the application cannot see, usually `internal` in a library.
   MediatR's scan registered it through reflection.
-- [CPR0004](diagnostics.md#cpr0004): a generic handler the build cannot close, usually one whose type parameter
+- [RVX0004](diagnostics.md#rvx0004): a generic handler the build cannot close, usually one whose type parameter
   has no constraint.
-- [CPR0005](diagnostics.md#cpr0005): a library that references `Capar` instead of `Capar.Contracts`.
-- [CPR0006](diagnostics.md#cpr0006): an `AddCapar` call that registers another project's mediator.
+- [RVX0005](diagnostics.md#rvx0005): a library that references `Relevox` instead of `Relevox.Contracts`.
+- [RVX0006](diagnostics.md#rvx0006): an `AddRelevox` call that registers another project's mediator.
 
 Each one links to what it means and how to fix it.
 
@@ -159,7 +159,7 @@ odd parts: which processors run, the order handlers run in, when a send throws i
 
 - **Two handlers for one request is a build error** instead of a coin toss.
 - **Behaviours do not run for a request nothing handles.** The send fails with the same exception type,
-  without the behaviours' side effects. The build already warned with CPR0001.
+  without the behaviours' side effects. The build already warned with RVX0001.
 - **Exception handlers are found for exception types the build can see**: those some handler for the request
   names, and `Exception`. One registered directly with the container for some other exception type is not
   found.
@@ -171,12 +171,12 @@ odd parts: which processors run, the order handlers run in, when a send throws i
 
 Nothing below is needed to migrate. Each is a choice MediatR did not offer.
 
-- **Inject the generated mediator where the call site knows what it sends.** `CaparMediator`, in the
+- **Inject the generated mediator where the call site knows what it sends.** `RelevoxMediator`, in the
   host's own namespace, has a typed `Send` per request that calls the handler with nothing to look up. It
   costs a quarter of MediatR's time, against about half through `ISender`
   ([measurements](benchmark-results/2026-10-17-m4.md)).
 - **Make stateless handlers singletons** with `options.HandlerLifetime = ServiceLifetime.Singleton`, or by
-  registering a handler yourself before `AddCapar`. The generated mediator then resolves each handler once
+  registering a handler yourself before `AddRelevox`. The generated mediator then resolves each handler once
   and keeps it.
 - **Publish with NativeAOT.** Nothing on the dispatch path uses reflection, and no trimming annotations are
   needed.

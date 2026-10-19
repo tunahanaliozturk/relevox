@@ -45,11 +45,11 @@ dotnet_diagnostic.CA1822.severity = none
 # The contracts mirror MediatR 12 names on purpose: RequestHandlerDelegate, StreamHandlerDelegate and a
 # parameter called next are what every existing behaviour is written against. Renaming them for the
 # analyzer would break the one-line migration this library exists to offer. See ADR 0002 and ADR 0005.
-[src/Capar.Contracts/**.cs]
+[src/Relevox.Contracts/**.cs]
 dotnet_diagnostic.CA1711.severity = none
 dotnet_diagnostic.CA1716.severity = none
 
 # The shared scenarios call next() without a token on purpose: what the handler receives then is one of
 # the behaviours being compared with MediatR.
-[tests/Capar.DifferentialTests.Scenarios/**.cs]
+[tests/Relevox.DifferentialTests.Scenarios/**.cs]
 dotnet_diagnostic.CA2016.severity = none

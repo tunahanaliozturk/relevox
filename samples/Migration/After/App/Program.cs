@@ -1,11 +1,11 @@
-using Capar;
 using Microsoft.Extensions.DependencyInjection;
+using Relevox;
 using Shop.Orders;
 
 ServiceCollection services = new();
 services.AddSingleton<OrderStore>();
 services.AddSingleton<Journal>();
-services.AddCapar(options =>
+services.AddRelevox(options =>
 {
     options.AddOpenBehavior(typeof(Validation<,>));
     options.AddOpenRequestPreProcessor(typeof(Stamp<>));

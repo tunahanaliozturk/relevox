@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="Relevox">
+  <defs>
+    <mask id="behind-second" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+      <rect width="100" height="100" fill="#fff"/>
+      <line x1="30" y1="72" x2="60" y2="42" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+      <line x1="52" y1="60" x2="86" y2="26" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+    </mask>
+    <mask id="behind-third" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+      <rect width="100" height="100" fill="#fff"/>
+      <line x1="52" y1="60" x2="86" y2="26" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <line x1="10" y1="84" x2="38" y2="56" stroke="#18181B" stroke-opacity="0.4" stroke-width="13" stroke-linecap="round" mask="url(#behind-second)"/>
+  <line x1="30" y1="72" x2="60" y2="42" stroke="#18181B" stroke-width="13" stroke-linecap="round" mask="url(#behind-third)"/>
+  <line x1="52" y1="60" x2="86" y2="26" stroke="#CA9A04" stroke-width="13" stroke-linecap="round"/>
+</svg>
