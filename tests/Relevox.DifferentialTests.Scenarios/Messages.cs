@@ -95,6 +95,21 @@ public sealed record Quiet : INotification;
 
 public sealed record Boom : INotification;
 
+public sealed record Chime(bool Fail) : INotification;
+
+// The synchronous base MediatR 12 has, so a handler written against it moves over unchanged.
+public sealed class ChimeHandler(Trace trace) : NotificationHandler<Chime>
+{
+    protected override void Handle(Chime notification)
+    {
+        trace.Add($"chime {notification.Fail}");
+        if (notification.Fail)
+        {
+            throw new InvalidOperationException("chime");
+        }
+    }
+}
+
 public sealed class AlarmLogger(Trace trace) : INotificationHandler<Alarm>
 {
     public Task Handle(Alarm notification, CancellationToken cancellationToken)
