@@ -571,14 +571,16 @@ internal static class Emitter
             throughParameters.Add($"{Token} cancellationToken");
             code.Line();
             code.Open($"private {Task} PublishThrough{index}({string.Join(", ", throughParameters)})");
-            code.Line("global::Relevox.NotificationHandlerExecutor[] executors =");
-            code.Line("[");
+            // An array initializer rather than a collection expression: the generated code compiles as part of the
+            // user's project, which may pin C# 11.
+            code.Line("global::Relevox.NotificationHandlerExecutor[] executors = new global::Relevox.NotificationHandlerExecutor[]");
+            code.Line("{");
             for (int target = 0; target < notification.Targets.Length; target++)
             {
                 code.Line($"    new(handler{target}, (message, token) => handler{target}.Handle(({shape.Syntax})message, token)),");
             }
 
-            code.Line("];");
+            code.Line("};");
             code.Line("return Publisher().Publish(executors, notification, cancellationToken);");
             code.Close();
 

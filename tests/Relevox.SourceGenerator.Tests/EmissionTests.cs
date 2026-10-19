@@ -65,6 +65,28 @@ public sealed class EmissionTests
     }
 
     [Fact]
+    public void The_generated_code_compiles_as_CSharp_11()
+    {
+        // A project can pin an older LangVersion than its SDK's default. The generated files are compiled as part of
+        // it, so they must not need anything newer than the oldest C# a supported project might pin.
+        GeneratorRun run = GeneratorHarness.Run(Everything + """
+
+            public sealed class Audit<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+        Microsoft.CodeAnalysis.CSharp.CSharpParseOptions eleven = new(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp11);
+        Microsoft.CodeAnalysis.Compilation older = run.Compilation.RemoveAllSyntaxTrees().AddSyntaxTrees(
+            run.Compilation.SyntaxTrees.Select(tree => Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(tree.GetText(), eleven, tree.FilePath)));
+
+        older.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(static diagnostic => diagnostic.ToString())
+            .ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_struct_request_is_not_boxed_to_be_null_checked()
     {
         string mediator = GeneratorHarness.Run(Everything).Mediator;
