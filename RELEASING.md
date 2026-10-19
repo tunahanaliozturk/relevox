@@ -5,8 +5,9 @@ NuGet, waits for an approval.
 
 ## Once, before the first release
 
-1. **Decide the name.** The package IDs, the namespaces, the diagnostic prefix `CPR`, the help links and the
-   logo all carry it; renaming later is a breaking change for everyone who installed it.
+1. **Decide the name.** Done: Relevox, with the diagnostic prefix `RVX` ([ADR 0010](docs/adr/0010-name-relevox.md)).
+   The package IDs, the namespaces, the help links and the logo all carry it; renaming after a release is a
+   breaking change for everyone who installed it.
 2. **Reserve the package ID prefix** on nuget.org for the account that will own the packages, so nobody else
    can publish under it.
 3. **Set up trusted publishing** on nuget.org: a policy for this repository, the workflow `release.yml` and
