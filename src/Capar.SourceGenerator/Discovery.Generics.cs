@@ -188,6 +188,19 @@ internal static partial class Discovery
                     && SymbolEqualityComparer.Default.Equals(contract.TypeArguments[0], definition.TypeParameters[0])))
             {
                 ITypeParameterSymbol parameter = definition.TypeParameters[0];
+
+                // Kept open too, for notification types the build never saw, such as EntityCreated<Invoice> built
+                // in a generic base class: the container would close it for those under MediatR.
+                _parts.Add(Empty with
+                {
+                    OpenNotifications = new[]
+                    {
+                        new OpenNotificationHandler(
+                            definition.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
+                            OrderOf(definition, _compilation, definition.Locations.Any(static location => location.IsInSource))),
+                    }.ToEquatableArray(),
+                });
+
                 foreach (INamedTypeSymbol notification in Notifications())
                 {
                     if (Satisfies(parameter, notification, Map(parameter, notification), _compilation))

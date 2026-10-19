@@ -30,7 +30,8 @@ internal static partial class Discovery
         EquatableArray<MessageModel>.Empty,
         EquatableArray<SkippedModel>.Empty,
         EquatableArray<OpenRegistration>.Empty,
-        EquatableArray<string>.Empty);
+        EquatableArray<string>.Empty,
+        EquatableArray<OpenNotificationHandler>.Empty);
 
     /// <param name="symbol">The type.</param>
     /// <param name="compilation">The compilation the generated code will be part of.</param>
@@ -140,7 +141,8 @@ internal static partial class Discovery
                 messages.Distinct().ToEquatableArray(),
                 skipped.Distinct().ToEquatableArray(),
                 open.Distinct().ToEquatableArray(),
-                experimental.OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
+                experimental.OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray(),
+                EquatableArray<OpenNotificationHandler>.Empty);
 
         void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response, INamedTypeSymbol contract, ITypeSymbol? exception = null)
         {
@@ -395,7 +397,8 @@ internal static partial class Discovery
             list.SelectMany(static part => part.Messages).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Skipped).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Open).Distinct().ToEquatableArray(),
-            list.SelectMany(static part => part.Experimental).Distinct().OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray());
+            list.SelectMany(static part => part.Experimental).Distinct().OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray(),
+            list.SelectMany(static part => part.OpenNotifications).Distinct().ToEquatableArray());
     }
 
     private static bool ReachesContracts(IAssemblySymbol assembly, Dictionary<IAssemblySymbol, bool> memo)
