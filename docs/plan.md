@@ -5,7 +5,8 @@ and Portuguese, with *vox*, Latin for voice: the message handed from runner to r
 passes through each behaviour to its handler. The project was called Çapar until 2026-10-19, after the
 Ottoman mounted courier; [ADR 0010](adr/0010-name-relevox.md) records why it changed.
 
-Status: plan, before any code. The repository stays private until v1.0.0.
+Status: the plan the project was built from, kept as written; the code, the ADRs and the CHANGELOG say where
+it ended up.
 
 ## 1. Why this exists
 
