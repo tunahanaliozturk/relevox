@@ -206,7 +206,7 @@ public sealed class RelevoxOnlyTests
         throw new InvalidOperationException("Expected the call to fail.");
     }
 
-    private static ServiceProvider Build(Action<global::Relevox.RelevoxOptions>? configure = null, Action<IServiceCollection>? before = null)
+    private static ServiceProvider Build(Action<global::Microsoft.Extensions.DependencyInjection.RelevoxOptions>? configure = null, Action<IServiceCollection>? before = null)
     {
         ServiceCollection services = new();
         services.AddSingleton<S.Trace>();

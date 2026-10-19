@@ -80,6 +80,7 @@ public sealed class MigrateFromMediatR : CodeFixProvider
                 ("Name", IdentifierNameSyntax name) when name.FirstAncestorOrSelf<UsingDirectiveSyntax>() is { Parent: { } block } => (block, WithUsingsMoved(block)),
                 ("Name", IdentifierNameSyntax name) => (name, Renamed(name, "Relevox")),
                 ("Configuration", IdentifierNameSyntax name) => (name, Renamed(name, "RelevoxOptions")),
+                ("Strategy", IdentifierNameSyntax name) => (name, Qualified(name)),
                 ("Registration", SimpleNameSyntax method) when Registration(method) is { } call
                     && Rewrite(call, method, model, context.CancellationToken) is { } rewritten => (call, rewritten),
                 _ => null,
@@ -101,6 +102,15 @@ public sealed class MigrateFromMediatR : CodeFixProvider
 
     private static IdentifierNameSyntax Renamed(IdentifierNameSyntax name, string to) =>
         name.WithIdentifier(SyntaxFactory.Identifier(to).WithTriviaFrom(name.Identifier));
+
+    // RequestExceptionActionProcessorStrategy, which code that configured MediatR found through
+    // Microsoft.Extensions.DependencyInjection, written with the namespace Relevox declares it in.
+    private static SyntaxNode Qualified(IdentifierNameSyntax name)
+    {
+        const string Full = "Relevox.RequestExceptionActionProcessorStrategy";
+        SyntaxNode qualified = SyntaxFacts.IsInTypeOnlyContext(name) ? SyntaxFactory.ParseTypeName(Full) : SyntaxFactory.ParseExpression(Full);
+        return qualified.WithTriviaFrom(name);
+    }
 
     /// <summary>
     /// The file or namespace with every movable MediatR using in it renamed, and kept in order if it was in order.
@@ -127,6 +137,30 @@ public sealed class MigrateFromMediatR : CodeFixProvider
                 static (_, name) => Renamed(name, "Relevox"))),
         ];
 
+        // A file that already had `using Relevox;` next to `using MediatR;` would end up with it twice, which is a
+        // compiler warning, and an error under warnings as errors. The renamed copy goes, unless it carries a
+        // comment or directive that would go with it.
+        HashSet<string> seen = new(
+            renamed.Where((directive, index) => directive.IsEquivalentTo(usings[index])).Select(Identity),
+            System.StringComparer.Ordinal);
+        List<UsingDirectiveSyntax> unique = [];
+        List<UsingDirectiveSyntax> originals = [];
+        for (int index = 0; index < renamed.Length; index++)
+        {
+            bool wasRenamed = !renamed[index].IsEquivalentTo(usings[index]);
+            bool plain = renamed[index].GetLeadingTrivia().All(static trivia => trivia.IsKind(SyntaxKind.WhitespaceTrivia) || trivia.IsKind(SyntaxKind.EndOfLineTrivia));
+            if (wasRenamed && plain && !seen.Add(Identity(renamed[index])))
+            {
+                continue;
+            }
+
+            unique.Add(renamed[index]);
+            originals.Add(usings[index]);
+        }
+
+        renamed = [.. unique];
+        usings = SyntaxFactory.List(originals);
+
         // Each position keeps its own trivia, so a file header, a blank line or a missing final newline stays where
         // it was.
         UsingDirectiveSyntax[] moved = IsInOrder(usings)
@@ -144,6 +178,10 @@ public sealed class MigrateFromMediatR : CodeFixProvider
             _ => block,
         };
     }
+
+    // What makes two using directives the same one: kind, alias and the name, ignoring trivia.
+    private static string Identity(UsingDirectiveSyntax directive) =>
+        $"{directive.GlobalKeyword.RawKind}|{directive.StaticKeyword.RawKind}|{directive.Alias?.Name.Identifier.ValueText}|{directive.NamespaceOrType.WithoutTrivia()}";
 
     private static bool IsInOrder(SyntaxList<UsingDirectiveSyntax> usings)
     {

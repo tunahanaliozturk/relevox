@@ -37,6 +37,16 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     /// <summary>An <c>AddMediatR</c> call.</summary>
     public const string RegistrationKind = "Registration";
 
+    /// <summary>
+    /// <c>RequestExceptionActionProcessorStrategy</c>, which MediatR declares in
+    /// <c>Microsoft.Extensions.DependencyInjection</c> and Relevox in <c>Relevox</c>.
+    /// </summary>
+    /// <remarks>
+    /// It cannot follow MediatR into that namespace: an application half way through a migration, with both
+    /// packages referenced, would see the same full name twice.
+    /// </remarks>
+    public const string StrategyKind = "Strategy";
+
     // MediatR namespaces whose types Relevox has under the same names below Relevox.
     private static readonly HashSet<string> Mapped = new(System.StringComparer.Ordinal) { "Pipeline", "NotificationPublishers", "Entities" };
 
@@ -83,7 +93,8 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     {
         IdentifierNameSyntax name = (IdentifierNameSyntax)context.Node;
         string text = name.Identifier.ValueText;
-        if (text is not ("MediatR" or "MediatRServiceConfiguration") || Resolves(context.SemanticModel, name, context))
+        if (text is not ("MediatR" or "MediatRServiceConfiguration" or "RequestExceptionActionProcessorStrategy")
+            || Resolves(context.SemanticModel, name, context))
         {
             return;
         }
@@ -91,6 +102,24 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
         if (text == "MediatRServiceConfiguration")
         {
             Report(context, name, ConfigurationKind, text);
+            return;
+        }
+
+        if (text == "RequestExceptionActionProcessorStrategy")
+        {
+            // Only the simple name: Company.RequestExceptionActionProcessorStrategy is somebody else's type.
+            bool qualified = name.Parent switch
+            {
+                QualifiedNameSyntax parent => parent.Right == name,
+                MemberAccessExpressionSyntax parent => parent.Name == name,
+                _ => false,
+            };
+
+            if (!qualified)
+            {
+                Report(context, name, StrategyKind, text);
+            }
+
             return;
         }
 
