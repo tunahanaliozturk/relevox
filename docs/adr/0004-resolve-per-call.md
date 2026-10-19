@@ -36,14 +36,14 @@ resolution above. The default lifetime stays transient, as in MediatR.
 
 Two things the M1 review and the differential tests settled:
 
-- **What is kept is decided per handler, from the registration in force.** `AddCapar` adds handlers with
+- **What is kept is decided per handler, from the registration in force.** `AddRelevox` adds handlers with
   `TryAdd`, so a handler the application registered itself keeps the application's lifetime. The generated
   registration reads each handler's last descriptor and keeps the instance only when it is scoped or
   singleton; a transient registration is never kept, whatever the options say. Within one mediator
   instance a scoped handler is as safe to keep as a singleton, because a mediator never outlives its scope.
-  Registrations made after `AddCapar` are not seen, which the documentation says.
+  Registrations made after `AddRelevox` are not seen, which the documentation says.
 - **`Lifetime` is the mediator's lifetime only.** The differential tests showed that MediatR 12's
-  `Lifetime` setting leaves handlers transient. Çapar matches that, and adds `HandlerLifetime` for the
+  `Lifetime` setting leaves handlers transient. Relevox matches that, and adds `HandlerLifetime` for the
   handlers, transient by default. Setting it to singleton is how a user gets Mediator-style numbers on
   purpose rather than by surprise.
 

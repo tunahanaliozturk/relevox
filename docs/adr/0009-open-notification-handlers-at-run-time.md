@@ -24,7 +24,7 @@ The build-time closings stay as they are, and each generic notification handler 
 - The generator registers it with the container as an open generic, with the handler lifetime, as MediatR's
   scan does.
 - The generated mediator passes the open definitions, in the order MediatR would run them, to
-  `Capar.Internal.OpenNotificationHandlers`.
+  `Relevox.Internal.OpenNotificationHandlers`.
 - A published notification whose type has no entry in the generated mediator goes there. It closes each
   definition over the runtime type with `MakeGenericType`, keeps the ones whose constraints the type satisfies,
   and remembers the result per type. It resolves the handlers from the container and runs them, one after
@@ -40,12 +40,12 @@ closed at run time cannot promise the trimmer kept those members.
 ## Consequences
 
 - A generic notification handler reaches every notification type its constraints admit, as under MediatR,
-  within what Çapar registers at all: not an internal handler in another project (CPR0003), nor a handler in
+  within what Relevox registers at all: not an internal handler in another project (RVX0003), nor a handler in
   a NuGet package, which MediatR's scan of the application's assemblies would not find either. The
   differential tests hold this for a closed generic notification built from a type parameter, published
   as `INotification`, as `object`, and under `TaskWhenAllPublisher`, and for a struct its constraints rule
   out.
-- This is the one place Çapar closes a type at run time. The cost is paid once per notification type: an
+- This is the one place Relevox closes a type at run time. The cost is paid once per notification type: an
   exception for each definition whose constraints fail, then a dictionary lookup. Nothing changes for a
   project with no generic notification handler; its generated code is the same as before.
 - Under NativeAOT a closing over a reference type works, and the AOT sample in CI checks two: a handler

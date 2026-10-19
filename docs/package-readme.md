@@ -1,4 +1,4 @@
-# Çapar
+# Relevox
 
 A mediator for .NET whose dispatch is written by a source generator at build time, with the same handler
 signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
@@ -16,15 +16,15 @@ signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 
 | Package | Reference it from |
 |---|---|
-| `Capar` | The application, the project that calls `AddCapar`. It brings the source generator. |
-| `Capar.Contracts` | Projects that only declare requests and handlers: domain, application, feature libraries. |
+| `Relevox` | The application, the project that calls `AddRelevox`. It brings the source generator. |
+| `Relevox.Contracts` | Projects that only declare requests and handlers: domain, application, feature libraries. |
 
 ## Quick start
 
 ```csharp
-using Capar;
+using Relevox;
 
-builder.Services.AddCapar();
+builder.Services.AddRelevox();
 
 public sealed record GetOrder(int Id) : IRequest<Order>;
 
@@ -38,15 +38,15 @@ public sealed class GetOrderHandler(OrderStore store) : IRequestHandler<GetOrder
 Order order = await sender.Send(new GetOrder(42), cancellationToken);
 ```
 
-Handlers are found in the application and in every referenced project that uses `Capar.Contracts`.
+Handlers are found in the application and in every referenced project that uses `Relevox.Contracts`.
 
 ## From MediatR 12
 
-1. Replace the `MediatR` package with `Capar` in the application and with `Capar.Contracts` elsewhere.
-2. Replace `using MediatR;` with `using Capar;` and `using MediatR.Pipeline;` with `using Capar.Pipeline;`.
-3. Replace `AddMediatR(cfg => cfg.RegisterServicesFromAssembly(...))` with `AddCapar()`. Behaviours,
+1. Replace the `MediatR` package with `Relevox` in the application and with `Relevox.Contracts` elsewhere.
+2. Replace `using MediatR;` with `using Relevox;` and `using MediatR.Pipeline;` with `using Relevox.Pipeline;`.
+3. Replace `AddMediatR(cfg => cfg.RegisterServicesFromAssembly(...))` with `AddRelevox()`. Behaviours,
    processors and lifetimes are configured with the same members as before.
 
-In an IDE, steps 2 and 3 are a code fix: after the package swap, apply **Move from MediatR to Capar** to the
+In an IDE, steps 2 and 3 are a code fix: after the package swap, apply **Move from MediatR to Relevox** to the
 whole solution. The migration guide in the repository covers the rest, including the few places where
 behaviour differs.

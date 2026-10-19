@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Packages are restored under obj, which the script deletes, so a package rebuilt with the same version is
+      never served stale from the machine-wide cache.
+    -->
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)obj/packages</RestorePackagesPath>
+    <RelevoxVersion Condition="'$(RelevoxVersion)' == ''">0.0.0-smoke</RelevoxVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Relevox" Version="$(RelevoxVersion)" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- Its own projects, built separately by the script. -->
+  <ItemGroup>
+    <Compile Remove="Layered/**" />
+  </ItemGroup>
+
+  <!-- Built only by the second step of the script, which expects the packaged analyzer to report RVX0001. -->
+  <ItemGroup Condition="'$(SmokeUnhandled)' != 'true'">
+    <Compile Remove="Unhandled.cs" />
+  </ItemGroup>
+
+</Project>

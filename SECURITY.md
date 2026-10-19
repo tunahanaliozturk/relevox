@@ -2,12 +2,12 @@
 
 ## Reporting a vulnerability
 
-Open a [private security advisory](https://github.com/tunahanaliozturk/capar/security/advisories/new)
+Open a [private security advisory](https://github.com/tunahanaliozturk/relevox/security/advisories/new)
 rather than a public issue. I will acknowledge within a few days and keep you updated.
 
 ## What is in scope
 
-Çapar runs inside your process and inside your compiler, so the interesting failures are these:
+Relevox runs inside your process and inside your compiler, so the interesting failures are these:
 
 - **Generated code that calls the wrong handler**, or skips a behaviour that was registered. Authorization
   and validation are commonly written as pipeline behaviours; a dispatch path that bypasses them is a

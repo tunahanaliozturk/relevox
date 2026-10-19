@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    An ASP.NET Core minimal API on Relevox, shaped the way most applications using a mediator are: endpoints that
+    send, a scoped service the handlers depend on, a validation behaviour, a pre-processor, a notification with
+    two listeners, and a streamed list. tests/Relevox.Samples.Web.Tests drives it over HTTP in CI.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Shop</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    An application would write <PackageReference Include="Relevox" />, which brings the generator with it. Inside
+    this repository the same thing takes two project references.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Relevox/Relevox.csproj" />
+    <ProjectReference Include="../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

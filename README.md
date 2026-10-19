@@ -1,17 +1,17 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/capar-mark-dark.svg">
-    <img src="docs/brand/capar-mark.svg" alt="Çapar" width="120">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/relevox-mark-dark.svg">
+    <img src="docs/brand/relevox-mark.svg" alt="Relevox" width="120">
   </picture>
 </p>
 
-# Çapar
+# Relevox
 
 A mediator for .NET whose dispatch is written by a source generator at build time, with the same handler
 signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 
-A çapar was a mounted courier who carried orders across the Ottoman roads at a gallop. This one carries
-requests to their handlers.
+The name joins *relevo*, the relay race in Spanish and Portuguese, and *vox*, Latin for voice: the message
+handed from runner to runner. A request goes the same way, through each behaviour to its handler.
 
 > **Status: feature complete for 1.0, not released yet.** Nothing is on NuGet. To try it, pack the two
 > projects into a local feed the way [`eng/package-smoke.sh`](eng/package-smoke.sh) does.
@@ -19,14 +19,14 @@ requests to their handlers.
 ## Why
 
 MediatR 13 and later are licensed under RPL-1.5 or a commercial agreement and check a licence key at run
-time. 12.5.0 is the last Apache-2.0 release and is frozen. Çapar is a place to move to without rewriting
+time. 12.5.0 is the last Apache-2.0 release and is frozen. Relevox is a place to move to without rewriting
 anything:
 
 - **Same signatures.** `IRequestHandler<TRequest, TResponse>.Handle(request, cancellationToken)` returning
   `Task<TResponse>`, the same pipeline behaviours, pre and post processors, exception handlers and actions,
   streams and notifications. Migrating changes packages, `using` directives and one registration call.
-- **Same behaviour.** Every scenario in the [differential tests](tests/Capar.DifferentialTests) runs on
-  MediatR 12.5.0 and on Çapar, and the two must agree on results, handler order and exceptions, down to
+- **Same behaviour.** Every scenario in the [differential tests](tests/Relevox.DifferentialTests) runs on
+  MediatR 12.5.0 and on Relevox, and the two must agree on results, handler order and exceptions, down to
   which processors run. [compatibility.md](docs/compatibility.md) lists what they pinned down.
 - **Mistakes found by the compiler.** No assembly scanning. A request with no handler, or two, or a handler
   the application cannot call, is reported while building, with a [page per rule](docs/diagnostics.md).
@@ -38,7 +38,7 @@ Measured with BenchmarkDotNet 0.15.8 on an Intel Core Ultra 7 255H, .NET 10.0.13
 and what each number does and does not show, are in
 [docs/benchmark-results/2026-10-17-m4.md](docs/benchmark-results/2026-10-17-m4.md).
 
-| | MediatR 12.5 | Çapar | Çapar as a share of MediatR |
+| | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
 |---|---:|---:|---:|
 | Send, through `ISender` | 37.1 ns, 128 B | 15.7 ns, 24 B | 0.42 |
 | Send, through the generated mediator | 37.1 ns, 128 B | 9.3 ns, 24 B | 0.25 |
@@ -49,7 +49,7 @@ and what each number does and does not show, are in
 | Eight request types in turn, of 500 | 113.5 ns | 28.2 ns | 0.25 |
 
 Mediator 3.0, the other source-generated library, is faster where it holds handlers as singletons, which it
-does by default and Çapar does on request. With transient handlers in both, Çapar's typed send is 9.5 ns
+does by default and Relevox does on request. With transient handlers in both, Relevox's typed send is 9.5 ns
 against Mediator's 28.3 ns. Mediator's handlers return `ValueTask`, so moving to it means rewriting them;
 that is the trade [ADR 0002](docs/adr/0002-task-not-valuetask.md) explains.
 
@@ -57,16 +57,16 @@ that is the trade [ADR 0002](docs/adr/0002-task-not-valuetask.md) explains.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/project-layout-dark.png">
-  <img src="docs/images/project-layout-light.png" alt="The API and test projects reference the application, which references Capar and calls AddCapar; libraries below it reference only Capar.Contracts" width="800">
+  <img src="docs/images/project-layout-light.png" alt="The API and test projects reference the application, which references Relevox and calls AddRelevox; libraries below it reference only Relevox.Contracts" width="800">
 </picture>
 
-The project that calls `AddCapar` references `Capar` and gets the one mediator. Libraries reference only
-`Capar.Contracts`, which has no dependencies. Projects above the application use its mediator.
+The project that calls `AddRelevox` references `Relevox` and gets the one mediator. Libraries reference only
+`Relevox.Contracts`, which has no dependencies. Projects above the application use its mediator.
 
 ```csharp
-using Capar;
+using Relevox;
 
-builder.Services.AddCapar();
+builder.Services.AddRelevox();
 
 public sealed record GetOrder(int Id) : IRequest<Order>;
 
@@ -83,7 +83,7 @@ Order order = await sender.Send(new GetOrder(42), cancellationToken);
 Behaviours, processors and lifetimes are configured as in MediatR:
 
 ```csharp
-builder.Services.AddCapar(options =>
+builder.Services.AddRelevox(options =>
 {
     options.AddOpenBehavior(typeof(Validation<,>));
     options.AddOpenRequestPreProcessor(typeof(Stamp<>));
@@ -95,24 +95,24 @@ builder.Services.AddCapar(options =>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/migration-dark.png">
-  <img src="docs/images/migration-light.png" alt="Swap the packages, run dotnet format analyzers with CPR0007, build. Tried on Clean Architecture and eShop with every test passing" width="880">
+  <img src="docs/images/migration-light.png" alt="Swap the packages, run dotnet format analyzers with RVX0007, build. Tried on Clean Architecture and eShop with every test passing" width="880">
 </picture>
 
 The command rewrites `using MediatR`, `AddMediatR` and the scanning settings. In an IDE the same fix is
-**Move from MediatR to Capar**, applied to the whole solution. Both trials are written up in
+**Move from MediatR to Relevox**, applied to the whole solution. Both trials are written up in
 [migration-trial.md](docs/migration-trial.md).
 
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.
 [samples/Migration](samples/Migration) holds the same order service on both libraries; CI runs the two and
-fails if their output differs. [samples/Capar.Samples.Web](samples/Capar.Samples.Web) is an ASP.NET Core
-minimal API on Çapar, with its [`.http` file](samples/Capar.Samples.Web/Capar.Samples.Web.http) and tests that
+fails if their output differs. [samples/Relevox.Samples.Web](samples/Relevox.Samples.Web) is an ASP.NET Core
+minimal API on Relevox, with its [`.http` file](samples/Relevox.Samples.Web/Relevox.Samples.Web.http) and tests that
 drive it over HTTP.
 
 ## How it works
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/how-it-works-dark.png">
-  <img src="docs/images/how-it-works-light.png" alt="At build time the generator reads the handlers and writes CaparMediator, AddCapar and diagnostics. At send time a typed overload or ISender goes to the handler, through behaviours when there are any" width="760">
+  <img src="docs/images/how-it-works-light.png" alt="At build time the generator reads the handlers and writes RelevoxMediator, AddRelevox and diagnostics. At send time a typed overload or ISender goes to the handler, through behaviours when there are any" width="760">
 </picture>
 
 Nothing is scanned at run time. `ISender.Send` costs one frozen-dictionary lookup, however many requests there
@@ -126,20 +126,21 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [4. Resolve handlers per call, by concrete type](docs/adr/0004-resolve-per-call.md)
 - [5. No `namespace MediatR` shim](docs/adr/0005-no-mediatr-namespace-shim.md)
 - [6. Clean-room rule, and MediatR 12.5.0 as the test oracle](docs/adr/0006-clean-room.md)
-- [7. `AddCapar` lives in `Microsoft.Extensions.DependencyInjection`](docs/adr/0007-addcapar-namespace.md)
+- [7. `AddRelevox` lives in `Microsoft.Extensions.DependencyInjection`](docs/adr/0007-addrelevox-namespace.md)
 - [8. Generic handlers are closed at build time](docs/adr/0008-generic-handlers.md)
 - [9. Generic notification handlers also close at run time](docs/adr/0009-open-notification-handlers-at-run-time.md)
+- [10. The name: Relevox](docs/adr/0010-name-relevox.md)
 
 ## Building
 
 The .NET 10 SDK is all it needs.
 
 ```bash
-dotnet build Capar.slnx
-dotnet run --project tests/Capar.SourceGenerator.Tests   # generator: output, diagnostics, incrementality
-dotnet run --project tests/Capar.DifferentialTests       # every scenario on MediatR 12.5.0 and on Çapar
+dotnet build Relevox.slnx
+dotnet run --project tests/Relevox.SourceGenerator.Tests   # generator: output, diagnostics, incrementality
+dotnet run --project tests/Relevox.DifferentialTests       # every scenario on MediatR 12.5.0 and on Relevox
 bash eng/package-smoke.sh                                # pack, install into a new app, run it
-dotnet run --project tools/Capar.LicenseAudit -- .       # every dependency permissively licensed
+dotnet run --project tools/Relevox.LicenseAudit -- .       # every dependency permissively licensed
 ```
 
 The diagrams in this file are drawn by `tools/diagrams.py`; `CHROME=<path to Chrome or Edge> python tools/diagrams.py`

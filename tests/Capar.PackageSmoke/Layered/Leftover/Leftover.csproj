@@ -1,8 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <!-- MediatR code left after the package swap. The script fixes a copy with dotnet format and builds it. -->
-  <ItemGroup>
-    <PackageReference Include="Capar.Contracts" Version="$(CaparVersion)" />
-  </ItemGroup>
-
-</Project>

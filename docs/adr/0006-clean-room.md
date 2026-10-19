@@ -20,7 +20,7 @@ and a dependency on `Microsoft.IdentityModel.JsonWebTokens`. The paid line added
   inspected for public type names only, to confirm the API had not moved.
 - The 12.5.0 public API shape is matched on purpose, because that shape is what migrating code is written
   against. API shape is not code.
-- Çapar is written from the behaviour described in the plan and pinned down by tests. Its source is not
+- Relevox is written from the behaviour described in the plan and pinned down by tests. Its source is not
   ported from 12.5.0 either.
 - MediatR 12.5.0 is used as a test-only dependency: differential tests run the same scenario on both
   libraries and require identical traces of which handler, behaviour and processor ran, in what order,

@@ -1,15 +1,15 @@
 name: Bug report
-description: Something Çapar does differently from what you expected, or from MediatR 12.
+description: Something Relevox does differently from what you expected, or from MediatR 12.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time. A security problem belongs in a [private advisory](https://github.com/tunahanaliozturk/capar/security/advisories/new), not here.
+        Thanks for taking the time. A security problem belongs in a [private advisory](https://github.com/tunahanaliozturk/relevox/security/advisories/new), not here.
   - type: input
     id: version
     attributes:
-      label: Çapar version
+      label: Relevox version
       placeholder: 1.0.0
     validations:
       required: true
@@ -31,7 +31,7 @@ body:
     id: repro
     attributes:
       label: Smallest code that shows it
-      description: The request, the handler, any behaviours or processors involved, and how AddCapar is called.
+      description: The request, the handler, any behaviours or processors involved, and how AddRelevox is called.
       render: csharp
     validations:
       required: true
