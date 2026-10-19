@@ -39,6 +39,36 @@ public static partial class Scenarios
             return "done";
         });
 
+    public static Task<string> GenericNotificationHandlersReachATypeTheBuildNeverSaw() =>
+        Run.Scenario(async services =>
+        {
+            await services.GetRequiredService<IPublisher>().Publish(Shipments.Reroute(42));
+            return "done";
+        });
+
+    public static Task<string> GenericNotificationHandlersReachATypeTheBuildNeverSawAsObject() =>
+        Run.Scenario(async services =>
+        {
+            await services.GetRequiredService<IPublisher>().Publish((object)Shipments.Reroute(7L));
+            return "done";
+        });
+
+    public static Task<string> GenericNotificationHandlersReachATypeTheBuildNeverSawUnderWhenAll() =>
+        Run.Scenario(
+            async services =>
+            {
+                await services.GetRequiredService<IPublisher>().Publish(Shipments.Reroute(3.5m));
+                return "done";
+            },
+            profile: Profile.WhenAll);
+
+    public static Task<string> GenericNotificationHandlerConstraintsHoldForAStructTheBuildNeverSaw() =>
+        Run.Scenario(async services =>
+        {
+            await services.GetRequiredService<IPublisher>().Publish(Shipments.Weigh(12));
+            return "done";
+        });
+
     public static Task<string> GenericNotificationHandlerSkipsANotificationOutsideItsConstraint() =>
         Run.Scenario(async services =>
         {

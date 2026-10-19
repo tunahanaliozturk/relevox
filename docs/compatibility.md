@@ -50,8 +50,9 @@ types.
 closes it for each notification published, within its constraints. So it runs last, after catch-all
 handlers, for every notification its constraints admit, including one nothing else handles. A closing does
 not count as handling the notification for the catch-all rule above: a base-type handler still sees only
-notifications some written handler names. Çapar closes such handlers at build time, over the notification
-types the build can see.
+notifications some written handler names. Çapar closes such handlers at build time over the notification
+types the build can see, and at run time, once per type, over a notification type it could not see, such as
+`EntityCreated<Invoice>` built from a type parameter ([ADR 0009](adr/0009-open-notification-handlers-at-run-time.md)).
 
 **Dispatch goes by the runtime type**, through every entry point, the typed overloads on the generated
 mediator included. A `DerivedQuery` held in a `BaseQuery` variable is a `DerivedQuery`.
@@ -187,12 +188,10 @@ some is checked against each scope's list.
 the generator can see but cannot call, such as internal ones in another project, are reported as `CPR0003`.
 
 **Generic handlers the build cannot close.** A generic handler is registered by closing it at build time
-([ADR 0008](adr/0008-generic-handlers.md)). A generic notification handler reaches the notification types
-the build can see: concrete ones declared in the application and the projects it references, apart from
-projects with a mediator of their own, and closed generic ones some handler names. Publishing an `EntityCreated<Invoice>` that nothing names reaches no
-generic handler, where MediatR's container would close one for it. Generic request and stream handlers are
-closed only over types that satisfy a constraint naming a type in the solution; the rest are reported as
-`CPR0004`.
+([ADR 0008](adr/0008-generic-handlers.md)). A generic notification handler is the exception: it is also
+closed at run time over a notification type the build never saw ([ADR 0009](adr/0009-open-notification-handlers-at-run-time.md)),
+except a struct under NativeAOT, which cannot be closed there. Generic request and stream handlers are closed
+only over types that satisfy a constraint naming a type in the solution; the rest are reported as `CPR0004`.
 
 **Exception handlers for exception types the build cannot see.** MediatR closes
 `IRequestExceptionHandler<,,>` over every type in the thrown exception's hierarchy at run time. Çapar looks

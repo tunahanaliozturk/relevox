@@ -25,6 +25,41 @@ public sealed class GenericHandlerTests
         run.Diagnostics.Where(diagnostic => diagnostic.Id == "CPR0004").ShouldHaveSingleItem().GetMessage(System.Globalization.CultureInfo.InvariantCulture);
 
     [Fact]
+    public void A_generic_notification_handler_is_also_registered_open_in_the_order_it_runs()
+    {
+        // Kept open for notification types the build never sees. Two of them run in declaration order, the
+        // order MediatR's scan registers them in.
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public sealed class Second<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class First<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.Mediator.ShouldContain("new(typeof(global::Second<>), typeof(global::First<>))");
+        run.Sources["CaparServiceCollectionExtensions.g.cs"].ShouldContain("new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(typeof(global::First<>), typeof(global::First<>), handlerLifetime)");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Without_a_generic_notification_handler_nothing_is_closed_at_run_time()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public sealed record Placed : INotification;
+            public sealed class PlacedHandler : INotificationHandler<Placed>
+            {
+                public Task Handle(Placed notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.Mediator.ShouldNotContain("OpenNotificationHandlers");
+    }
+
+    [Fact]
     public void A_generic_stream_handler_is_closed_over_every_type_its_constraint_admits()
     {
         // MediatR's RegisterGenericHandlers throws on this shape at registration, so there is no oracle for it.

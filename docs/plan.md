@@ -329,6 +329,7 @@ mechanical change today and gets more expensive after the first release.
 - 0006 Clean-room rule and the use of MediatR 12.5.0 as a test oracle.
 - 0007 `AddCapar` declared in `Microsoft.Extensions.DependencyInjection`. Written in M5.
 - 0008 Generic handlers closed at build time.
+- 0009 Generic notification handlers also closed at run time, for notification types the build never saw.
 
 ## 10. Open questions
 

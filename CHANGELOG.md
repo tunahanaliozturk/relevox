@@ -8,6 +8,11 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- A generic notification handler, `H<T> : INotificationHandler<T>`, now also reaches notification types the build
+  never saw, such as `EntityCreated<Invoice>` built in a generic base class and published as `INotification`. It
+  is registered open and closed at run time, once per type, as MediatR's container closes it
+  ([ADR 0009](docs/adr/0009-open-notification-handlers-at-run-time.md)).
+
 - Release infrastructure, not used yet: a workflow that runs on a version tag, tests, packs, validates SourceLink
   and determinism, creates the GitHub release from this file and waits for an approval before publishing to
   NuGet with trusted publishing; RELEASING.md, Dependabot, CodeQL for when the repository is public, issue

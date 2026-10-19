@@ -54,7 +54,7 @@ handlers, so they are held to the same rules.
   request. Çapar keeps the written one. That is listed as a deliberate difference.
 - A generic notification handler reaches only notification types the build can see. `EntityCreated<Invoice>`
   published from code the build never compiled, and named by no handler, reaches it under MediatR and not
-  under Çapar.
+  under Çapar. [ADR 0009](0009-open-notification-handlers-at-run-time.md) closes that gap at run time.
 - The closing step looks at every type in the compilation on each compilation; what each referenced assembly
   offers is worked out once and cached. Its output is value-equal between edits that change nothing it
   depends on, so nothing downstream reruns. Measured on a single project of 5,000 types, one run takes 7 ms
