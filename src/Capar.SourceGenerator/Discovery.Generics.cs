@@ -190,16 +190,20 @@ internal static partial class Discovery
                 ITypeParameterSymbol parameter = definition.TypeParameters[0];
 
                 // Kept open too, for notification types the build never saw, such as EntityCreated<Invoice> built
-                // in a generic base class: the container would close it for those under MediatR.
-                _parts.Add(Empty with
+                // in a generic base class: the container would close it for those under MediatR. Not when its type
+                // parameter asks the trimmer to keep members, which a type closed at run time cannot promise.
+                if (!parameter.GetAttributes().Any(static attribute => attribute.AttributeClass?.Name == "DynamicallyAccessedMembersAttribute"))
                 {
-                    OpenNotifications = new[]
+                    _parts.Add(Empty with
                     {
-                        new OpenNotificationHandler(
-                            definition.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
-                            OrderOf(definition, _compilation, definition.Locations.Any(static location => location.IsInSource))),
-                    }.ToEquatableArray(),
-                });
+                        OpenNotifications = new[]
+                        {
+                            new OpenNotificationHandler(
+                                definition.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
+                                OrderOf(definition, _compilation, definition.Locations.Any(static location => location.IsInSource))),
+                        }.ToEquatableArray(),
+                    });
+                }
 
                 foreach (INamedTypeSymbol notification in Notifications())
                 {
@@ -473,8 +477,11 @@ internal static partial class Discovery
                     {
                         notifications.Add(type);
                     }
+                    // A notification a handler names counts even when its own assembly is not walked here, such as
+                    // a library with a mediator of its own: the handler gives it a dispatch entry, and that entry
+                    // has to carry the generic handlers' closings too.
                     else if (contract.MetadataName == "INotificationHandler`1"
-                        && contract.TypeArguments[0] is INamedTypeSymbol { IsGenericType: true, IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } named
+                        && contract.TypeArguments[0] is INamedTypeSymbol { IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } named
                         && !IsOpen(named))
                     {
                         notifications.Add(named);
