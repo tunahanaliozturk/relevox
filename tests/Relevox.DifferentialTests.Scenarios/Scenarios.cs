@@ -153,6 +153,19 @@ public static partial class Scenarios
         Run.Scenario(
             services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Boom())));
 
+    public static Task<string> PublishToASynchronousNotificationHandler() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Chime(false))));
+
+    public static Task<string> PublishToASynchronousNotificationHandlerThatThrows() =>
+        Run.Scenario(services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Chime(true))));
+
+    // TaskWhenAllPublisher calls every handler before awaiting any, so it shows whether the synchronous base
+    // throws out of Handle or returns a faulted task.
+    public static Task<string> PublishToASynchronousNotificationHandlerThatThrowsUnderWhenAll() =>
+        Run.Scenario(
+            services => Run.Timing(() => services.GetRequiredService<IPublisher>().Publish(new Chime(true))),
+            profile: Profile.WhenAll);
+
     // Streams
 
     public static Task<string> StreamItems() =>

@@ -37,6 +37,32 @@ public interface INotificationHandler<in TNotification>
     Task Handle(TNotification notification, CancellationToken cancellationToken);
 }
 
+/// <summary>A base for a notification handler whose work is synchronous.</summary>
+/// <typeparam name="TNotification">The notification handled.</typeparam>
+/// <remarks>
+/// MediatR 12 has the same base, so handlers that derive from it move over unchanged. An exception thrown by
+/// <see cref="Handle(TNotification)"/> escapes the call rather than faulting a task, as it does in MediatR, where
+/// it stops the handlers after this one from running.
+/// </remarks>
+public abstract class NotificationHandler<TNotification> : INotificationHandler<TNotification>
+    where TNotification : INotification
+{
+    /// <summary>Creates the handler.</summary>
+    protected NotificationHandler()
+    {
+    }
+
+    Task INotificationHandler<TNotification>.Handle(TNotification notification, CancellationToken cancellationToken)
+    {
+        Handle(notification);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Handles the notification.</summary>
+    /// <param name="notification">The notification.</param>
+    protected abstract void Handle(TNotification notification);
+}
+
 /// <summary>Handles one stream request type.</summary>
 /// <typeparam name="TRequest">The request handled.</typeparam>
 /// <typeparam name="TResponse">The type of each item in the stream.</typeparam>
