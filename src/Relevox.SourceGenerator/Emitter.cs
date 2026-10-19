@@ -784,7 +784,7 @@ internal static class Emitter
         code.Close();
         code.Line();
         code.Line("private static global::System.InvalidOperationException NoHandler(global::System.Type type) =>");
-        code.Line("    new($\"No handler for '{type}' was found when this assembly was built. Relevox finds handlers at compile time, so the handler has to be in this project or in a project it references.\");");
+        code.Line("    new($\"No handler for '{type}' was found when this assembly was built, or more than one was. Relevox finds handlers at compile time, so the handler has to be in this project or in a project it references; the build reports which with RVX0001 or RVX0002, unless analyzers are turned off.\");");
     }
 
     private static void EmitDispatchers(CodeWriter code, EmitPlan plan)

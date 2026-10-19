@@ -146,6 +146,14 @@ compares the two types member by member.
 
 ## Different on purpose
 
+**A handler is resolved by its own class, not through its interface.** The generated mediator asks the
+container for `PlaceOrderHandler`, not for `IRequestHandler<PlaceOrder, int>` ([ADR 0004](adr/0004-resolve-per-call.md)).
+A registration made against the interface, such as a test double or a decorator added with Scrutor's
+`Decorate(typeof(IRequestHandler<,>), ...)`, is therefore not used, where MediatR would use it. Replace a
+handler by registering its class before `AddRelevox` (`services.AddTransient<PlaceOrderHandler, FakePlaceOrder>()`,
+with the fake deriving from it), and put cross-cutting work in a pipeline behaviour, which is resolved through
+its interface as in MediatR.
+
 **Two handlers for one request is a build error (`RVX0002`).** That includes a concrete handler and a
 concrete subclass of it. MediatR keeps whichever its scan registered first.
 

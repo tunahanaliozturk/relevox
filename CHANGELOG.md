@@ -20,8 +20,9 @@ and one registration call; the [migration guide](docs/migration.md) covers it, a
 ### Added
 
 - Requests, notifications and streams with MediatR 12's names and signatures: `IRequest`, `IRequestHandler`,
-  `INotificationHandler`, `IStreamRequest`, `IStreamRequestHandler`, `ISender`, `IPublisher`, `IMediator` and
-  `Unit`.
+  `INotificationHandler` and its synchronous base `NotificationHandler`, `IStreamRequest`, `IStreamRequestHandler`,
+  `ISender`, `IPublisher`, `IMediator` and `Unit`. A test checks every public type of MediatR 12.5 for a
+  counterpart.
 - Pipeline and stream behaviours, pre and post processors, exception handlers and exception actions, registered
   and ordered by MediatR 12's rules. `ForeachAwaitPublisher`, `TaskWhenAllPublisher` and custom
   `INotificationPublisher`s.
@@ -29,7 +30,9 @@ and one registration call; the [migration guide](docs/migration.md) covers it, a
   calls the handler with nothing to look up. `ISender` and `IPublisher` find the message's runtime type with one
   dictionary lookup.
 - `AddRelevox`, which registers every handler by its concrete type with no assembly scanning. `RelevoxOptions`
-  has each MediatR configuration member that still means something without scanning, plus `HandlerLifetime`.
+  has each MediatR configuration member that still means something without scanning, plus `HandlerLifetime`,
+  and sits in `Microsoft.Extensions.DependencyInjection` as MediatR's configuration does. An `IMediator` the
+  application registered first, such as a test double, is kept.
 - Generic handlers, closed while the project builds over the types that satisfy their constraints. A generic
   notification handler is also closed at run time over a notification type the build never saw
   ([ADR 0009](docs/adr/0009-open-notification-handlers-at-run-time.md)).
