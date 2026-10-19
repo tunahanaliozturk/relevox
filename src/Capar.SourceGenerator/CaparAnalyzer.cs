@@ -43,9 +43,10 @@ public sealed class CaparAnalyzer : DiagnosticAnalyzer
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
     {
-        // Analyzed but not reported on: the generator reads files marked as generated too, such as a *.g.cs on
-        // disk, and the two have to agree on what is a handler and whether AddCapar is called.
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
+        // Generated code is left out here and, by the same rules, in the generator (GeneratedCode.cs). The two
+        // have to agree on what is a handler and whether AddCapar is called, and the generator cannot see what
+        // other generators write, so the analyzer must not either.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(static start =>
         {

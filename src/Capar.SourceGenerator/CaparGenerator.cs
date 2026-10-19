@@ -34,9 +34,19 @@ public sealed class CaparGenerator : IIncrementalGenerator
                 predicate: static (node, _) => node is TypeDeclarationSyntax { BaseList: not null } declaration
                     && !declaration.Modifiers.Any(SyntaxKind.StaticKeyword),
                 transform: static (syntax, cancellationToken) =>
-                    syntax.SemanticModel.GetDeclaredSymbol(syntax.Node, cancellationToken) is INamedTypeSymbol symbol
-                        ? Discovery.Classify(symbol, syntax.SemanticModel.Compilation, fromSource: true, cancellationToken)
-                        : Discovery.Empty)
+                {
+                    if (syntax.SemanticModel.GetDeclaredSymbol(syntax.Node, cancellationToken) is not INamedTypeSymbol symbol)
+                    {
+                        return Discovery.Empty;
+                    }
+
+                    // Generated code is checked for only once a type turns out to matter; most do not.
+                    DiscoveryModel model = Discovery.Classify(symbol, syntax.SemanticModel.Compilation, fromSource: true, cancellationToken);
+                    return model.IsEmpty
+                        || (!GeneratedCode.Contains(syntax.Node.SyntaxTree, syntax.SemanticModel.Compilation, cancellationToken) && !GeneratedCode.IsMarked(symbol))
+                        ? model
+                        : Discovery.Empty;
+                })
             .WithTrackingName(TrackingNames.Source)
             .Where(static model => !model.IsEmpty)
             .Collect()
@@ -62,9 +72,9 @@ public sealed class CaparGenerator : IIncrementalGenerator
         IncrementalValueProvider<bool> callsAddCapar = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => IsAddCaparCall(node),
-                transform: static (_, _) => true)
+                transform: static (call, cancellationToken) => !GeneratedCode.Contains(call.Node.SyntaxTree, call.SemanticModel.Compilation, cancellationToken))
             .Collect()
-            .Select(static (calls, _) => calls.Length > 0);
+            .Select(static (calls, _) => calls.Contains(true));
 
         IncrementalValueProvider<EmitPlan> plan = fromSource
             .Combine(fromReferences)

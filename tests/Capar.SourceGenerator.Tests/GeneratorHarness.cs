@@ -44,13 +44,20 @@ public static class GeneratorHarness
     /// </summary>
     public static GeneratorRun RunStrict(params string[] sources) => Run("Subject", [], strict: true, sources);
 
-    public static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, params string[] sources)
+    public static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, params string[] sources) =>
+        Run(assemblyName, extra, strict, [], sources);
+
+    /// <summary>Like <see cref="Run(string, IEnumerable{MetadataReference}, string[])"/>, with another generator running alongside.</summary>
+    public static GeneratorRun RunAlongside(IIncrementalGenerator other, string assemblyName, IEnumerable<MetadataReference> extra, params string[] sources) =>
+        Run(assemblyName, extra, strict: false, [other], sources);
+
+    private static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, IIncrementalGenerator[] others, string[] sources)
     {
         CSharpCompilation compilation = Compile(assemblyName, extra, sources, strict);
 
         GeneratorDriver driver = CSharpGeneratorDriver
             .Create(
-                [new CaparGenerator().AsSourceGenerator()],
+                [new CaparGenerator().AsSourceGenerator(), .. others.Select(static other => other.AsSourceGenerator())],
                 parseOptions: strict ? ParseOptions.WithDocumentationMode(DocumentationMode.Diagnose) : ParseOptions)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
 
@@ -68,6 +75,7 @@ public static class GeneratorHarness
         return new GeneratorRun(
             [.. result.Diagnostics, .. analyzer],
             result.Results
+                .Where(single => single.Generator.GetGeneratorType() == typeof(CaparGenerator))
                 .SelectMany(single => single.GeneratedSources)
                 .ToDictionary(source => source.HintName, source => source.SourceText.ToString(), StringComparer.Ordinal),
             [.. output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)],
