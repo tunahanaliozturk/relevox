@@ -147,6 +147,14 @@ internal sealed record SkippedModel(
 /// <param name="ImplementationType">The unbound implementation type.</param>
 internal sealed record OpenRegistration(string ServiceType, string ImplementationType);
 
+/// <summary>
+/// A generic notification handler declared as <c>H&lt;T&gt; : INotificationHandler&lt;T&gt;</c>, kept open as well as
+/// closed: the mediator closes it at run time over a notification type the build never saw.
+/// </summary>
+/// <param name="Definition">The unbound type, such as <c>global::Ns.Audit&lt;&gt;</c>.</param>
+/// <param name="Order">Where it is declared, so several run in the order MediatR registers them.</param>
+internal sealed record OpenNotificationHandler(string Definition, DeclarationOrder Order);
+
 /// <summary>What one declaration or one referenced assembly contributed.</summary>
 /// <param name="Handlers">Handler contracts found.</param>
 /// <param name="Messages">Concrete messages found.</param>
@@ -161,9 +169,10 @@ internal sealed record DiscoveryModel(
     EquatableArray<MessageModel> Messages,
     EquatableArray<SkippedModel> Skipped,
     EquatableArray<OpenRegistration> Open,
-    EquatableArray<string> Experimental)
+    EquatableArray<string> Experimental,
+    EquatableArray<OpenNotificationHandler> OpenNotifications)
 {
-    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0;
+    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0 && OpenNotifications.Length == 0;
 }
 
 /// <summary>What the referenced assemblies contributed, plus the facts taken from the compilation.</summary>

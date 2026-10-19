@@ -37,6 +37,17 @@ public sealed record Rerouted<T>(T Destination) : IShipmentEvent;
 
 public sealed record Mislaid(string Parcel) : INotification;
 
+public readonly record struct Weighed<T>(T Kilograms) : IShipmentEvent;
+
+// Built from a type parameter, so no declaration names the closed type. Only a closing at run time reaches it,
+// as in a generic base entity that raises new EntityCreated<TSelf>().
+public static class Shipments
+{
+    public static INotification Reroute<T>(T destination) => new Rerouted<T>(destination);
+
+    public static INotification Weigh<T>(T kilograms) => new Weighed<T>(kilograms);
+}
+
 public sealed class DispatchedLogger(Trace trace) : INotificationHandler<Dispatched>
 {
     public Task Handle(Dispatched notification, CancellationToken cancellationToken)

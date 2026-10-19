@@ -48,6 +48,9 @@ internal sealed record DiagnosticEntry(string Rule, EquatableArray<string> Argum
 /// <summary>Everything the emitter needs, decided.</summary>
 /// <param name="Namespace">Where the generated mediator lives, named after the assembly.</param>
 /// <param name="RegistrationNamespace">Where <c>AddCapar</c> lives; see <see cref="Planner.RegistrationNamespaceFor"/>.</param>
+/// <param name="OpenNotificationHandlers">
+/// Generic notification handlers, unbound and in the order they run, for notification types the build never saw.
+/// </param>
 /// <param name="Emits">False for a project that only uses another project's mediator; see <see cref="Planner.Build"/>.</param>
 internal sealed record EmitPlan(
     string Namespace,
@@ -62,6 +65,7 @@ internal sealed record EmitPlan(
     EquatableArray<ExceptionCatalogEntry> ExceptionCatalogs,
     EquatableArray<string> SuppressedWarnings,
     EquatableArray<DiagnosticEntry> Diagnostics,
+    EquatableArray<string> OpenNotificationHandlers,
     bool Emits = true);
 
 /// <summary>Turns what discovery found into what gets emitted, deciding every conflict on the way.</summary>
@@ -93,7 +97,8 @@ internal static class Planner
             && discovery.Handlers.All(static handler => handler.Order.Assembly != 0)
             && !discovery.Skipped.Any(static skipped => skipped.Location is not null);
         List<DiagnosticEntry> diagnostics = [];
-        MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order));
+        MetadataOrder order = new(discovery.Handlers.Select(static handler => handler.Order)
+            .Concat(discovery.OpenNotifications.Select(static open => open.Order)));
 
         // The same message can arrive more than once: from a partial declaration, from a notification handler
         // naming a closed generic, or from source and a reference at once. The source copy wins because it
@@ -294,6 +299,12 @@ internal static class Planner
             catalogs.ToEquatableArray(),
             discovery.Experimental,
             diagnostics.ToEquatableArray(),
+            discovery.OpenNotifications
+                .OrderBy(static open => open.Order, order)
+                .ThenBy(static open => open.Definition, StringComparer.Ordinal)
+                .Select(static open => open.Definition)
+                .Distinct(StringComparer.Ordinal)
+                .ToEquatableArray(),
             Emits: !consumer);
 
         HandlerModel? Single(IGrouping<string, HandlerModel> group, MessageKind kind)

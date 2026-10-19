@@ -64,6 +64,11 @@ internal static class Emitter
         code.Line("private readonly global::System.IServiceProvider _services;");
         code.Line("private readonly global::Capar.Internal.PipelineState<CaparMediator> _pipelines;");
         code.Line("private global::Capar.INotificationPublisher? _publisher;");
+        if (plan.OpenNotificationHandlers.Length > 0)
+        {
+            code.Line($"private static readonly global::Capar.Internal.OpenNotificationHandlers OpenNotificationHandlers = new({string.Join(", ", plan.OpenNotificationHandlers.Select(static definition => $"typeof({definition})"))});");
+        }
+
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"private readonly bool _keep{handler.Value};");
@@ -93,7 +98,7 @@ internal static class Emitter
         EmitRequests(code, plan, handlerIndex);
         EmitStreams(code, plan, handlerIndex);
         EmitNotifications(code, plan, handlerIndex);
-        EmitInterfaceMembers(code);
+        EmitInterfaceMembers(code, plan);
         EmitHandlerAccessors(code, handlerIndex);
         EmitDispatchers(code, plan);
 
@@ -163,6 +168,16 @@ internal static class Emitter
             code.Line($"if (registered.Add(typeof({handler})))");
             code.Line("{");
             code.Line($"    services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({handler}), typeof({handler}), handlerLifetime));");
+            code.Line("}");
+        }
+
+        // Generic notification handlers are registered open as well, for notification types the build never saw;
+        // the container closes them, as under MediatR.
+        foreach (string definition in plan.OpenNotificationHandlers)
+        {
+            code.Line($"if (registered.Add(typeof({definition})))");
+            code.Line("{");
+            code.Line($"    services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({definition}), typeof({definition}), handlerLifetime));");
             code.Line("}");
         }
 
@@ -588,7 +603,7 @@ internal static class Emitter
         }
     }
 
-    private static void EmitInterfaceMembers(CodeWriter code)
+    private static void EmitInterfaceMembers(CodeWriter code, EmitPlan plan)
     {
         code.Line();
         code.Line("/// <inheritdoc />");
@@ -700,7 +715,7 @@ internal static class Emitter
         code.Line("    throw new global::System.ArgumentException($\"'{notification.GetType()}' does not implement INotification.\", nameof(notification));");
         code.Line("}");
         code.Line();
-        code.Line($"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(known, cancellationToken);");
+        code.Line(Unlisted(plan, "known"));
         code.Close();
 
         code.Line();
@@ -717,9 +732,15 @@ internal static class Emitter
         code.Line("    return dispatcher.Publish(this, notification, cancellationToken);");
         code.Line("}");
         code.Line();
-        code.Line($"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(notification, cancellationToken);");
+        code.Line(Unlisted(plan, "notification"));
         code.Close();
     }
+
+    // A notification type with no entry: nothing written handles it, but a generic handler may still close over it.
+    private static string Unlisted(EmitPlan plan, string notification) =>
+        plan.OpenNotificationHandlers.Length > 0
+            ? $"return OpenNotificationHandlers.Publish(_services, {notification}, _pipelines.SequentialPublish(_services) ? null : Publisher(), cancellationToken);"
+            : $"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty({notification}, cancellationToken);";
 
     private static void EmitHandlerAccessors(CodeWriter code, Dictionary<string, int> handlerIndex)
     {

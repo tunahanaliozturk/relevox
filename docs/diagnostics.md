@@ -69,7 +69,8 @@ The generated code calls closed types, so a generic handler is registered by clo
 builds ([ADR 0008](adr/0008-generic-handlers.md)):
 
 - A notification handler declared as `Audit<T> : INotificationHandler<T>` is closed over every notification
-  type the build can see that satisfies its constraints, as MediatR's container closes it at run time.
+  type the build can see that satisfies its constraints, and over any other at run time, as MediatR's container
+  closes it ([ADR 0009](adr/0009-open-notification-handlers-at-run-time.md)).
 - A request or stream handler such as `GetByIdHandler<T> : IRequestHandler<GetById<T>, string>
   where T : IEntity` is closed over every type in the solution that satisfies its constraints, as MediatR does
   with `RegisterGenericHandlers`.

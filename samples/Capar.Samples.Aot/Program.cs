@@ -38,6 +38,10 @@ await publisher.Publish(new Shipped(3));
 Check("notification, first handler", journal.Contains("emailed 3"), true);
 Check("notification, second handler", journal.Contains("invoiced 3"), true);
 
+// A notification type no declaration names, closed over at run time: the one place Capar calls MakeGenericType.
+await publisher.Publish(Events.Created(new Customer("Ada")));
+Check("generic handler, notification type the build never saw", journal.Contains("audited Created`1"), true);
+
 List<int> items = [];
 await foreach (int item in sender.CreateStream(new Countdown(3)))
 {
@@ -139,6 +143,25 @@ namespace Capar.Samples.Aot
         public Task Handle(Shipped notification, CancellationToken cancellationToken)
         {
             journal.Write($"invoiced {notification.OrderId}");
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed record Customer(string Name);
+
+    public sealed record Created<T>(T Entity) : INotification;
+
+    public static class Events
+    {
+        public static INotification Created<T>(T entity) => new Created<T>(entity);
+    }
+
+    public sealed class AuditLog<T>(Journal journal) : INotificationHandler<T>
+        where T : INotification
+    {
+        public Task Handle(T notification, CancellationToken cancellationToken)
+        {
+            journal.Write($"audited {typeof(T).Name}");
             return Task.CompletedTask;
         }
     }
