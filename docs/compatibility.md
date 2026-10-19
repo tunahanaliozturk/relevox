@@ -200,4 +200,6 @@ only over types that satisfy a constraint naming a type in the solution; the res
 up only the exception types some handler for that request names, which is what lets it run without
 generating code at run time. An exception handler registered directly with the container for some other
 exception type is not found. Open generic exception handlers and actions are closed over those same
-exception types, plus `Exception`.
+exception types, plus `Exception`. One whose exception type parameter is constrained to something narrower,
+such as `where TException : DomainException`, cannot take `Exception` and is reported as `RVX0004` rather than
+registered.

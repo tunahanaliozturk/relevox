@@ -88,6 +88,7 @@ The message says which of these a handler missed:
 | declared as H&lt;T&gt; : INotificationHandler&lt;T&gt;, with one type parameter | The notification is built from the type parameter, as in `INotificationHandler<Envelope<T>>`, or the handler has more type parameters than the notification. MediatR throws on every publish for the first shape. |
 | registered only when its type parameters are exactly the interface's | A generic processor, exception handler or action such as `Pre<T> : IRequestPreProcessor<Wrapper<T>>`, which the container cannot close. |
 | nested in a generic type | The handler's own type parameters come from the type around it. |
+| constrained to something narrower than Exception | A generic exception handler or action such as `DomainHandler<TRequest, TResponse, TException> where TException : DomainException`. Relevox registers open exception handlers and actions for `Exception` only, which such a handler cannot take. Write one closed handler per exception type instead, or constrain the type parameter to `Exception`. |
 
 An inaccessible generic handler, such as a `private` nested one or an `internal` one in another project, is
 reported as [RVX0003](#rvx0003), like a written one.

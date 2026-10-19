@@ -25,6 +25,40 @@ public sealed class GenericHandlerTests
         run.Diagnostics.Where(diagnostic => diagnostic.Id == "RVX0004").ShouldHaveSingleItem().GetMessage(System.Globalization.CultureInfo.InvariantCulture);
 
     [Fact]
+    public void A_generic_exception_handler_constrained_to_a_narrower_exception_is_reported_not_dropped()
+    {
+        // Registered for Exception only, such a handler would never be closed and never run, where MediatR runs
+        // it for the thrown type. Constrained to Exception itself, it is registered as before.
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            using Relevox.Pipeline;
+            public class DomainException : Exception;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed class DomainHandler<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
+                where TRequest : notnull
+                where TException : DomainException
+            {
+                public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class AnyHandler<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
+                where TRequest : notnull
+                where TException : Exception
+            {
+                public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        Reason(run).ShouldContain("'TException' is constrained to something narrower than Exception");
+        run.Diagnostics.Single(diagnostic => diagnostic.Id == "RVX0004").GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("DomainHandler");
+        run.Sources["RelevoxServiceCollectionExtensions.g.cs"].ShouldContain("typeof(global::AnyHandler<,,>)");
+        run.Sources["RelevoxServiceCollectionExtensions.g.cs"].ShouldNotContain("DomainHandler");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_generic_notification_handler_is_also_registered_open_in_the_order_it_runs()
     {
         // Kept open for notification types the build never sees. Two of them run in declaration order, the

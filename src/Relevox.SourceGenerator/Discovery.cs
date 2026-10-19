@@ -162,6 +162,22 @@ internal static partial class Discovery
                 && contract.TypeArguments.Length == symbol.TypeParameters.Length
                 && contract.TypeArguments.Select((argument, index) => SymbolEqualityComparer.Default.Equals(argument, symbol.TypeParameters[index])).All(static same => same))
             {
+                // Open exception handlers and actions are closed over System.Exception only. One whose exception
+                // type must be something narrower, such as TException : DomainException, would never be closed,
+                // and so never run, where MediatR runs it for the thrown type. Better a warning than silence.
+                if (exception is ITypeParameterSymbol { } thrown
+                    && (thrown.HasValueTypeConstraint
+                        || thrown.HasUnmanagedTypeConstraint
+                        || thrown.ConstraintTypes.Any(static bound => bound.ToDisplayString() != "System.Exception")))
+                {
+                    skipped.Add(Skip(
+                        SourceGenerator.Diagnostics.GenericHandler.Id,
+                        location,
+                        Display(symbol),
+                        $"its exception type parameter '{thrown.Name}' is constrained to something narrower than Exception, and a generic exception handler or action is registered for Exception only"));
+                    return;
+                }
+
                 open.Add(new OpenRegistration(
                     contract.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
                     symbol.ConstructUnboundGenericType().ToDisplayString(PlainFormat)));
