@@ -27,7 +27,7 @@ NuGet, waits for an approval.
    gh api -X POST repos/tunahanaliozturk/relevox/rulesets --input eng/main-ruleset.json
    ```
 
-   Once CodeQL runs, add its `analyze` job to the required checks.
+   CodeQL's `analyze` job is among the required checks, since it first ran on 2026-10-19.
 
 ## Each release
 

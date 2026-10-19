@@ -135,6 +135,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [8. Generic handlers are closed at build time](docs/adr/0008-generic-handlers.md)
 - [9. Generic notification handlers also close at run time](docs/adr/0009-open-notification-handlers-at-run-time.md)
 - [10. The name: Relevox](docs/adr/0010-name-relevox.md)
+- [11. `Relevox.Internal` is a contract between generated code and the runtime](docs/adr/0011-internal-api-is-a-contract.md)
 
 ## Building
 
