@@ -246,7 +246,7 @@ internal static partial class Discovery
             // Only types that can actually be instantiated and sent get a dispatch entry. An abstract base or
             // an interface still matters for notifications, through the AssignableTo list of each concrete type
             // that derives from it. An open generic is reached through its closed forms, which handlers name.
-            if (message.IsAbstract || message.IsUnboundGenericType || ContainsTypeParameters(message) || !IsAccessible(message, compilation))
+            if (message.IsAbstract || message.IsUnboundGenericType || IsOpen(message) || !IsAccessible(message, compilation))
             {
                 return;
             }
@@ -571,7 +571,9 @@ internal static partial class Discovery
 
     private static bool IsObsoleteAsError(ITypeSymbol type)
     {
-        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        // A type parameter's containing type is the generic type that declares it, which names the parameter
+        // again: walking on would never end.
+        for (ITypeSymbol? current = type; current is not null and not ITypeParameterSymbol; current = current.ContainingType)
         {
             foreach (AttributeData attribute in current.GetAttributes())
             {
@@ -594,7 +596,7 @@ internal static partial class Discovery
 
     private static void CollectExperimental(ITypeSymbol type, HashSet<string> ids)
     {
-        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        for (ITypeSymbol? current = type; current is not null and not ITypeParameterSymbol; current = current.ContainingType)
         {
             foreach (AttributeData attribute in current.GetAttributes())
             {

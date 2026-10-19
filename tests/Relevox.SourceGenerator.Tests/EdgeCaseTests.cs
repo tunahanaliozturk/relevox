@@ -429,6 +429,27 @@ public sealed class EdgeCaseTests
     }
 
     [Fact]
+    public void A_request_nested_in_a_generic_type_neither_crashes_the_build_nor_is_left_out_when_closed()
+    {
+        // Paged<T>.Query names T through its containing type only. Walking it once sent the compiler into a stack
+        // overflow, the analyzer host with it.
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public static class Paged<T>
+            {
+                public sealed record Query(int Page) : IRequest<T[]>;
+            }
+            public sealed class IntPages : IRequestHandler<Paged<int>.Query, int[]>
+            {
+                public Task<int[]> Handle(Paged<int>.Query request, CancellationToken cancellationToken) => Task.FromResult(new[] { request.Page });
+            }
+            """);
+
+        run.Mediator.ShouldContain("Send(global::Paged<int>.Query request");
+        run.Ids.ShouldBeEmpty();
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_downstream_project_stays_quiet_about_what_the_mediator_already_reported()
     {
         // A contracts-only library with an open processor and an internal handler, under an application that
