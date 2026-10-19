@@ -1,0 +1,46 @@
+name: Migration problem
+description: Moving a project from MediatR to Relevox did not go as the guide says.
+labels: [migration]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every real project migrated so far has taught Relevox something, so this is the most useful report you can send.
+  - type: input
+    id: mediatr
+    attributes:
+      label: MediatR version you moved from
+      placeholder: 12.5.0, 13.1.0, 14.2.0
+    validations:
+      required: true
+  - type: input
+    id: relevox
+    attributes:
+      label: Relevox version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where it went wrong
+      options:
+        - The package swap
+        - The RVX0007 fix, in the IDE or with dotnet format
+        - The build after the fix
+        - Behaviour at run time differs from MediatR
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The diagnostic or exception text, and the code it points at. For a run-time difference, what MediatR did and what Relevox did.
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: How the solution is laid out
+      description: Which projects reference MediatR or MediatR.Contracts, and which one calls AddMediatR. Generic handlers, behaviours, processors and notification handlers in other projects are all worth mentioning.

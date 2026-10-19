@@ -152,10 +152,45 @@ def migration(t):
     ]
 
 
+# The README's benchmark table, from docs/benchmark-results/2026-10-17-m4.md: (label, MediatR, Relevox, unit).
+BENCHMARKS = [
+    ("Send through ISender", 37.1, 15.7, "ns"),
+    ("Send, generated mediator", 37.1, 9.3, "ns"),
+    ("Send, three behaviours", 141, 66, "ns"),
+    ("Publish to five handlers", 138, 53.6, "ns"),
+    ("Stream of 100 items", 2.45, 1.40, "µs"),
+    ("Register and send once", 93.4, 3.0, "µs"),
+    ("8 of 500 request types", 113.5, 28.2, "ns"),
+]
+
+
+def benchmarks(t):
+    parts = [
+        f'<text x="20" y="34" font-family="{SANS}" font-size="15" font-weight="600" fill="{t["ink"]}">Time, MediatR 12.5 = 100%</text>',
+        f'<rect x="560" y="22" width="14" height="14" rx="3" fill="{t["line"]}"/>',
+        f'<text x="580" y="34" font-family="{SANS}" font-size="13" fill="{t["muted"]}">MediatR 12.5</text>',
+        f'<rect x="680" y="22" width="14" height="14" rx="3" fill="{t["accent"]}"/>',
+        f'<text x="700" y="34" font-family="{SANS}" font-size="13" fill="{t["muted"]}">Relevox</text>',
+    ]
+    top, left, width = 60, 230, 520
+    for index, (label, theirs, ours, unit) in enumerate(BENCHMARKS):
+        y = top + index * 46
+        share = ours / theirs
+        parts.append(f'<text x="{left - 14}" y="{y + 22}" text-anchor="end" font-family="{SANS}" font-size="13.5" fill="{t["ink"]}">{esc(label)}</text>')
+        parts.append(f'<rect x="{left}" y="{y + 4}" width="{width}" height="12" rx="4" fill="{t["line"]}"/>')
+        parts.append(f'<rect x="{left}" y="{y + 18}" width="{max(width * share, 4):.1f}" height="12" rx="4" fill="{t["accent"]}"/>')
+        parts.append(
+            f'<text x="{left + width + 12}" y="{y + 22}" font-family="{MONO}" font-size="12.5" fill="{t["muted"]}">'
+            f'{ours:g} vs {theirs:g} {unit}  ({share:.2f})</text>'
+        )
+    return parts
+
+
 DIAGRAMS = {
     "how-it-works": (860, 428, how_it_works),
     "project-layout": (1000, 172, project_layout),
     "migration": (1090, 172, migration),
+    "benchmarks": (960, 390, benchmarks),
 }
 
 

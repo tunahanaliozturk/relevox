@@ -17,6 +17,17 @@ NuGet, waits for an approval.
    the repository variable `NUGET_USER` to the nuget.org account name.
 5. **Make the repository public** if it is not yet. The SourceLink in the packages points at it, and CodeQL
    starts running then.
+6. **Protect `main`**, which GitHub allows on a private repository only on a paid plan. The rules are in
+   [`eng/main-ruleset.json`](eng/main-ruleset.json): changes arrive through a pull request with its
+   conversations resolved, every CI job has to pass on an up-to-date branch, history stays linear, and the
+   branch can be neither force-pushed nor deleted. No approving review is required, so a sole maintainer can
+   still merge. Apply them once:
+
+   ```bash
+   gh api -X POST repos/tunahanaliozturk/relevox/rulesets --input eng/main-ruleset.json
+   ```
+
+   Once CodeQL runs, add its `analyze` job to the required checks.
 
 ## Each release
 
