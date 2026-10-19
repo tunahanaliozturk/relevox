@@ -28,7 +28,8 @@ reports RVX0005, rather than drop that handler.
 
 `AddRelevox` called a second time from the same project does nothing. Called after another project's
 `AddRelevox`, it throws, because only one mediator can be `IMediator` and keeping the first silently would
-leave the other's handlers unreachable.
+leave the other's handlers unreachable. An `IMediator`, `ISender` or `IPublisher` the application registered itself before
+`AddRelevox`, such as a test double, is kept, as MediatR keeps it.
 
 ## Matched, including the surprising parts
 
