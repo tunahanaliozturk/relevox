@@ -1,5 +1,9 @@
 # Security
 
+## Supported versions
+
+The latest release gets fixes. Before 1.0.0, that means the latest release candidate.
+
 ## Reporting a vulnerability
 
 Open a [private security advisory](https://github.com/tunahanaliozturk/relevox/security/advisories/new)

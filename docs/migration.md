@@ -110,8 +110,7 @@ Delete the scanning calls, because there is nothing to scan: `RegisterServicesFr
 `RegisterServicesFromAssemblies`, `RegisterServicesFromAssemblyContaining`, `AssembliesToRegister` and
 `TypeEvaluator`. Delete `MediatorImplementationType` too: the mediator is generated, so there is no class to
 swap. Everything else on MediatR's configuration exists on `RelevoxOptions` with the same name and number of
-parameters: behaviours,
-stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `NotificationPublisherType`,
+parameters: behaviours, stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `NotificationPublisherType`,
 `AutoRegisterRequestProcessors` and `RequestExceptionActionProcessorStrategy`. A test compares the two types
 member by member. Delete `RegisterGenericHandlers` and the limits that go with it
 (`MaxGenericTypeParameters`, `MaxGenericTypeRegistrations`, `MaxTypesClosing`, `RegistrationTimeout`): generic
@@ -178,5 +177,7 @@ Nothing below is needed to migrate. Each is a choice MediatR did not offer.
 - **Make stateless handlers singletons** with `options.HandlerLifetime = ServiceLifetime.Singleton`, or by
   registering a handler yourself before `AddRelevox`. The generated mediator then resolves each handler once
   and keeps it.
-- **Publish with NativeAOT.** Nothing on the dispatch path uses reflection, and no trimming annotations are
-  needed.
+- **Publish with NativeAOT.** Dispatch uses no reflection, and no trimming annotations are needed. The one
+  exception is a generic notification handler reaching a notification type the build never saw, which is closed
+  with `MakeGenericType` once per type; under NativeAOT that works for classes, not structs
+  ([ADR 0009](adr/0009-open-notification-handlers-at-run-time.md)).

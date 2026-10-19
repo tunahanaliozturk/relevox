@@ -32,7 +32,9 @@ NuGet, waits for an approval.
 ## Each release
 
 1. Move the `Unreleased` section of `CHANGELOG.md` under a heading `## [x.y.z] - yyyy-mm-dd` and merge that.
-   The workflow refuses a tag with no matching section, and the section becomes the release notes.
+   The workflow refuses a tag with no matching section, and the section becomes the release notes. In the same
+   pull request, move the rules in each `AnalyzerReleases.Unshipped.md` to `AnalyzerReleases.Shipped.md` under
+   `## Release x.y.z`, and update the README's status line.
 2. Tag the merge commit and push the tag:
 
    ```bash
@@ -41,9 +43,10 @@ NuGet, waits for an approval.
    ```
 
    A version with a suffix, such as `-rc.1`, becomes a pre-release on GitHub and on NuGet.
-3. The workflow builds, runs every test suite, packs with the tag's version, installs the packages into a
-   new application and runs it, and validates SourceLink, determinism and compiler flags. It then creates
-   the GitHub release with the packages attached.
+3. The workflow builds, runs the generator, differential and web sample tests, packs with the tag's version,
+   installs the packages into a new application and runs it, and validates SourceLink, determinism and compiler
+   flags. It then creates the GitHub release with the packages attached. NativeAOT, the licence audit and the
+   benchmark sanity run are CI's, on the commit being tagged: tag only a commit whose CI is green.
 4. Approve the `publish to NuGet` job when you are ready. It pushes both packages and their symbols.
 
 ## If something is wrong
