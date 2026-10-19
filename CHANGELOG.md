@@ -6,6 +6,8 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-19
+
 The first release. Relevox is a mediator for .NET 10 whose dispatch is written by a source generator while the
 project builds, with the same handler signatures as MediatR 12. Moving over changes packages, `using` directives
 and one registration call; the [migration guide](docs/migration.md) covers it, and

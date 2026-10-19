@@ -4,8 +4,8 @@ A mediator for .NET whose dispatch is written by a source generator at build tim
 signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 
 ```bash
-dotnet add package Relevox --prerelease             # the application, which calls AddRelevox
-dotnet add package Relevox.Contracts --prerelease   # libraries that only declare requests and handlers
+dotnet add package Relevox             # the application, which calls AddRelevox
+dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
 ```
 
 - **Same signatures as MediatR 12.** Requests, notifications, streams, pipeline behaviours, pre and post
