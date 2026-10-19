@@ -60,8 +60,9 @@ All notable changes to this project are written down here. The format follows
   with a generic handler still walks the interfaces.
 - A web sample: an ASP.NET Core minimal API with scoped services in handlers, a validation behaviour, a
   pre-processor, problem details, a notification with two listeners and a streamed list, tested over HTTP in CI.
-- A migration of Jason Taylor's Clean Architecture template from MediatR 14.2.0, with its tests passing before
-  and after: [docs/migration-trial.md](docs/migration-trial.md).
+- Migrations of Jason Taylor's Clean Architecture template from MediatR 14.2.0 and of Microsoft's eShop from
+  MediatR 13.1.0, with their tests passing before and after: [docs/migration-trial.md](docs/migration-trial.md).
+- CPR0007's fix no longer leaves a blank line at the top of a registration whose first statement it removed.
 - A project that has no handlers or processors of its own, does not call `AddCapar`, and references a project
   with a mediator generates nothing and reports nothing about its references, so the projects below an
   application layer no longer warn with CPR0005. It still generates when a handler in its references sits where

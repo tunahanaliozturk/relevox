@@ -240,7 +240,8 @@ public sealed class MigrateFromMediatR : CodeFixProvider
 
     /// <summary>
     /// Removes a statement from its block, keeping the comments and directives above it on the next line. Its
-    /// indentation goes with it: carried over, it would indent the next line twice.
+    /// indentation goes with it: carried over, it would indent the next line twice. When it opened the block,
+    /// the blank lines that separated it from the next statement go too, so the block does not start with one.
     /// </summary>
     private static AnonymousFunctionExpressionSyntax Remove(AnonymousFunctionExpressionSyntax function, StatementSyntax statement)
     {
@@ -263,7 +264,23 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         StatementSyntax target = marked.DescendantNodes().OfType<StatementSyntax>().First(candidate => candidate.SpanStart == statement.SpanStart && candidate.IsKind(statement.Kind()));
         AnonymousFunctionExpressionSyntax removed = marked.RemoveNode(target, SyntaxRemoveOptions.KeepNoTrivia)!;
         SyntaxToken landing = removed.GetAnnotatedTokens(next).Single();
-        return removed.ReplaceToken(landing, landing.WithLeadingTrivia(SyntaxFactory.TriviaList(kept).AddRange(landing.LeadingTrivia)));
+        SyntaxTriviaList rest = landing.LeadingTrivia;
+        if (kept.Count == 0 && statement.Parent is BlockSyntax block && block.Statements[0] == statement)
+        {
+            // Everything up to the last line break before the next statement's own trivia begins.
+            int start = 0;
+            for (int index = 0; index < rest.Count && (rest[index].IsKind(SyntaxKind.WhitespaceTrivia) || rest[index].IsKind(SyntaxKind.EndOfLineTrivia)); index++)
+            {
+                if (rest[index].IsKind(SyntaxKind.EndOfLineTrivia))
+                {
+                    start = index + 1;
+                }
+            }
+
+            rest = SyntaxFactory.TriviaList(rest.Skip(start));
+        }
+
+        return removed.ReplaceToken(landing, landing.WithLeadingTrivia(SyntaxFactory.TriviaList(kept).AddRange(rest)));
     }
 
     // A statement or a nested lambda's expression body that a dropped member left with nothing to do.

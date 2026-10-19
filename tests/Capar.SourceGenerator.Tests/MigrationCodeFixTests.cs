@@ -193,6 +193,32 @@ public sealed class MigrationCodeFixTests
     }
 
     [Fact]
+    public async Task Removing_the_first_statement_does_not_leave_the_block_starting_with_a_blank_line()
+    {
+        // eShop's registration: the scan first, a blank line, then the behaviours.
+        string[] fixedSources = await Migrate(Handlers, """
+            using MediatR;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop;
+
+            public static class Startup
+            {
+                public static IServiceCollection Configure(IServiceCollection services) =>
+                    services.AddMediatR(options =>
+                    {
+                        options.RegisterServicesFromAssembly(typeof(Startup).Assembly);
+
+                        options.AddOpenBehavior(typeof(Logging<,>));
+                    });
+            }
+            """);
+
+        fixedSources[1].ReplaceLineEndings("\n").ShouldContain("{\n            options.AddOpenBehavior(typeof(Logging<,>));");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
     public async Task Removed_settings_nested_in_statements_and_lambdas_leave_code_that_builds()
     {
         string[] fixedSources = await Migrate(Handlers, """

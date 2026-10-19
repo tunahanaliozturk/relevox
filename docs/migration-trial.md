@@ -1,10 +1,16 @@
-# Migrating a real project
+# Migrating real projects
 
-Every other test in this repository runs code written for it. This page is about code that was not: Jason
-Taylor's [Clean Architecture template](https://github.com/jasontaylordev/CleanArchitecture) (MIT), a widely
-used starting point for .NET applications, which uses MediatR for every request in the application layer.
+Every other test in this repository runs code written for it. This page is about code that was not: two widely
+used .NET applications on MediatR, moved to Çapar the way the [migration guide](migration.md) says, with their
+own tests run before and after.
 
-## The project
+- Jason Taylor's [Clean Architecture template](https://github.com/jasontaylordev/CleanArchitecture) (MIT), on
+  MediatR 14.2.0.
+- Microsoft's [eShop reference application](https://github.com/dotnet/eShop) (MIT), on MediatR 13.1.0.
+
+## Clean Architecture
+
+### The project
 
 - Upstream commit `1bc2b07`, 2026-10-15, .NET 10.
 - MediatR **14.2.0**, the commercially licensed line, and `MediatR.Contracts` in the domain layer.
@@ -17,7 +23,7 @@ used starting point for .NET applications, which uses MediatR for every request 
 Everything ran locally with `-p:NuGetAudit=false -p:AspireUseCliBundle=false`, on both sides, for two problems
 in the template's own dependencies that have nothing to do with the mediator.
 
-## What the migration took
+### What the migration took
 
 1. In `Directory.Packages.props`, `MediatR` became `Capar` and `MediatR.Contracts` became `Capar.Contracts`; the
    two project files changed the same names. Four lines.
@@ -38,7 +44,7 @@ in the template's own dependencies that have nothing to do with the mediator.
 | Functional tests | 19 passed | 19 passed |
 | Files changed | | 10, +11 / -12 lines |
 
-## What it found
+### What it found
 
 The first attempt did not go that smoothly, and each problem was Çapar's, fixed before this page was written.
 
@@ -57,6 +63,62 @@ The first attempt did not go that smoothly, and each problem was Çapar's, fixed
 - **`dotnet format` runs the fix.** Not a problem, a discovery: the command above migrates a solution without
   an IDE, which the guide now says.
 
-None of these showed up in the repository's own tests, which reference Çapar's projects directly rather than
-its packages, and which were written by the same people who wrote the code. That is the case for doing this
-before a release.
+## eShop
+
+### The project
+
+- Upstream commit `913acea`, 2026-10-15, .NET 10, Aspire.
+- MediatR **13.1.0**, the first commercially licensed version. eShop sets no licence key.
+- The ordering service is the part that uses MediatR. Domain declares seven domain events as `INotification`.
+  Infrastructure publishes them through `IMediator` from its `DbContext`. Ordering.API holds nine command and
+  query handlers, seven domain event handlers, three open behaviours (logging, validation, a database
+  transaction) and the `AddMediatR` call. The unit tests mock `IMediator`.
+- Tests: 43 ordering unit tests, and 11 functional tests that start the API against a real Postgres in a
+  container through Aspire and send it HTTP requests.
+
+The same `-p:NuGetAudit=false -p:AspireUseCliBundle=false` as above, on both sides. The solution file includes
+the MAUI client, which needs workloads this machine does not have, so the commands use eShop's own
+`eShop.Web.slnf`, which leaves it out.
+
+### What the migration took
+
+1. In `Directory.Packages.props`, `MediatR` became `Capar` and `Capar.Contracts`. Ordering.Domain's project
+   file changed `MediatR` to `Capar.Contracts`, and Ordering.API, which had MediatR only through Domain, got
+   an explicit reference to `Capar`, since the generator has to run where `AddCapar` is called.
+2. The same command:
+
+   ```bash
+   dotnet format analyzers eShop.Web.slnf --diagnostics CPR0007 --severity info
+   ```
+
+   It changed five source files in 26 seconds: four global `using` directives and the registration, which lost
+   its `RegisterServicesFromAssemblyContaining` line and kept the three behaviours.
+3. Nothing else. eShop builds with warnings as errors, and it built with none.
+
+| | MediatR 13.1.0 | Çapar |
+|---|---:|---:|
+| Ordering unit tests | 43 passed | 43 passed |
+| Ordering functional tests, Postgres | 11 passed | 11 passed |
+| Files changed | | 8, +9 / -9 lines |
+
+Only Ordering.API generates a mediator. The two test projects reference it, run the generator because analyzers
+flow through project references, and generate nothing, as the consumer rule from the first trial intends.
+
+### What it found
+
+Less than the first one, which is the point of doing a second.
+
+- **A blank line at the top of the registration.** The scan call was the first statement in the lambda and a
+  blank line followed it; removing the call left the block opening with that blank line. The fix now drops
+  blank lines that would open a block. The table above is from the fixed version.
+- **The build does not show CPR0007.** Not a bug, but worth saying: after the package swap, `dotnet build` shows
+  only the compiler's errors for the missing `MediatR` namespace, because the compiler does not run analyzers
+  once there are errors. The IDE and `dotnet format` do, which the guide now says.
+- **`dotnet format` only changes files below the directory it runs in.** Found writing the package smoke test,
+  not in eShop, and also in the guide now.
+
+## Why bother
+
+None of what the first trial found showed up in the repository's own tests, which reference Çapar's projects
+directly rather than its packages, and which were written by the same people who wrote the code. That is the
+case for doing this before a release, and for doing it on more than one project.
