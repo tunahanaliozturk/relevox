@@ -630,7 +630,10 @@ internal static class Emitter
             code.Line("{");
             for (int target = 0; target < notification.Targets.Length; target++)
             {
-                code.Line($"    new(handler{target}, (message, token) => handler{target}.Handle(({shape.Syntax})message, token)),");
+                // The null-forgiving operator, here and below, because a handler may name the notification with
+                // other nullable annotations, Envelope<string> for an Envelope<string?>: the same type at run time,
+                // and CS8620 under warnings as errors without it.
+                code.Line($"    new(handler{target}, (message, token) => handler{target}.Handle((({shape.Syntax})message)!, token)),");
             }
 
             code.Line("};");
@@ -651,7 +654,7 @@ internal static class Emitter
             code.Open($"private static async {Task} PublishSequentially{index}({string.Join(", ", parameters)})");
             for (int target = 0; target < notification.Targets.Length; target++)
             {
-                code.Line($"await handler{target}.Handle(notification, cancellationToken).ConfigureAwait(false);");
+                code.Line($"await handler{target}.Handle(notification!, cancellationToken).ConfigureAwait(false);");
             }
 
             code.Close();

@@ -87,6 +87,28 @@ public sealed class EdgeCaseTests
     }
 
     [Fact]
+    public void Notification_handlers_that_name_the_notification_with_other_annotations_compile()
+    {
+        // Envelope<string?> and Envelope<string> are one type at run time, so both handlers receive it, and the
+        // generated call to the second one failed with CS8620.
+        GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
+            public sealed record Envelope<T>(T Body) : INotification;
+
+            public sealed class Lenient : INotificationHandler<Envelope<string?>>
+            {
+                public Task Handle(Envelope<string?> notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class Strict : INotificationHandler<Envelope<string>>
+            {
+                public Task Handle(Envelope<string> notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_nullable_response_keeps_its_annotation()
     {
         GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
