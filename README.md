@@ -166,6 +166,10 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [11. `Relevox.Internal` is a contract between generated code and the runtime](docs/adr/0011-internal-api-is-a-contract.md)
 - [12. A testing package with a fake mediator and a notification recorder](docs/adr/0012-testing-package.md)
 
+## Roadmap
+
+What comes next, version by version, is in [docs/roadmap.md](docs/roadmap.md).
+
 ## Building
 
 The .NET 10 SDK is all it needs.
