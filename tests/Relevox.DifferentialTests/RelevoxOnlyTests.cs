@@ -49,6 +49,20 @@ public sealed class RelevoxOnlyTests
     }
 
     [Fact]
+    public async Task A_handler_registered_again_as_transient_after_AddRelevox_is_never_kept()
+    {
+        // The container resolves the last registration, so the mediator has to judge by it as well.
+        ServiceCollection services = new();
+        services.AddSingleton<S.Trace>();
+        Registration.AddRelevox(services, options => options.HandlerLifetime = ServiceLifetime.Singleton);
+        services.AddTransient<S.StampHandler>();
+        await using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        RelevoxMediator mediator = provider.GetRequiredService<RelevoxMediator>();
+
+        (await mediator.Send(new S.Stamp())).ShouldNotBe(await mediator.Send(new S.Stamp()));
+    }
+
+    [Fact]
     public void Calling_AddRelevox_twice_is_harmless()
     {
         ServiceCollection services = new();
