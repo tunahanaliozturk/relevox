@@ -10,6 +10,7 @@
     <PackageTags>mediator;cqrs;mediatr;testing</PackageTags>
     <!-- Nothing to compare against until the first release; set to that version afterwards. -->
     <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
+    <RelevoxPackageReadme>$(MSBuildThisFileDirectory)../../docs/testing-package-readme.md</RelevoxPackageReadme>
   </PropertyGroup>
 
   <ItemGroup>

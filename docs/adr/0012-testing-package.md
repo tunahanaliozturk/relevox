@@ -18,8 +18,8 @@ notifications went out.
 Ship `Relevox.Testing` with two things and nothing else:
 
 - **`FakeMediator`**, an `IMediator` written by hand. Setups are keyed by request type and given as lambdas
-  whose parameter type names the request, so the compiler infers both type arguments and checks the response
-  against the request's `IRequest<T>`. It records sent requests and published notifications as objects. A
+  whose parameter type names the request, so the compiler infers both type arguments, when the lambda returns
+  the declared response type, and checks the response against the request's `IRequest<T>`. It records sent requests and published notifications as objects. A
   request with no setup fails, naming the type.
 - **`NotificationRecorder`**, registered by `AddRelevoxNotificationRecorder`, which replaces the
   `INotificationPublisher` in force with one that records and then delegates to it.

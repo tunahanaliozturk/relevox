@@ -50,7 +50,7 @@ public sealed class FakeMediator : IMediator
 
     /// <summary>Handles every <typeparamref name="TRequest"/>, a request without a response, with <paramref name="handle"/>.</summary>
     /// <typeparam name="TRequest">The request type.</typeparam>
-    /// <param name="handle">Runs for each request. Write it with braces, <c>r =&gt; { ... }</c>, so it cannot be read as returning a value.</param>
+    /// <param name="handle">Runs for each request.</param>
     /// <returns>This fake, to chain further setups.</returns>
     public FakeMediator Setup<TRequest>(Action<TRequest> handle)
         where TRequest : IRequest

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Relevox;
 using Relevox.NotificationPublishers;
 using Relevox.Testing;
@@ -19,6 +18,12 @@ public static class RelevoxTestingServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // A second call would wrap the first call's recording publisher and record everything twice.
+        if (services.Any(static descriptor => descriptor.ServiceType == typeof(NotificationRecorder)))
+        {
+            return services;
+        }
+
         // The container resolves the last unkeyed registration, so that is the one to wrap.
         ServiceDescriptor? inForce = services.LastOrDefault(static descriptor => descriptor.ServiceType == typeof(INotificationPublisher) && !descriptor.IsKeyedService);
         if (inForce is not null)
@@ -26,7 +31,7 @@ public static class RelevoxTestingServiceCollectionExtensions
             services.Remove(inForce);
         }
 
-        services.TryAddSingleton<NotificationRecorder>();
+        services.AddSingleton(static _ => new NotificationRecorder());
         services.Add(new ServiceDescriptor(
             typeof(INotificationPublisher),
             provider => new RecordingPublisher(provider.GetRequiredService<NotificationRecorder>(), Inner(provider, inForce), ownsInner: inForce is { ImplementationFactory: not null } or { ImplementationType: not null }),

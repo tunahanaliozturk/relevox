@@ -32,6 +32,22 @@ public sealed class NotificationRecorderTests
     }
 
     [Fact]
+    public async Task Adding_the_recorder_twice_records_each_notification_once()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton<Ledger>();
+        services.AddRelevox();
+        services.AddRelevoxNotificationRecorder();
+        services.AddRelevoxNotificationRecorder();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        await provider.GetRequiredService<IPublisher>().Publish(new PriceChanged("bolt", 4m));
+
+        provider.GetRequiredService<NotificationRecorder>().Published<object>().Count.ShouldBe(1);
+        provider.GetRequiredService<Ledger>().Lines.ShouldBe(["bolt 4"]);
+    }
+
+    [Fact]
     public async Task A_publisher_the_container_would_have_disposed_is_still_disposed()
     {
         ServiceCollection services = new();
