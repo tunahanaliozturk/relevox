@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Relevox.Internal;
 
 namespace Relevox.DifferentialTests;
@@ -8,6 +9,21 @@ namespace Relevox.DifferentialTests;
 /// </summary>
 public sealed class RequestPipelineTests
 {
+    [Fact]
+    public void A_request_with_no_behaviours_is_sent_directly_after_its_first_send()
+    {
+        // 1.0.0 remembered this case as a pipeline, so every send went back to the container. Nothing failed;
+        // only the send benchmark showed it.
+        using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        PipelineState<object> state = new(requests: 1, streams: 0, builtInsForEveryRequest: false);
+
+        state.TryDirect(0, out _).ShouldBeFalse();
+        state.Behaviors<string, int>(0, services, out bool asynchronous).ShouldBeNull();
+
+        asynchronous.ShouldBeFalse();
+        state.TryDirect(0, out _).ShouldBeTrue();
+    }
+
     [Fact]
     public async Task Ten_behaviours_run_in_order_and_a_late_one_can_retry()
     {
