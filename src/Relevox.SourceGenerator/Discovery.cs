@@ -109,7 +109,7 @@ internal static partial class Discovery
             switch (contract.MetadataName)
             {
                 case "IRequestHandler`2":
-                    AddHandler(HandlerKind.Request, contract.TypeArguments[0], contract.TypeArguments[1], contract);
+                    AddHandler(HandlerKind.Request, contract.TypeArguments[0], DeclaredResponse(contract.TypeArguments[0], "IRequest`1", contract.TypeArguments[1]), contract);
                     break;
                 case "IRequestHandler`1":
                     AddHandler(HandlerKind.VoidRequest, contract.TypeArguments[0], null, contract);
@@ -118,7 +118,7 @@ internal static partial class Discovery
                     AddHandler(HandlerKind.Notification, contract.TypeArguments[0], null, contract);
                     break;
                 case "IStreamRequestHandler`2":
-                    AddHandler(HandlerKind.Stream, contract.TypeArguments[0], contract.TypeArguments[1], contract);
+                    AddHandler(HandlerKind.Stream, contract.TypeArguments[0], DeclaredResponse(contract.TypeArguments[0], "IStreamRequest`1", contract.TypeArguments[1]), contract);
                     break;
                 case "IRequest`1" or "IRequest":
                     AddMessage(symbol, MessageKind.Request, location, fromSource);
@@ -225,7 +225,10 @@ internal static partial class Discovery
 
             handlers.Add(new HandlerModel(
                 kind,
-                Plain(symbol),
+                // Annotated: a closing such as Audit<Envelope<string?>> is cast to INotificationHandler<Envelope<string?>>,
+                // and the plain name, Audit<Envelope<string>>, fails that cast with CS8619. A class name is never
+                // annotated at the top level, so the name still works in typeof.
+                AnnotatedName(symbol),
                 Shape(message),
                 response is null ? null : Plain(response),
                 response is null ? null : AnnotatedName(response),
@@ -720,6 +723,30 @@ internal static partial class Discovery
     private static string Plain(ITypeSymbol symbol) => symbol.ToDisplayString(PlainFormat);
 
     private static string AnnotatedName(ITypeSymbol symbol) => symbol.ToDisplayString(AnnotatedFormat);
+
+    /// <summary>
+    /// The response as the request declares it in its <c>IRequest&lt;T&gt;</c> or <c>IStreamRequest&lt;T&gt;</c>, rather
+    /// than as the handler writes it. They are the same type, but a handler compiled with nullable annotations off
+    /// says <c>string</c> where the request says <c>string?</c>, and generated code naming the handler's version
+    /// breaks the request's constraint (CS8631).
+    /// </summary>
+    private static ITypeSymbol DeclaredResponse(ITypeSymbol message, string contract, ITypeSymbol handled)
+    {
+        IEnumerable<INamedTypeSymbol> candidates = message is INamedTypeSymbol { TypeKind: TypeKind.Interface } self
+            ? message.AllInterfaces.Prepend(self)
+            : message.AllInterfaces;
+        foreach (INamedTypeSymbol candidate in candidates)
+        {
+            if (candidate.MetadataName == contract
+                && candidate.ContainingNamespace?.ToDisplayString() == ContractsNamespace
+                && SymbolEqualityComparer.Default.Equals(candidate.TypeArguments[0], handled))
+            {
+                return candidate.TypeArguments[0];
+            }
+        }
+
+        return handled;
+    }
 
     private static string Display(ITypeSymbol symbol) =>
         symbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
