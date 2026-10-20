@@ -1,5 +1,10 @@
 # Relevox
 
+[GitHub](https://github.com/tunahanaliozturk/relevox) ·
+[Docs](https://github.com/tunahanaliozturk/relevox/tree/main/docs) ·
+[Changelog](https://github.com/tunahanaliozturk/relevox/blob/main/CHANGELOG.md) ·
+[Moving from MediatR](https://github.com/tunahanaliozturk/relevox/blob/main/docs/migration.md)
+
 A mediator for .NET whose dispatch is written by a source generator at build time, with the same handler
 signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 

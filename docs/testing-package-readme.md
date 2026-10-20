@@ -1,5 +1,9 @@
 # Relevox.Testing
 
+[GitHub](https://github.com/tunahanaliozturk/relevox) ·
+[Testing guide](https://github.com/tunahanaliozturk/relevox/blob/main/docs/testing.md) ·
+[Changelog](https://github.com/tunahanaliozturk/relevox/blob/main/CHANGELOG.md)
+
 Test helpers for [Relevox](https://github.com/tunahanaliozturk/relevox), the source-generated mediator with
 MediatR 12's handler signatures. Reference it from test projects only.
 
