@@ -6,6 +6,7 @@ signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 ```bash
 dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
+dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
 ```
 
 - **Same signatures as MediatR 12.** Requests, notifications, streams, pipeline behaviours, pre and post
@@ -15,7 +16,7 @@ dotnet add package Relevox.Contracts   # libraries that only declare requests an
   reported by the compiler.
 - **NativeAOT and trimming** without annotations.
 - **Faster than MediatR 12.5:** a send takes under half the time through `ISender` and a quarter through
-  the generated mediator; startup takes a thirtieth. Every number is measured and
+  the generated mediator; startup takes a twenty-fifth. Every number is measured and
   [published with the hardware named](https://github.com/tunahanaliozturk/relevox/tree/main/docs/benchmark-results).
 
 ## Packages
@@ -24,6 +25,7 @@ dotnet add package Relevox.Contracts   # libraries that only declare requests an
 |---|---|
 | `Relevox` | The application, the project that calls `AddRelevox`. It brings the source generator. |
 | `Relevox.Contracts` | Projects that only declare requests and handlers: domain, application, feature libraries. |
+| `Relevox.Testing` | Test projects: a fake `IMediator` and a recorder for published notifications ([testing.md](https://github.com/tunahanaliozturk/relevox/blob/main/docs/testing.md)). |
 
 ## Quick start
 

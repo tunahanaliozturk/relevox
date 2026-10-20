@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Relevox;
+using Relevox.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Smoke;
 
@@ -9,6 +10,7 @@ using Smoke;
 ServiceCollection services = new();
 services.AddSingleton<Log>();
 services.AddRelevox(options => options.AddOpenBehavior(typeof(Counting<,>)));
+services.AddRelevoxNotificationRecorder();
 
 await using ServiceProvider provider = services.BuildServiceProvider();
 using IServiceScope scope = provider.CreateScope();
@@ -31,6 +33,10 @@ await foreach (int item in sender.CreateStream(new Count(3)))
 }
 
 Check("stream", string.Join(",", items), "1,2,3");
+Check("recorder saw the publish", provider.GetRequiredService<NotificationRecorder>().Published<Shipped>().Count, 1);
+
+FakeMediator fake = new FakeMediator().Setup((Ping ping) => ping.Text + " faked");
+Check("fake mediator", await fake.Send(new Ping("hi")), "hi faked");
 Console.WriteLine("Every check passed against the packed packages.");
 return 0;
 

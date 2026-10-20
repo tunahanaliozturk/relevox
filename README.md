@@ -16,6 +16,7 @@ handed from runner to runner. A request goes the same way, through each behaviou
 ```bash
 dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
+dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
 ```
 
 ## Why
@@ -117,6 +118,12 @@ fails if their output differs. [samples/Relevox.Samples.Web](samples/Relevox.Sam
 minimal API on Relevox, with its [`.http` file](samples/Relevox.Samples.Web/Relevox.Samples.Web.http) and tests that
 drive it over HTTP.
 
+## Testing
+
+`Relevox.Testing` has a `FakeMediator` that answers what the test set up and records what was sent and
+published, in place of a mocked `IMediator`, and a recorder for the notifications the real mediator publishes
+in an integration test. [docs/testing.md](docs/testing.md) shows both, next to the Moq version.
+
 ## How it works
 
 <picture>
@@ -140,6 +147,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [9. Generic notification handlers also close at run time](docs/adr/0009-open-notification-handlers-at-run-time.md)
 - [10. The name: Relevox](docs/adr/0010-name-relevox.md)
 - [11. `Relevox.Internal` is a contract between generated code and the runtime](docs/adr/0011-internal-api-is-a-contract.md)
+- [12. A testing package with a fake mediator and a notification recorder](docs/adr/0012-testing-package.md)
 
 ## Building
 

@@ -334,6 +334,7 @@ mechanical change today and gets more expensive after the first release.
 - 0009 Generic notification handlers also closed at run time, for notification types the build never saw.
 - 0010 The name: Relevox, and RVX for the diagnostics.
 - 0011 `Relevox.Internal` only grows within a major version.
+- 0012 A testing package with a fake mediator and a notification recorder.
 
 ## 10. Open questions
 

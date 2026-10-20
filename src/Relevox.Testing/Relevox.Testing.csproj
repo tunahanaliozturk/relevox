@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>Relevox.Testing</PackageId>
+    <Description>Test helpers for Relevox: a fake IMediator that answers what you set up and records what was sent and published, and a recorder for the notifications a real mediator publishes.</Description>
+    <PackageTags>mediator;cqrs;mediatr;testing</PackageTags>
+    <!-- Nothing to compare against until the first release; set to that version afterwards. -->
+    <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      For INotificationPublisher, which the recorder wraps. The analyzers stay behind: a test project gets the
+      generator from the application it references, and a second copy through this package would give the test
+      project a mediator of its own.
+    -->
+    <ProjectReference Include="../Relevox/Relevox.csproj" PrivateAssets="analyzers" />
+  </ItemGroup>
+
+</Project>

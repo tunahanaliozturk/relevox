@@ -54,6 +54,10 @@ jobs:
       - name: Web sample tests
         run: dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build
 
+      # Relevox.Testing: the fake mediator on its own, and the recorder in front of a real generated mediator.
+      - name: Testing package tests
+        run: dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build
+
       # The same order service on MediatR 12.5 and moved to Relevox by following docs/migration.md. Both print
       # what they did; any difference in the transcripts fails the build.
       - name: Migration sample prints the same before and after

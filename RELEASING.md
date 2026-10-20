@@ -58,7 +58,9 @@ NuGet, waits for an approval.
    benchmark sanity run are CI's, on the commit being tagged: tag only a commit whose CI is green.
 5. Approve the `publish to NuGet` job when you are ready. It pushes both packages and their symbols.
 6. Once the packages are on nuget.org, set `PackageValidationBaselineVersion` in `Directory.Build.props` to the
-   version just released. Every later pack then fails on a member removed or changed since that release,
+   version just released. After `Relevox.Testing`'s first release, also remove the empty override in its project
+   file, which keeps validation from looking for a version that does not exist yet. Before that first release,
+   add `Relevox.Testing` to the packages of the trusted publishing policy on nuget.org, or its push is refused. Every later pack then fails on a member removed or changed since that release,
    `Relevox.Internal` included ([ADR 0011](docs/adr/0011-internal-api-is-a-contract.md)).
 
    A new major version is the one release allowed to break it, and the check would still stop it. Record each
