@@ -42,6 +42,9 @@ All notable changes to this project are written down here. The format follows
   `AddRelevox` was still held by the mediator, so one instance was shared where the container hands out a new
   one each time. Which handlers the mediator may hold is now read when the first mediator is built.
 
+Every benchmark was run again on this code ([results](docs/benchmark-results/2026-10-20-1.1.0.md)). Nothing on the
+send, publish or stream paths changed; registering allocates 2 KB more.
+
 ## [1.0.1] - 2026-10-20
 
 ### Fixed

@@ -152,15 +152,15 @@ def migration(t):
     ]
 
 
-# The README's benchmark table, from docs/benchmark-results/2026-10-20-1.0.1.md: (label, MediatR, Relevox, unit).
+# The README's benchmark table, from docs/benchmark-results/2026-10-20-1.1.0.md: (label, MediatR, Relevox, unit).
 BENCHMARKS = [
-    ("Send through ISender", 32.5, 11.3, "ns"),
-    ("Send, generated mediator", 32.5, 7.8, "ns"),
-    ("Send, three behaviours", 107, 50.6, "ns"),
-    ("Publish to five handlers", 126, 50.5, "ns"),
-    ("Stream of 100 items", 2.70, 1.29, "µs"),
-    ("Register and send once", 90.1, 3.5, "µs"),
-    ("8 of 500 request types", 67.3, 22.9, "ns"),
+    ("Send through ISender", 39.8, 12.8, "ns"),
+    ("Send, generated mediator", 39.8, 8.5, "ns"),
+    ("Send, three behaviours", 108, 58.8, "ns"),
+    ("Publish to five handlers", 140, 56.6, "ns"),
+    ("Stream of 100 items", 3.07, 1.51, "µs"),
+    ("Register and send once", 129, 5.3, "µs"),
+    ("8 of 500 request types", 71.8, 23.2, "ns"),
 ]
 
 
