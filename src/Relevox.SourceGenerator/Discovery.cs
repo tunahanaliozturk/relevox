@@ -116,6 +116,15 @@ internal static partial class Discovery
                     break;
                 case "INotificationHandler`1":
                     AddHandler(HandlerKind.Notification, contract.TypeArguments[0], null, contract);
+
+                    // Discovery never visits an interface, so a notification interface a handler names is taken from
+                    // here, for its list of handlers. INotification itself is not one.
+                    if (contract.TypeArguments[0] is INamedTypeSymbol { TypeKind: TypeKind.Interface } named
+                        && named.ContainingAssembly?.Name != ContractsAssembly)
+                    {
+                        AddMessage(named, MessageKind.Notification, null, declaredHere: false);
+                    }
+
                     break;
                 case "IStreamRequestHandler`2":
                     AddHandler(HandlerKind.Stream, contract.TypeArguments[0], DeclaredResponse(contract.TypeArguments[0], "IStreamRequest`1", contract.TypeArguments[1]), contract);
@@ -271,8 +280,10 @@ internal static partial class Discovery
         {
             // Only types that can actually be instantiated and sent get a dispatch entry. An abstract base or
             // an interface still matters for notifications, through the AssignableTo list of each concrete type
-            // that derives from it. An open generic is reached through its closed forms, which handlers name.
-            if (message.IsAbstract || message.IsUnboundGenericType || IsOpen(message) || !IsAccessible(message, compilation))
+            // that derives from it, and it is kept as a message of its own so that its handlers can be registered
+            // under it as MediatR registers them; the planner keeps it out of dispatch. An open generic is reached
+            // through its closed forms, which handlers name.
+            if ((message.IsAbstract && kind != MessageKind.Notification) || message.IsUnboundGenericType || IsOpen(message) || !IsAccessible(message, compilation))
             {
                 return;
             }

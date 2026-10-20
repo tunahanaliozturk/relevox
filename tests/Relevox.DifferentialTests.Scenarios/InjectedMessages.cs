@@ -50,3 +50,34 @@ public sealed class SecondDoorbellListener(Trace trace) : INotificationHandler<D
         return Task.CompletedTask;
     }
 }
+
+/// <summary>An abstract notification with a handler of its own, taken from the container as a list.</summary>
+public abstract record Bulletin(string Text) : INotification;
+
+public sealed record PostedBulletin(string Text) : Bulletin(Text);
+
+public sealed class BulletinReader(Trace trace) : INotificationHandler<Bulletin>
+{
+    public Task Handle(Bulletin notification, CancellationToken cancellationToken)
+    {
+        trace.Add($"BulletinReader({notification.Text})");
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>The same for a notification interface.</summary>
+public interface IMemo : INotification
+{
+    string Text { get; }
+}
+
+public sealed record Memo(string Text) : IMemo;
+
+public sealed class MemoReader(Trace trace) : INotificationHandler<IMemo>
+{
+    public Task Handle(IMemo notification, CancellationToken cancellationToken)
+    {
+        trace.Add($"MemoReader({notification.Text})");
+        return Task.CompletedTask;
+    }
+}
