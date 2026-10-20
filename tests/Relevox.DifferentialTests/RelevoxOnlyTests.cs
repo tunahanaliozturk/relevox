@@ -265,6 +265,55 @@ public sealed class RelevoxOnlyTests
             services => services.AddSingleton<TallyUser>()));
     }
 
+    /// <remarks>
+    /// Shared runners are too noisy to hold a nanosecond number, but they can count container lookups, which is
+    /// what a send costs beyond the handler. The scenario assembly has exception handlers, so every request
+    /// carries the exception slot, idle for this one: after the first send, that path must ask for nothing but
+    /// the handler. A request with no behaviours at all, the case 1.0.0 got wrong, is pinned down where the
+    /// state is decided, in <see cref="RequestPipelineTests"/>.
+    /// </remarks>
+    [Fact]
+    public async Task A_request_with_only_idle_slots_asks_the_container_only_for_its_handler()
+    {
+        await using ServiceProvider provider = Build();
+        CountingProvider counting = new(provider);
+        RelevoxMediator mediator = new(counting, new bool[512], provider.GetRequiredService<Internal.PipelineState<RelevoxMediator>>());
+
+        await mediator.Send(new S.Tally("first"));
+        counting.Requested.Clear();
+
+        await mediator.Send(new S.Tally("typed"));
+        await ((ISender)mediator).Send(new S.Tally("through ISender"));
+
+        counting.Requested.ShouldBe([typeof(S.TallyHandler), typeof(S.TallyHandler)]);
+    }
+
+    [Fact]
+    public async Task A_kept_singleton_handler_is_not_asked_for_again()
+    {
+        await using ServiceProvider provider = Build(options => options.HandlerLifetime = ServiceLifetime.Singleton);
+        CountingProvider counting = new(provider);
+        RelevoxMediator mediator = new(counting, Enumerable.Repeat(true, 512).ToArray(), provider.GetRequiredService<Internal.PipelineState<RelevoxMediator>>());
+
+        await mediator.Send(new S.Tally("first"));
+        counting.Requested.Clear();
+
+        await mediator.Send(new S.Tally("second"));
+
+        counting.Requested.ShouldBeEmpty();
+    }
+
+    private sealed class CountingProvider(IServiceProvider inner) : IServiceProvider
+    {
+        public List<Type> Requested { get; } = [];
+
+        public object? GetService(Type serviceType)
+        {
+            Requested.Add(serviceType);
+            return inner.GetService(serviceType);
+        }
+    }
+
     private sealed class TallyUser(IRequestHandler<S.Tally, int> tally)
     {
         public IRequestHandler<S.Tally, int> Tally { get; } = tally;
