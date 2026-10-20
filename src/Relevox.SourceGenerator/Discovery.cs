@@ -146,6 +146,13 @@ internal static partial class Discovery
 
         void AddHandler(HandlerKind kind, ITypeSymbol message, ITypeSymbol? response, INamedTypeSymbol contract, ITypeSymbol? exception = null)
         {
+            // A struct handler would otherwise vanish, leaving only RVX0001 for its request, which points the wrong way.
+            if (concrete && symbol.TypeKind == TypeKind.Struct && closedFrom is null)
+            {
+                skipped.Add(Skip(Diagnostics.Inaccessible.Id, location, Display(symbol), "is a struct; handlers are resolved from the container and have to be classes"));
+                return;
+            }
+
             if (!concrete || symbol.TypeKind != TypeKind.Class)
             {
                 return;

@@ -56,9 +56,10 @@ The generated mediator is ordinary C# compiled into the project that calls `AddR
 handlers that project can see. The message says why this one cannot: the handler, or a type it handles, is
 `internal` to another project, or `private`, or nested in a `private` type. A handler whose type, or whose
 request or response type, is marked `[Obsolete]` as an error is reported here too, because calling it would
-not compile.
+not compile. So is a handler written as a `struct`: handlers are created by the container and held as
+objects, so they have to be classes.
 
-**Fix:** make the handler `public`, or give the project that calls `AddRelevox` access with
+**Fix:** make the handler a `class` if it is a `struct`. Otherwise make it `public`, or give the project that calls `AddRelevox` access with
 `[assembly: InternalsVisibleTo("YourApp")]` in the project that declares the handler.
 
 ## RVX0004
