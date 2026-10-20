@@ -13,6 +13,11 @@ public sealed class NotificationRecorder
     private readonly Lock _gate = new();
     private readonly List<object> _published = [];
 
+    // Only AddRelevoxNotificationRecorder makes one: a recorder the test built itself would never be fed.
+    internal NotificationRecorder()
+    {
+    }
+
     /// <summary>The notifications published so far that are a <typeparamref name="TNotification"/>, in order.</summary>
     /// <typeparam name="TNotification">The notification type, or <see cref="object"/> for all of them.</typeparam>
     /// <returns>A copy; later publishes do not change it.</returns>

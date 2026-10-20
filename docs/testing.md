@@ -30,11 +30,13 @@ mediator.Published<OrderCompleted>().Single().OrderId.ShouldBe(order.Id);
 ```
 
 - **`Setup((TRequest request) => response)`** answers a request with a response. The lambda's parameter type
-  says which request; the compiler checks that the response type matches the request's `IRequest<T>`.
+  says which request; the compiler checks that the response type matches the request's `IRequest<T>`. When the
+  lambda returns a narrower type than the request declares, such as a `List<T>` for `IReadOnlyList<T>` or a
+  non-null value for `string?`, give the type arguments: `Setup<FindName, string?>(query => "Ada")`.
 - **`SetupAsync((TRequest request, CancellationToken token) => task)`** for an answer that needs to await, or
   to see the cancellation token the code under test passed.
-- **`Setup((TRequest request) => { ... })`** for a request without a response. Write the braces: without them
-  a lambda like `r => list.Add(r)` returns a value and the compiler picks the overload for a request with one.
+- **`Setup((TRequest request) => ...)`** for a request without a response, which runs the lambda and
+  answers with `Unit`.
 - **`Throws<TRequest>(exception)`** fails the send with a faulted task, as a handler that throws would.
 - **`SetupStream((TRequest request) => items)`** for a stream request.
 - **`Sent<T>()`** and **`Published<T>()`** return what went out, in order, filtered by type. Use `object` for
