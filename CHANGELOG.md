@@ -6,6 +6,28 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-20
+
+### Fixed
+
+- A request with no behaviours is sent straight to its handler again. Since the built-in behaviours became
+  slots, before 1.0.0, such a request was remembered as having a pipeline after its first send, so every send
+  asked the container for an empty list of behaviours: about 10 ns more per send, and a singleton handler's
+  typed send went from under 1 ns to about 11 ns. The README showed numbers measured before that change.
+  Every benchmark has been run again ([results](docs/benchmark-results/2026-10-20-1.0.1.md)), and the README
+  shows the new numbers.
+- `AddRelevox` registers every handler under its interface as well as its class, as MediatR does. Code that took
+  a handler as `IRequestHandler<TRequest, TResponse>`, `IStreamRequestHandler<TRequest, TResponse>` or
+  `IEnumerable<INotificationHandler<TNotification>>` compiled after moving from MediatR and then failed when the
+  container was built or the class was first resolved. A real migration found it: one query handler called
+  another through its interface. The interface registrations hand out the class registration, with its
+  lifetime, so they return the instance the mediator uses; one the application made under the interface itself
+  is kept. [compatibility.md](docs/compatibility.md) lists the two cases where the list of notification handlers
+  is still shorter than MediatR's. Registering costs about 0.5 µs more for the benchmark's handlers; sending is
+  unchanged.
+- A keyed registration the application made before `AddRelevox` no longer stops the unkeyed handler being
+  registered.
+
 ## [1.0.0] - 2026-10-19
 
 The first release. Relevox is a mediator for .NET 10 whose dispatch is written by a source generator while the
