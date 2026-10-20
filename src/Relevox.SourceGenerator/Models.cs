@@ -153,7 +153,15 @@ internal sealed record SkippedModel(
 /// </summary>
 /// <param name="ServiceType">The unbound service type, such as <c>global::Relevox.Pipeline.IRequestPreProcessor&lt;&gt;</c>.</param>
 /// <param name="ImplementationType">The unbound implementation type.</param>
-internal sealed record OpenRegistration(string ServiceType, string ImplementationType);
+/// <param name="Exception">
+/// For an exception handler or action, the exception type the container is asked to close it over: Exception, or
+/// the class its exception type parameter is constrained to. Null for anything else.
+/// </param>
+/// <param name="RequestBounds">
+/// The types its request type parameter is constrained to, so that only requests deriving from all of them
+/// look it up. Empty for anything else.
+/// </param>
+internal sealed record OpenRegistration(string ServiceType, string ImplementationType, string? Exception = null, EquatableArray<string> RequestBounds = default);
 
 /// <summary>
 /// A generic notification handler declared as <c>H&lt;T&gt; : INotificationHandler&lt;T&gt;</c>, kept open as well as

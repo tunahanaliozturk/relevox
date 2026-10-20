@@ -225,6 +225,9 @@ only over types that satisfy a constraint naming a type in the solution; the res
 up only the exception types some handler for that request names, which is what lets it run without
 generating code at run time. An exception handler registered directly with the container for some other
 exception type is not found. Open generic exception handlers and actions are closed over those same
-exception types, plus `Exception`. One whose exception type parameter is constrained to something narrower,
-such as `where TException : DomainException`, cannot take `Exception` and is reported as `RVX0004` rather than
-registered.
+exception types, plus `Exception`, or plus the class their exception type parameter is constrained to, such as
+`DomainException` for `where TException : DomainException`; the container skips any closing that breaks the
+constraint. Only requests that meet the request type parameter's constraints look them up. A subclass of that
+class which no handler names, thrown by a request, reaches such a handler once, at the constrained class, where
+MediatR runs it at the subclass and again at each class above it. A constraint no single exception class can
+meet, such as an interface, is reported as `RVX0004`.

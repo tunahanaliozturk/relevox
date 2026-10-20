@@ -25,36 +25,49 @@ public sealed class GenericHandlerTests
         run.Diagnostics.Where(diagnostic => diagnostic.Id == "RVX0004").ShouldHaveSingleItem().GetMessage(System.Globalization.CultureInfo.InvariantCulture);
 
     [Fact]
-    public void A_generic_exception_handler_constrained_to_a_narrower_exception_is_reported_not_dropped()
+    public void A_generic_exception_handler_constrained_to_an_exception_class_is_closed_over_that_class()
     {
-        // Registered for Exception only, such a handler would never be closed and never run, where MediatR runs
-        // it for the thrown type. Constrained to Exception itself, it is registered as before.
+        // The container closes it over the exception types each catalog asks about, and for this one the catalog
+        // asks about DomainException, for the requests its request type parameter allows. Constrained to an
+        // interface, nothing in a thrown exception's chain of classes is ever exactly that, so it stays RVX0004.
         GeneratorRun run = GeneratorHarness.Run(Usings + """
             using Relevox.Pipeline;
             public class DomainException : Exception;
-            public sealed record Ping : IRequest<int>;
+            public interface IRetryable;
+            public interface ICommand;
+            public sealed record Ping : IRequest<int>, ICommand;
+            public sealed record Pong : IRequest<int>;
             public sealed class PingHandler : IRequestHandler<Ping, int>
             {
                 public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
             }
+            public sealed class PongHandler : IRequestHandler<Pong, int>
+            {
+                public Task<int> Handle(Pong request, CancellationToken cancellationToken) => Task.FromResult(2);
+            }
             public sealed class DomainHandler<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
-                where TRequest : notnull
+                where TRequest : ICommand
                 where TException : DomainException
             {
                 public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            public sealed class AnyHandler<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
+            public sealed class RetryHandler<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
                 where TRequest : notnull
-                where TException : Exception
+                where TException : Exception, IRetryable
             {
                 public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
             }
             """);
 
-        Reason(run).ShouldContain("'TException' is constrained to something narrower than Exception");
-        run.Diagnostics.Single(diagnostic => diagnostic.Id == "RVX0004").GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("DomainHandler");
-        run.Sources["RelevoxServiceCollectionExtensions.g.cs"].ShouldContain("typeof(global::AnyHandler<,,>)");
-        run.Sources["RelevoxServiceCollectionExtensions.g.cs"].ShouldNotContain("DomainHandler");
+        string registration = run.Sources["RelevoxServiceCollectionExtensions.g.cs"];
+        registration.ShouldContain("typeof(global::DomainHandler<,,>)");
+        registration.ShouldNotContain("RetryHandler");
+        run.Diagnostics.Single(diagnostic => diagnostic.Id == "RVX0004").GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("RetryHandler");
+
+        // Ping, an ICommand, looks DomainException up; Pong has no catalog at all.
+        registration.ShouldContain("HandleAs<global::DomainException>");
+        registration.ShouldContain("ExceptionCatalog<global::Ping");
+        registration.ShouldNotContain("ExceptionCatalog<global::Pong");
         run.CompilationErrors.ShouldBeEmpty();
     }
 
