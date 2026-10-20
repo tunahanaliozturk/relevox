@@ -7,6 +7,13 @@
 
 # Relevox
 
+[![NuGet](https://img.shields.io/nuget/v/Relevox?label=NuGet&logo=nuget)](https://www.nuget.org/packages/Relevox)
+[![Downloads](https://img.shields.io/nuget/dt/Relevox?label=downloads&logo=nuget)](https://www.nuget.org/packages/Relevox)
+[![CI](https://github.com/tunahanaliozturk/relevox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tunahanaliozturk/relevox/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/tunahanaliozturk/relevox/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/tunahanaliozturk/relevox/actions/workflows/codeql.yml)
+[![Licence: MIT](https://img.shields.io/github/license/tunahanaliozturk/relevox)](LICENSE)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
+
 A mediator for .NET whose dispatch is written by a source generator at build time, with the same handler
 signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 
@@ -18,6 +25,15 @@ dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
 dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
 ```
+
+| Package | Version | Downloads | Reference it from |
+|---|---|---|---|
+| [Relevox](https://www.nuget.org/packages/Relevox) | [![Relevox](https://img.shields.io/nuget/v/Relevox?label=)](https://www.nuget.org/packages/Relevox) | [![Relevox downloads](https://img.shields.io/nuget/dt/Relevox?label=)](https://www.nuget.org/packages/Relevox) | The application, the project that calls `AddRelevox`. It brings the source generator. |
+| [Relevox.Contracts](https://www.nuget.org/packages/Relevox.Contracts) | [![Relevox.Contracts](https://img.shields.io/nuget/v/Relevox.Contracts?label=)](https://www.nuget.org/packages/Relevox.Contracts) | [![Relevox.Contracts downloads](https://img.shields.io/nuget/dt/Relevox.Contracts?label=)](https://www.nuget.org/packages/Relevox.Contracts) | Libraries that only declare requests and handlers. No dependencies. |
+| [Relevox.Testing](https://www.nuget.org/packages/Relevox.Testing) | [![Relevox.Testing](https://img.shields.io/nuget/v/Relevox.Testing?label=)](https://www.nuget.org/packages/Relevox.Testing) | [![Relevox.Testing downloads](https://img.shields.io/nuget/dt/Relevox.Testing?label=)](https://www.nuget.org/packages/Relevox.Testing) | Test projects ([testing.md](docs/testing.md)). |
+
+Releases and their notes are on the [releases page](https://github.com/tunahanaliozturk/relevox/releases) and in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Why
 
