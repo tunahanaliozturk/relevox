@@ -38,27 +38,28 @@ anything:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/benchmarks-dark.png">
-  <img src="docs/images/benchmarks-light.png" alt="Relevox's time as a share of MediatR 12.5's, from 0.03 for registering and sending once to 0.57 for a stream of 100 items" width="760">
+  <img src="docs/images/benchmarks-light.png" alt="Relevox's time as a share of MediatR 12.5's, from 0.04 for registering and sending once to 0.48 for a stream of 100 items" width="760">
 </picture>
 
 Measured with BenchmarkDotNet 0.15.8 on an Intel Core Ultra 7 255H, .NET 10.0.13, Windows 11. Full tables,
 and what each number does and does not show, are in
-[docs/benchmark-results/2026-10-17-m4.md](docs/benchmark-results/2026-10-17-m4.md), measured at commit `b79d6b2`.
+[docs/benchmark-results/2026-10-20-1.0.1.md](docs/benchmark-results/2026-10-20-1.0.1.md), measured for 1.0.1.
 With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
 |---|---:|---:|---:|
-| Send, through `ISender` | 37.1 ns, 128 B | 15.7 ns, 24 B | 0.42 |
-| Send, through the generated mediator | 37.1 ns, 128 B | 9.3 ns, 24 B | 0.25 |
-| Send with three behaviours | 141 ns, 656 B | 66 ns, 392 B | 0.47 |
-| Publish to five handlers | 138 ns | 53.6 ns | 0.39 |
-| Stream of 100 items | 2.45 µs, 592 B | 1.40 µs, 328 B | 0.57 |
-| Register and send once | 93.4 µs | 3.0 µs | 0.03 |
-| Eight request types in turn, of 500 | 113.5 ns | 28.2 ns | 0.25 |
+| Send, through `ISender` | 32.5 ns, 128 B | 11.3 ns, 24 B | 0.35 |
+| Send, through the generated mediator | 32.5 ns, 128 B | 7.8 ns, 24 B | 0.24 |
+| Send with three behaviours | 107 ns, 656 B | 50.6 ns, 392 B | 0.47 |
+| Publish to five handlers | 126 ns, 896 B | 50.5 ns, 120 B | 0.40 |
+| Stream of 100 items | 2.70 µs, 592 B | 1.29 µs, 328 B | 0.48 |
+| Register and send once | 90.1 µs | 3.5 µs | 0.04 |
+| Eight request types in turn, of 500 | 67.3 ns | 22.9 ns | 0.34 |
 
-Mediator 3.0, the other source-generated library, is faster where it holds handlers as singletons, which it
-does by default and Relevox does on request. With transient handlers in both, Relevox's typed send is 9.5 ns
-against Mediator's 28.3 ns. Mediator's handlers return `ValueTask`, so moving to it means rewriting them;
+Mediator 3.0, the other source-generated library, holds handlers as singletons by default, which Relevox does
+on request; a typed send then takes about 1 ns in both. Mediator stays ahead on behaviours and publishing,
+which it composes at build time. With transient handlers in both, Relevox's typed send is 9.7 ns against
+Mediator's 32.5 ns. Mediator's handlers return `ValueTask`, so moving to it means rewriting them;
 that is the trade [ADR 0002](docs/adr/0002-task-not-valuetask.md) explains.
 
 ## Quick start
