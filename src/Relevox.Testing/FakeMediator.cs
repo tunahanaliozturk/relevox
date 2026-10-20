@@ -144,7 +144,7 @@ public sealed class FakeMediator : IMediator
 
     /// <inheritdoc/>
     public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken cancellationToken = default) =>
-        Cast<TResponse>(Stream(request, cancellationToken));
+        Cast<TResponse>(Stream(request, cancellationToken), cancellationToken);
 
     /// <inheritdoc/>
     public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken cancellationToken = default) =>
@@ -212,7 +212,20 @@ public sealed class FakeMediator : IMediator
             _streams.TryGetValue(request.GetType(), out items);
         }
 
-        return items is null ? Failing(NotSetUp(request, nameof(SetupStream))) : items(request, cancellationToken);
+        return items is null ? Failing(NotSetUp(request, nameof(SetupStream))) : Deferred(items, request, cancellationToken);
+    }
+
+    // The setup runs when enumeration starts, as a real handler does, so a stream created and never read has no
+    // effect. The token given here and one passed to WithCancellation are both honoured.
+    private static async IAsyncEnumerable<object?> Deferred(
+        Func<object, CancellationToken, IAsyncEnumerable<object?>> items,
+        object request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (object? item in items(request, cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
     }
 
     private static InvalidOperationException NotSetUp(object request, string method) =>
@@ -228,9 +241,9 @@ public sealed class FakeMediator : IMediator
         }
     }
 
-    private static async IAsyncEnumerable<T> Cast<T>(IAsyncEnumerable<object?> items)
+    private static async IAsyncEnumerable<T> Cast<T>(IAsyncEnumerable<object?> items, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await foreach (object? item in items.ConfigureAwait(false))
+        await foreach (object? item in items.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
             yield return (T)item!;
         }

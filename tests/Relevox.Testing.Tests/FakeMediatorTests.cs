@@ -90,6 +90,48 @@ public sealed class FakeMediatorTests
     }
 
     [Fact]
+    public async Task A_stream_setup_runs_when_enumeration_starts_not_when_the_stream_is_created()
+    {
+        int calls = 0;
+        FakeMediator mediator = new FakeMediator().SetupStream((ListSkus _) =>
+        {
+            calls++;
+            return Enumerable.Repeat("a", 1);
+        });
+
+        IAsyncEnumerable<string> stream = mediator.CreateStream(new ListSkus(1));
+        calls.ShouldBe(0);
+
+        await foreach (string _ in stream)
+        {
+        }
+
+        calls.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_typed_stream_stops_when_the_token_given_to_WithCancellation_is_cancelled()
+    {
+        using CancellationTokenSource source = new();
+        FakeMediator mediator = new FakeMediator().SetupStream((ListSkus query) => Enumerable.Range(1, query.Count).Select(index => $"sku-{index}"));
+
+        List<string> read = [];
+        await Should.ThrowAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (string sku in mediator.CreateStream(new ListSkus(10)).WithCancellation(source.Token))
+            {
+                read.Add(sku);
+                if (read.Count == 2)
+                {
+                    await source.CancelAsync();
+                }
+            }
+        });
+
+        read.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Published_notifications_are_recorded_by_type()
     {
         FakeMediator mediator = new();

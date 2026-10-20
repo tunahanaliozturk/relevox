@@ -29,7 +29,7 @@ public static class RelevoxTestingServiceCollectionExtensions
         services.TryAddSingleton<NotificationRecorder>();
         services.Add(new ServiceDescriptor(
             typeof(INotificationPublisher),
-            provider => new RecordingPublisher(provider.GetRequiredService<NotificationRecorder>(), Inner(provider, inForce)),
+            provider => new RecordingPublisher(provider.GetRequiredService<NotificationRecorder>(), Inner(provider, inForce), ownsInner: inForce is { ImplementationFactory: not null } or { ImplementationType: not null }),
             inForce?.Lifetime ?? ServiceLifetime.Singleton));
         return services;
     }
