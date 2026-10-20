@@ -43,11 +43,39 @@ public sealed class NotificationRecorder
 }
 
 /// <summary>Records each notification, then hands it to the publisher that was in force.</summary>
-internal sealed class RecordingPublisher(NotificationRecorder recorder, INotificationPublisher inner) : INotificationPublisher
+/// <remarks>
+/// When it created that publisher itself, from a factory or a type the container would otherwise have disposed,
+/// it disposes it in turn; the container now tracks only this one.
+/// </remarks>
+internal sealed class RecordingPublisher(NotificationRecorder recorder, INotificationPublisher inner, bool ownsInner) : INotificationPublisher, IDisposable, IAsyncDisposable
 {
     public Task Publish(IEnumerable<NotificationHandlerExecutor> handlerExecutors, INotification notification, CancellationToken cancellationToken)
     {
         recorder.Record(notification);
         return inner.Publish(handlerExecutors, notification, cancellationToken);
+    }
+
+    public void Dispose()
+    {
+        if (ownsInner && inner is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (!ownsInner)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        if (inner is IAsyncDisposable asynchronous)
+        {
+            return asynchronous.DisposeAsync();
+        }
+
+        Dispose();
+        return ValueTask.CompletedTask;
     }
 }

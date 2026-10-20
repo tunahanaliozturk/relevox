@@ -31,6 +31,40 @@ public sealed class NotificationRecorderTests
         provider.GetRequiredService<NotificationRecorder>().Published<object>().Count.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task A_publisher_the_container_would_have_disposed_is_still_disposed()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton<Ledger>();
+        services.AddRelevox(options => options.NotificationPublisherType = typeof(DisposablePublisher));
+        services.AddRelevoxNotificationRecorder();
+        ServiceProvider provider = services.BuildServiceProvider();
+        await provider.GetRequiredService<IPublisher>().Publish(new PriceChanged("bolt", 3m));
+
+        await provider.DisposeAsync();
+
+        DisposablePublisher.Disposed.ShouldBeTrue();
+    }
+
+    public sealed class DisposablePublisher : INotificationPublisher, IAsyncDisposable
+    {
+        public static bool Disposed { get; private set; }
+
+        public async Task Publish(IEnumerable<NotificationHandlerExecutor> handlerExecutors, INotification notification, CancellationToken cancellationToken)
+        {
+            foreach (NotificationHandlerExecutor executor in handlerExecutors)
+            {
+                await executor.HandlerCallback(notification, cancellationToken);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private static ServiceProvider Build(Action<RelevoxOptions> configure)
     {
         ServiceCollection services = new();
