@@ -192,22 +192,7 @@ internal static class Emitter
         }
 
         code.Line();
-        code.Line("// Whether each handler can be kept is read from the registration actually in force, which may be one the");
-        code.Line("// application made before this call. A transient handler is never kept.");
-        code.Line($"global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> lifetimes = new();");
-        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
-        code.Line("if (!descriptor.IsKeyedService)");
-        code.Line("{");
-        code.Line("    lifetimes[descriptor.ServiceType] = descriptor.Lifetime;");
-        code.Line("}");
-        code.Close();
-        code.Line();
-        code.Line($"bool[] keep = new bool[{plan.HandlerTypes.Length}];");
-        for (int index = 0; index < plan.HandlerTypes.Length; index++)
-        {
-            code.Line($"keep[{index}] = lifetimes.TryGetValue(typeof({plan.HandlerTypes[index]}), out {DependencyInjection}.ServiceLifetime lifetime{index}) && lifetime{index} != {DependencyInjection}.ServiceLifetime.Transient;");
-        }
-
+        code.Line("global::System.Collections.Generic.Dictionary<global::System.Type, " + DependencyInjection + ".ServiceLifetime> lifetimes = Lifetimes(services);");
         code.Line();
         // MediatR registers each handler under its interface, so code that injects IRequestHandler<,> or
         // IEnumerable<INotificationHandler<>> directly works there. The mediator itself never resolves these: it
@@ -335,7 +320,10 @@ internal static class Emitter
         code.Line("bool builtInsForEveryRequest = exceptionHandlers || exceptionActions || preProcessors || postProcessors;");
         code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Relevox.Internal.PipelineState<{mediator}>), _ => new global::Relevox.Internal.PipelineState<{mediator}>({requestCount}, {streamCount}, builtInsForEveryRequest), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
-        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider)), lifetime));");
+        code.Line("// Whether each handler can be kept is read from the registration in force when the first mediator is built,");
+        code.Line("// not when this runs: a handler the application registers again afterwards, as transient, is never kept.");
+        code.Line("bool[]? keep = null;");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep ??= Keep(services), {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider)), lifetime));");
         foreach (string contract in new[] { "global::Relevox.IMediator", "global::Relevox.ISender", "global::Relevox.IPublisher" })
         {
             code.Line($"if (registered.Add(typeof({contract})))");
@@ -348,6 +336,31 @@ internal static class Emitter
         code.Close();
 
 
+        code.Line();
+        code.Open($"private static global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> Lifetimes({DependencyInjection}.IServiceCollection services)");
+        code.Line($"global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> lifetimes = new();");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
+        code.Line("if (!descriptor.IsKeyedService)");
+        code.Line("{");
+        code.Line("    lifetimes[descriptor.ServiceType] = descriptor.Lifetime;");
+        code.Line("}");
+        code.Close();
+        code.Line();
+        code.Line("return lifetimes;");
+        code.Close();
+        code.Line();
+        code.Line("/// <summary>Which handlers the mediator may hold on to: those whose registration in force is not transient.</summary>");
+        code.Open($"private static bool[] Keep({DependencyInjection}.IServiceCollection services)");
+        code.Line($"global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> lifetimes = Lifetimes(services);");
+        code.Line($"bool[] keep = new bool[{plan.HandlerTypes.Length}];");
+        for (int index = 0; index < plan.HandlerTypes.Length; index++)
+        {
+            code.Line($"keep[{index}] = lifetimes.TryGetValue(typeof({plan.HandlerTypes[index]}), out {DependencyInjection}.ServiceLifetime lifetime{index}) && lifetime{index} != {DependencyInjection}.ServiceLifetime.Transient;");
+        }
+
+        code.Line();
+        code.Line("return keep;");
+        code.Close();
         code.Line();
         code.Open($"private static bool Has({DependencyInjection}.IServiceCollection services, {Type} openContract)");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");

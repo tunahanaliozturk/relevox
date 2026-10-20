@@ -11,6 +11,13 @@ All notable changes to this project are written down here. The format follows
 - Packing compares each package's public API, `Relevox.Internal` included, with the last release and fails on a
   breaking change, as [ADR 0011](docs/adr/0011-internal-api-is-a-contract.md) promises.
 
+### Fixed
+
+- With `HandlerLifetime = Singleton`, a handler the application registered again as transient after
+  `AddRelevox` was still held by the mediator, so one instance was shared where the container hands out a new
+  one each time. Which handlers the mediator may hold is now read when the first mediator is built, from the
+  registrations the container actually uses.
+
 ## [1.0.1] - 2026-10-20
 
 ### Fixed
