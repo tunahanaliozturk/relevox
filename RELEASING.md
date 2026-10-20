@@ -61,6 +61,11 @@ NuGet, waits for an approval.
    version just released. Every later pack then fails on a member removed or changed since that release,
    `Relevox.Internal` included ([ADR 0011](docs/adr/0011-internal-api-is-a-contract.md)).
 
+   A new major version is the one release allowed to break it, and the check would still stop it. Record each
+   intended break in the pull request that makes it: pack with `-p:ApiCompatGenerateSuppressionFile=true`, which
+   writes `CompatibilitySuppressions.xml` next to the project, and review that file like code. After the major
+   is released and the baseline moves to it, delete the file.
+
 ## If something is wrong
 
 A package on NuGet cannot be deleted, only unlisted. Unlist the version, fix forward, and release the next
