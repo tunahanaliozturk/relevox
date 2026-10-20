@@ -9,8 +9,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 feed="$root/artifacts/smoke-feed"
 app="$root/tests/Relevox.PackageSmoke"
-# The release workflow passes the version it is about to publish; anything else tests a throwaway one.
-version="${RELEVOX_VERSION:-0.0.0-smoke}"
+# The release workflow passes the version it is about to publish; anything else tests a throwaway one. It sits
+# above every real release, because package validation requires a version no lower than its baseline.
+version="${RELEVOX_VERSION:-99.0.0-smoke}"
 
 layered="$app/Layered"
 

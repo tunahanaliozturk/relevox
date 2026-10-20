@@ -30,6 +30,11 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <!-- Checks the package against the rules NuGet applies to a library, such as matching assets per framework. -->
     <EnablePackageValidation>true</EnablePackageValidation>
+    <!--
+      Compares every public member with the last release, Relevox.Internal included, and fails the pack on a
+      breaking change (ADR 0011). Moved forward after each release.
+    -->
+    <PackageValidationBaselineVersion>1.0.1</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!--

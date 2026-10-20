@@ -11,7 +11,7 @@
       never served stale from the machine-wide cache.
     -->
     <RestorePackagesPath>$(MSBuildThisFileDirectory)obj/packages</RestorePackagesPath>
-    <RelevoxVersion Condition="'$(RelevoxVersion)' == ''">0.0.0-smoke</RelevoxVersion>
+    <RelevoxVersion Condition="'$(RelevoxVersion)' == ''">99.0.0-smoke</RelevoxVersion>
   </PropertyGroup>
 
   <ItemGroup>
