@@ -72,6 +72,41 @@ public sealed class GenericHandlerTests
     }
 
     [Fact]
+    public void Constraints_that_name_another_type_parameter_are_left_to_the_container_or_reported()
+    {
+        // TRequest : IRequest<TResponse> cannot be checked against a request without closing TResponse, so it must
+        // not rule every request out. TException : Failure<TRequest> could not be named in a catalog at all.
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            using Relevox.Pipeline;
+            public class Failure<T> : Exception;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed class Typed<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
+                where TRequest : IRequest<TResponse>
+                where TException : Exception
+            {
+                public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class Dependent<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
+                where TRequest : notnull
+                where TException : Failure<TRequest>
+            {
+                public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        string registration = run.Sources["RelevoxServiceCollectionExtensions.g.cs"];
+        registration.ShouldContain("typeof(global::Typed<,,>)");
+        registration.ShouldContain("ExceptionCatalog<global::Ping");
+        registration.ShouldNotContain("Dependent");
+        run.Diagnostics.Single(diagnostic => diagnostic.Id == "RVX0004").GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("Dependent");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_generic_notification_handler_is_also_registered_open_in_the_order_it_runs()
     {
         // Kept open for notification types the build never sees. Two of them run in declaration order, the

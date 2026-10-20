@@ -190,7 +190,7 @@ internal static partial class Discovery
                         || thrown.HasUnmanagedTypeConstraint
                         || thrown.HasConstructorConstraint
                         || bounds.Length > 1
-                        || (bounds.Length == 1 && (bounds[0].TypeKind != TypeKind.Class || !IsAccessible(bounds[0], compilation))))
+                        || (bounds.Length == 1 && (bounds[0].TypeKind != TypeKind.Class || ContainsTypeParameters(bounds[0]) || !IsAccessible(bounds[0], compilation))))
                     {
                         skipped.Add(Skip(
                             SourceGenerator.Diagnostics.GenericHandler.Id,
@@ -207,8 +207,11 @@ internal static partial class Discovery
                     contract.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
                     symbol.ConstructUnboundGenericType().ToDisplayString(PlainFormat),
                     closedOver,
+                    // Only closed bounds can be checked against a request's types here. One that names another type
+                    // parameter, such as IRequest<TResponse>, is left to the container, which skips the closings
+                    // that break it.
                     closedOver is not null && message is ITypeParameterSymbol requestParameter
-                        ? requestParameter.ConstraintTypes.Select(Plain).ToEquatableArray()
+                        ? requestParameter.ConstraintTypes.Where(static bound => !ContainsTypeParameters(bound)).Select(Plain).ToEquatableArray()
                         : EquatableArray<string>.Empty));
                 return;
             }
