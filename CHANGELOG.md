@@ -6,6 +6,11 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Packing compares each package's public API, `Relevox.Internal` included, with the last release and fails on a
+  breaking change, as [ADR 0011](docs/adr/0011-internal-api-is-a-contract.md) promises.
+
 ## [1.0.1] - 2026-10-20
 
 ### Fixed
