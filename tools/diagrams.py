@@ -152,15 +152,17 @@ def migration(t):
     ]
 
 
-# The README's benchmark table, from docs/benchmark-results/2026-10-20-1.1.0.md: (label, MediatR, Relevox, unit).
+# The README's benchmark table, from docs/benchmark-results/2026-10-20-1.1.0.md: (label, MediatR, Relevox, unit,
+# ratio). The ratio is BenchmarkDotNet's, as published, not one worked out from the rounded means here, which can
+# differ in the last digit.
 BENCHMARKS = [
-    ("Send through ISender", 39.8, 12.8, "ns"),
-    ("Send, generated mediator", 39.8, 8.5, "ns"),
-    ("Send, three behaviours", 108, 58.8, "ns"),
-    ("Publish to five handlers", 140, 56.6, "ns"),
-    ("Stream of 100 items", 3.07, 1.51, "µs"),
-    ("Register and send once", 129, 5.3, "µs"),
-    ("8 of 500 request types", 71.8, 23.2, "ns"),
+    ("Send through ISender", 39.8, 12.8, "ns", 0.32),
+    ("Send, generated mediator", 39.8, 8.5, "ns", 0.22),
+    ("Send, three behaviours", 108, 58.8, "ns", 0.55),
+    ("Publish to five handlers", 140, 56.6, "ns", 0.40),
+    ("Stream of 100 items", 3.07, 1.51, "µs", 0.49),
+    ("Register and send once", 129, 5.3, "µs", 0.04),
+    ("8 of 500 request types", 71.8, 23.2, "ns", 0.32),
 ]
 
 
@@ -173,9 +175,8 @@ def benchmarks(t):
         f'<text x="700" y="34" font-family="{SANS}" font-size="13" fill="{t["muted"]}">Relevox</text>',
     ]
     top, left, width = 60, 230, 520
-    for index, (label, theirs, ours, unit) in enumerate(BENCHMARKS):
+    for index, (label, theirs, ours, unit, share) in enumerate(BENCHMARKS):
         y = top + index * 46
-        share = ours / theirs
         parts.append(f'<text x="{left - 14}" y="{y + 22}" text-anchor="end" font-family="{SANS}" font-size="13.5" fill="{t["ink"]}">{esc(label)}</text>')
         parts.append(f'<rect x="{left}" y="{y + 4}" width="{width}" height="12" rx="4" fill="{t["line"]}"/>')
         parts.append(f'<rect x="{left}" y="{y + 18}" width="{max(width * share, 4):.1f}" height="12" rx="4" fill="{t["accent"]}"/>')
