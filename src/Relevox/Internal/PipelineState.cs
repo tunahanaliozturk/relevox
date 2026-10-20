@@ -192,15 +192,17 @@ public sealed class PipelineState<TMediator>
             }
         }
 
+        // No behaviours at all is the common case, and it must end on the direct path: remembered as a pipeline,
+        // every later send asked the container for an empty list and ran an empty chain, about 10 ns each.
         if (!anySlot)
         {
             if (remember)
             {
-                _requests[index] = Pipeline;
+                _requests[index] = behaviors.Length == 0 ? Direct : Pipeline;
             }
 
             asynchronous = false;
-            return behaviors;
+            return behaviors.Length == 0 ? null : behaviors;
         }
 
         SlotPlan plan = SlotPlan.For(behaviors, created);
