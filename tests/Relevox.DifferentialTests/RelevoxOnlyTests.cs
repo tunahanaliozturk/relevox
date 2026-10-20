@@ -275,9 +275,8 @@ public sealed class RelevoxOnlyTests
     [Fact]
     public async Task A_request_with_only_idle_slots_asks_the_container_only_for_its_handler()
     {
-        await using ServiceProvider provider = Build();
-        CountingProvider counting = new(provider);
-        RelevoxMediator mediator = new(counting, new bool[512], provider.GetRequiredService<Internal.PipelineState<RelevoxMediator>>());
+        (ServiceProvider provider, CountingProvider counting, RelevoxMediator mediator) = Counted();
+        await using ServiceProvider _ = provider;
 
         await mediator.Send(new S.Tally("first"));
         counting.Requested.Clear();
@@ -291,9 +290,8 @@ public sealed class RelevoxOnlyTests
     [Fact]
     public async Task A_kept_singleton_handler_is_not_asked_for_again()
     {
-        await using ServiceProvider provider = Build(options => options.HandlerLifetime = ServiceLifetime.Singleton);
-        CountingProvider counting = new(provider);
-        RelevoxMediator mediator = new(counting, Enumerable.Repeat(true, 512).ToArray(), provider.GetRequiredService<Internal.PipelineState<RelevoxMediator>>());
+        (ServiceProvider provider, CountingProvider counting, RelevoxMediator mediator) = Counted(options => options.HandlerLifetime = ServiceLifetime.Singleton);
+        await using ServiceProvider _ = provider;
 
         await mediator.Send(new S.Tally("first"));
         counting.Requested.Clear();
@@ -301,6 +299,22 @@ public sealed class RelevoxOnlyTests
         await mediator.Send(new S.Tally("second"));
 
         counting.Requested.ShouldBeEmpty();
+    }
+
+    /// <summary>
+    /// A mediator made by the factory <c>AddRelevox</c> registered, so with the keep flags the registration worked
+    /// out, but resolving through a provider that records every request.
+    /// </summary>
+    private static (ServiceProvider Provider, CountingProvider Counting, RelevoxMediator Mediator) Counted(
+        Action<global::Microsoft.Extensions.DependencyInjection.RelevoxOptions>? configure = null)
+    {
+        ServiceCollection services = new();
+        services.AddSingleton<S.Trace>();
+        Registration.AddRelevox(services, configure);
+        ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        CountingProvider counting = new(provider);
+        ServiceDescriptor registered = services.Single(descriptor => descriptor.ServiceType == typeof(RelevoxMediator));
+        return (provider, counting, (RelevoxMediator)registered.ImplementationFactory!(counting));
     }
 
     private sealed class CountingProvider(IServiceProvider inner) : IServiceProvider
