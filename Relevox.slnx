@@ -4,6 +4,7 @@
     <Project Path="src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj" />
     <Project Path="src/Relevox.CodeFixes/Relevox.CodeFixes.csproj" />
     <Project Path="src/Relevox.Migration/Relevox.Migration.csproj" />
+    <Project Path="src/Relevox.Testing/Relevox.Testing.csproj" />
     <Project Path="src/Relevox/Relevox.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -12,6 +13,7 @@
     <Project Path="tests/Relevox.DifferentialTests.OnMediatR/Relevox.DifferentialTests.OnMediatR.csproj" />
     <Project Path="tests/Relevox.DifferentialTests/Relevox.DifferentialTests.csproj" />
     <Project Path="tests/Relevox.Samples.Web.Tests/Relevox.Samples.Web.Tests.csproj" />
+    <Project Path="tests/Relevox.Testing.Tests/Relevox.Testing.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Relevox.Samples.Aot/Relevox.Samples.Aot.csproj" />

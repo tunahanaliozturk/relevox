@@ -19,8 +19,9 @@ rm -rf "$feed" "$app/bin" "$app/obj" "$layered/obj" "$layered"/*/bin "$layered"/
 
 dotnet pack "$root/src/Relevox.Contracts" --configuration Release --output "$feed" -p:Version="$version"
 dotnet pack "$root/src/Relevox" --configuration Release --output "$feed" -p:Version="$version"
+dotnet pack "$root/src/Relevox.Testing" --configuration Release --output "$feed" -p:Version="$version"
 
-for package in Relevox Relevox.Contracts; do
+for package in Relevox Relevox.Contracts Relevox.Testing; do
   contents="$(unzip -l "$feed/$package.$version.nupkg")"
   for expected in icon.png README.md "lib/net10.0/$package.dll" "lib/net10.0/$package.xml"; do
     grep -q " $expected\$" <<<"$contents" || { echo "$package.$version.nupkg has no $expected" >&2; exit 1; }
@@ -40,6 +41,9 @@ done
 # The contracts' analyzers have to reach an application that references only Relevox.
 unzip -p "$feed/Relevox.$version.nupkg" Relevox.nuspec | grep 'id="Relevox.Contracts"' | grep -vq 'exclude="[^"]*Analyzers' \
   || { echo "Relevox.$version.nupkg keeps the contracts' analyzers from flowing to the application" >&2; exit 1; }
+
+# The generator must not reach a test project through Relevox.Testing, or the test project gets a mediator of its own.
+unzip -p "$feed/Relevox.Testing.$version.nupkg" Relevox.Testing.nuspec | grep 'id="Relevox"' | grep -q 'include="[^"]*"'   && ! unzip -p "$feed/Relevox.Testing.$version.nupkg" Relevox.Testing.nuspec | grep 'id="Relevox"' | grep -q 'Analyzers'   || { echo "Relevox.Testing.$version.nupkg lets Relevox's analyzers flow to the test project" >&2; exit 1; }
 
 dotnet run --project "$app" --configuration Release -p:RelevoxVersion="$version"
 

@@ -44,6 +44,7 @@ jobs:
           dotnet run --project tests/Relevox.SourceGenerator.Tests --configuration Release --no-build
           dotnet run --project tests/Relevox.DifferentialTests --configuration Release --no-build
           dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build
+          dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build
 
       # Packs with the release version, installs the packages into a new application and runs it.
       - name: Pack and smoke test
