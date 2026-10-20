@@ -47,6 +47,15 @@ Two things the M1 review and the differential tests settled:
   handlers, transient by default. Setting it to singleton is how a user gets Mediator-style numbers on
   purpose rather than by surprise.
 
+## Third amendment, 1.0.1: registered under the interfaces too
+
+A real migration failed at startup: one handler took another as `IRequestHandler<,>`, which MediatR
+registers and Relevox did not. Handlers are now also registered under the interfaces MediatR registers them
+under. Those registrations are factories that hand out the class registration, with its lifetime, so the
+send path is unchanged: the mediator still asks for the class and the container still does no open-generic
+work on a send. What changed is the sentence "never as `IRequestHandler<,>`": it now holds for resolving, not
+for registering.
+
 ## Alternatives considered
 
 - **Singleton by default, as Mediator does.** Fastest out of the box, and it turns every handler with a

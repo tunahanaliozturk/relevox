@@ -237,6 +237,39 @@ public sealed class RelevoxOnlyTests
         throw new InvalidOperationException("Expected the call to fail.");
     }
 
+    [Fact]
+    public async Task A_handler_taken_through_its_interface_is_the_instance_the_mediator_uses()
+    {
+        await using ServiceProvider provider = Build(options => options.HandlerLifetime = ServiceLifetime.Singleton);
+
+        provider.GetRequiredService<IRequestHandler<S.Tally, int>>()
+            .ShouldBeSameAs(provider.GetRequiredService<S.TallyHandler>());
+    }
+
+    [Fact]
+    public async Task A_keyed_registration_does_not_hide_the_unkeyed_interface()
+    {
+        await using ServiceProvider provider = Build(before: services =>
+            services.AddKeyedTransient<IRequestHandler<S.Tally, int>, S.TallyHandler>("keyed"));
+
+        provider.GetService<IRequestHandler<S.Tally, int>>().ShouldBeOfType<S.TallyHandler>();
+    }
+
+    [Fact]
+    public void A_scoped_handler_taken_through_its_interface_by_a_singleton_fails_validation()
+    {
+        // The interface registration carries the class's lifetime, so the container catches the captive
+        // dependency when it is built rather than on the first resolve.
+        Should.Throw<AggregateException>(() => Build(
+            options => options.HandlerLifetime = ServiceLifetime.Scoped,
+            services => services.AddSingleton<TallyUser>()));
+    }
+
+    private sealed class TallyUser(IRequestHandler<S.Tally, int> tally)
+    {
+        public IRequestHandler<S.Tally, int> Tally { get; } = tally;
+    }
+
     private static ServiceProvider Build(Action<global::Microsoft.Extensions.DependencyInjection.RelevoxOptions>? configure = null, Action<IServiceCollection>? before = null)
     {
         ServiceCollection services = new();
