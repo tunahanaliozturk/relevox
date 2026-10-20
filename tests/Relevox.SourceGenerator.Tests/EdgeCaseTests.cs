@@ -39,6 +39,54 @@ public sealed class EdgeCaseTests
     }
 
     [Fact]
+    public void A_handler_written_without_nullable_annotations_takes_the_requests_response()
+    {
+        // The request says string?, the handler, compiled with nullable off, says plain string. Both are the
+        // same handler to the compiler, but generated code naming the handler's version broke the request's
+        // IRequest<string?> constraint with CS8631.
+        GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
+            public sealed record Lookup : IRequest<string?>;
+            public sealed record Feed : IStreamRequest<string?>;
+
+            #nullable disable
+            public sealed class LookupHandler : IRequestHandler<Lookup, string>
+            {
+                public Task<string> Handle(Lookup request, CancellationToken cancellationToken) => Task.FromResult<string>(null);
+            }
+
+            public sealed class FeedHandler : IStreamRequestHandler<Feed, string>
+            {
+                public System.Collections.Generic.IAsyncEnumerable<string> Handle(Feed request, CancellationToken cancellationToken) => null;
+            }
+            #nullable restore
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_generic_notification_handler_closed_over_a_nullable_argument_compiles()
+    {
+        // Audit<T> is closed over the notification type, which carries string? in a type argument. The closing
+        // named Envelope<string> where the notification is Envelope<string?>, and failed with CS8619.
+        GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
+            public sealed record Envelope<T>(T Body) : INotification;
+
+            public sealed class Audit<T> : INotificationHandler<T> where T : INotification
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class EnvelopeHandler : INotificationHandler<Envelope<string?>>
+            {
+                public Task Handle(Envelope<string?> notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_nullable_response_keeps_its_annotation()
     {
         GeneratorRun run = GeneratorHarness.RunStrict(Usings + """
