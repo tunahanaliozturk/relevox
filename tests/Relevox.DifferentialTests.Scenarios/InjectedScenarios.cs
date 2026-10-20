@@ -24,6 +24,28 @@ public static partial class Scenarios
             return null;
         });
 
+    public static Task<string> AbstractNotificationHandlersResolvedThroughTheirInterface() =>
+        Run.Scenario(async services =>
+        {
+            foreach (INotificationHandler<Bulletin> handler in services.GetServices<INotificationHandler<Bulletin>>())
+            {
+                await handler.Handle(new PostedBulletin("closed early"), default);
+            }
+
+            return null;
+        });
+
+    public static Task<string> InterfaceNotificationHandlersResolvedThroughTheirInterface() =>
+        Run.Scenario(async services =>
+        {
+            foreach (INotificationHandler<IMemo> handler in services.GetServices<INotificationHandler<IMemo>>())
+            {
+                await handler.Handle(new Memo("back at noon"), default);
+            }
+
+            return null;
+        });
+
     public static Task<string> PublishStillReachesEachNotificationHandlerOnce() =>
         Run.Scenario(async services =>
         {

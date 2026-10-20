@@ -303,7 +303,9 @@ internal static class Planner
             RegistrationNamespaceFor(assemblyName, seesAnotherRegistration),
             requests.OrderBy(static request => request.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
             streams.OrderBy(static stream => stream.Request.Type, StringComparer.Ordinal).ToEquatableArray(),
-            notifications.ToEquatableArray(),
+            // An abstract or interface notification cannot be published as itself, only through a concrete type
+            // that derives from it, so it has no dispatch entry. Its list of handlers still feeds the registrations.
+            notifications.Where(static notification => !notification.Notification.IsAbstract).ToEquatableArray(),
             handlerTypes.ToEquatableArray(),
             processors.ToEquatableArray(),
             discovery.Open
