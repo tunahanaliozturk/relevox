@@ -95,6 +95,22 @@ public sealed class DiagnosticTests
     }
 
     [Fact]
+    public void A_struct_handler_is_reported_rather_than_dropped()
+    {
+        GeneratorRun run = GeneratorHarness.Run(Usings + """
+            public sealed record Ping : IRequest<int>;
+            public struct PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        run.Ids.Order().ShouldBe(["RVX0001", "RVX0003"]);
+        run.Diagnostics.Single(diagnostic => diagnostic.Id == "RVX0003").GetMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldContain("is a struct");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_generic_handler_is_reported_rather_than_guessed_at()
     {
         GeneratorRun run = GeneratorHarness.Run(Usings + """
