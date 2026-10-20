@@ -143,7 +143,9 @@ jobs:
       # Shared runners are far too noisy for nanosecond claims; real numbers come from named hardware and
       # are committed under docs/benchmark-results.
       - name: Sanity
-        run: dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --sanity
+        run: |
+          dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --sanity
+          dotnet run -c Release --project benchmarks/Relevox.Benchmarks.Scale -- --sanity
 
       - name: Dry run
         run: dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --filter '*' --job Dry
