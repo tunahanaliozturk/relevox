@@ -14,8 +14,11 @@ broker: `messaging.system`, a destination, a producer span and a consumer span l
 call is a method call inside one process, on one thread of work. Borrowing `messaging.*` would tell every backend
 that recognises those attributes something untrue, such as that a request went through a queue.
 
-The generator knows every request, notification and handler type at build time, so whatever names it uses can be
-string constants in the generated code. Nothing has to be worked out with reflection when a span starts.
+The generator knows every request and handler type at build time, and every notification type the code names, so
+whatever names it uses for those can be string constants in the generated code. One kind of publish is different:
+a notification type that exists only at run time, such as `EntityCreated<T>` closed inside a generic base class,
+reaches its handlers through `OpenNotificationHandlers` ([ADR 0009](0009-open-notification-handlers-at-run-time.md)),
+and its name cannot be a constant.
 
 ## Decision
 
@@ -26,8 +29,16 @@ for `AddSource` and `AddMeter`.
 **Spans.** One span per `Send`, `Publish` and `CreateStream` call, of kind `Internal`, named by operation and
 message type: `send PlaceOrder`, `publish OrderPlaced`, `stream ListOrders`. The type in the name is the short
 C# name, generic arguments included (`send Paged<Order>`), so the name stays low in cardinality and readable in
-a trace view. A stream's span covers its enumeration, from the first `MoveNextAsync` to the end, because that is
-when its handler runs.
+a trace view.
+
+A stream gets one span, and one measurement, per enumeration, from the first `MoveNextAsync` to the end, a failure
+or disposal, because that is when its handler runs. The stream `CreateStream` returns can be enumerated more than
+once, and each enumeration resolves and runs the handler again, so each is its own operation. A stream that is
+created and never enumerated emits nothing.
+
+A publish of a notification type known only at run time takes its span name and `relevox.message.type` from the
+notification's type when it is published, worked out once per type and cached. That is `Type.Name` and
+`Type.FullName`, which trimming keeps, with generic arguments written the same way as the generated constants.
 
 **Attributes.**
 
