@@ -454,10 +454,19 @@ internal static class Planner
         ];
 
         // Open generic handlers and actions are closed by the container, but only over exception types the
-        // catalog asks about. Adding Exception for every request when one exists means they at least run.
-        bool openHandlers = discovery.Open.Any(static open => open.ServiceType.EndsWith("IRequestExceptionHandler<,,>", StringComparison.Ordinal));
-        bool openActions = discovery.Open.Any(static open => open.ServiceType.EndsWith("IRequestExceptionAction<,>", StringComparison.Ordinal));
-        const string AnyException = "global::System.Exception";
+        // catalog asks about: Exception, or the class a handler's exception type parameter is constrained to. Every
+        // request's catalog asks about each, so they at least run.
+        // A request type parameter constrained to, say, ICommand rules out every request that is not one, and the
+        // container would close nothing for those; leaving them out keeps their sends off the exception path.
+        OpenRegistration[] openHandlers = [.. discovery.Open.Where(static open => open.ServiceType.EndsWith("IRequestExceptionHandler<,,>", StringComparison.Ordinal))];
+        OpenRegistration[] openActions = [.. discovery.Open.Where(static open => open.ServiceType.EndsWith("IRequestExceptionAction<,>", StringComparison.Ordinal))];
+
+        IEnumerable<string> OpenFor(OpenRegistration[] registrations, string requestType) =>
+            registrations
+                .Where(open => open.RequestBounds.Length == 0
+                    || (messages.TryGetValue(Key(requestType, MessageKind.Request), out MessageModel? model)
+                        && open.RequestBounds.All(bound => model.AssignableTo.Contains(bound))))
+                .Select(static open => open.Exception ?? "global::System.Exception");
 
         List<ExceptionCatalogEntry> catalogs = [];
         foreach (RequestEntry request in requests.Where(static request => !request.Request.IsAbstract).OrderBy(static request => request.Request.Type, StringComparer.Ordinal))
@@ -468,7 +477,7 @@ internal static class Planner
                 .. closings
                     .Where(closing => closing.Request == request.Request.Type && closing.Response == response)
                     .Select(static closing => closing.Exception)
-                    .Concat(openHandlers ? [AnyException] : [])
+                    .Concat(OpenFor(openHandlers, request.Request.Type))
                     .Distinct(StringComparer.Ordinal)
                     .OrderBy(static type => type, StringComparer.Ordinal),
             ];
@@ -477,7 +486,7 @@ internal static class Planner
                 .. closings
                     .Where(closing => closing.Request == request.Request.Type && closing.Response is null)
                     .Select(static closing => closing.Exception)
-                    .Concat(openActions ? [AnyException] : [])
+                    .Concat(OpenFor(openActions, request.Request.Type))
                     .Distinct(StringComparer.Ordinal)
                     .OrderBy(static type => type, StringComparer.Ordinal),
             ];
