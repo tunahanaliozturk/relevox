@@ -3,8 +3,11 @@
 **MediatR without the license, plus everything a compiler can see.**
 
 Relevox keeps MediatR 12's handler signatures and behaviour, so moving over is a package swap and one code fix.
-What it adds comes from writing the dispatch at build time: the compiler sees every request, handler,
-behaviour and notification, and the versions below turn that into features.
+What it adds comes from writing the dispatch at build time: the compiler sees every request, handler and
+behaviour, and every notification type the code names, and the versions below turn that into features. A
+notification type that exists only at run time, such as `EntityCreated<T>` closed inside a generic base class,
+is the exception: it is dispatched at run time ([ADR 0009](adr/0009-open-notification-handlers-at-run-time.md)),
+and the message map and analyzers cannot list it.
 
 The plan lives on GitHub. Each minor version is a [milestone](https://github.com/tunahanaliozturk/relevox/milestones),
 and the pinned [Roadmap issue](https://github.com/tunahanaliozturk/relevox/issues/64) explains how it works,
