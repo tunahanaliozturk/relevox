@@ -6,17 +6,41 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-20
+
+### Added
+
+- `Relevox.Testing`, a package for test projects ([docs/testing.md](docs/testing.md), [ADR 0012](docs/adr/0012-testing-package.md)):
+  - `FakeMediator`, an `IMediator` for unit tests. It answers what the test set up with `Setup`, `SetupAsync`,
+    `SetupStream` and `Throws`, records what was sent and published, and fails a request nobody set up with its
+    type name instead of answering `default`.
+  - `AddRelevoxNotificationRecorder` and `NotificationRecorder`, which record every notification the real
+    mediator publishes while the application's handlers run as before.
+
 ### Changed
 
+- A handler written as a `struct` is reported as RVX0003, an error, instead of being dropped without a word,
+  which left only RVX0001 on its request. A project with one fails to build until it is made a class; under
+  1.0 such a handler never ran.
 - Packing compares each package's public API, `Relevox.Internal` included, with the last release and fails on a
   breaking change, as [ADR 0011](docs/adr/0011-internal-api-is-a-contract.md) promises.
 
 ### Fixed
 
+- A generic exception handler or action constrained to one exception class, such as
+  `where TException : DomainException`, runs instead of being reported as RVX0004. Only requests that meet its
+  request type parameter's constraints look it up, which is new for every generic exception handler: one used
+  to put every request on the exception path. [compatibility.md](docs/compatibility.md) states the remaining
+  difference from MediatR.
+- `IEnumerable<INotificationHandler<T>>` for an abstract or interface notification type holds the same handlers
+  as MediatR's, base-type handlers included.
+- Generated code compiles with handlers whose nullable annotations differ from their messages': a handler
+  compiled with nullable annotations off for a request declared `IRequest<string?>` (CS8631), a generic
+  notification handler closed over `Envelope<string?>` (CS8619), and handlers for `Envelope<string>` and
+  `Envelope<string?>` side by side (CS8620).
 - With `HandlerLifetime = Singleton`, a handler the application registered again as transient after
   `AddRelevox` was still held by the mediator, so one instance was shared where the container hands out a new
-  one each time. Which handlers the mediator may hold is now read when the first mediator is built, from the
-  registrations the container actually uses.
+  one each time. Which handlers the mediator may hold is now read when the first mediator is built.
 
 ## [1.0.1] - 2026-10-20
 
