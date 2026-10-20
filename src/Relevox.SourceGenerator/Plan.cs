@@ -51,6 +51,10 @@ internal sealed record DiagnosticEntry(string Rule, EquatableArray<string> Argum
 /// <param name="OpenNotificationHandlers">
 /// Generic notification handlers, unbound and in the order they run, for notification types the build never saw.
 /// </param>
+/// <param name="HandlerContracts">
+/// Each handler under the interface it implements, as MediatR registers it, for code that injects the interface.
+/// Annotated names: a typeof with the plain name breaks the request's nullable constraint.
+/// </param>
 /// <param name="Emits">False for a project that only uses another project's mediator; see <see cref="Planner.Build"/>.</param>
 internal sealed record EmitPlan(
     string Namespace,
@@ -66,6 +70,7 @@ internal sealed record EmitPlan(
     EquatableArray<string> SuppressedWarnings,
     EquatableArray<DiagnosticEntry> Diagnostics,
     EquatableArray<string> OpenNotificationHandlers,
+    EquatableArray<ServiceRegistration> HandlerContracts,
     bool Emits = true);
 
 /// <summary>Turns what discovery found into what gets emitted, deciding every conflict on the way.</summary>
@@ -111,12 +116,18 @@ internal static class Planner
                 static group => group.OrderByDescending(static message => message.FromSource).First(),
                 StringComparer.Ordinal);
 
+        List<ServiceRegistration> contracts = [];
         List<RequestEntry> requests = [];
         foreach (IGrouping<string, HandlerModel> group in GroupHandlers(discovery, HandlerKind.Request, HandlerKind.VoidRequest))
         {
             if (Single(group, MessageKind.Request) is { } handler)
             {
                 requests.Add(new RequestEntry(handler.Message, handler.ResponseType, handler.ResponseSyntax, handler.HandlerType));
+                contracts.Add(new ServiceRegistration(
+                    handler.ResponseType is null
+                        ? $"global::Relevox.IRequestHandler<{handler.Message.Syntax}>"
+                        : $"global::Relevox.IRequestHandler<{handler.Message.Syntax}, {handler.ResponseSyntax}>",
+                    handler.HandlerType));
             }
         }
 
@@ -126,6 +137,9 @@ internal static class Planner
             if (Single(group, MessageKind.Stream) is { } handler)
             {
                 streams.Add(new StreamEntry(handler.Message, handler.ResponseSyntax!, handler.HandlerType));
+                contracts.Add(new ServiceRegistration(
+                    $"global::Relevox.IStreamRequestHandler<{handler.Message.Syntax}, {handler.ResponseSyntax}>",
+                    handler.HandlerType));
             }
         }
 
@@ -305,6 +319,17 @@ internal static class Planner
                 .ThenBy(static open => open.Definition, StringComparer.Ordinal)
                 .Select(static open => open.Definition)
                 .Distinct(StringComparer.Ordinal)
+                .ToEquatableArray(),
+            // MediatR registers a base-type handler under each notification it reaches as well, in the order they
+            // run, so a notification's own list comes first and a handler's declared interface after it.
+            contracts
+                .Concat(notifications.SelectMany(static notification => notification.Targets.Select(target => new ServiceRegistration(
+                    $"global::Relevox.INotificationHandler<{notification.Notification.Syntax}>",
+                    target.HandlerType))))
+                .Concat(notificationHandlers.Select(static handler => new ServiceRegistration(
+                    $"global::Relevox.INotificationHandler<{handler.Message.Syntax}>",
+                    handler.HandlerType)))
+                .Distinct()
                 .ToEquatableArray(),
             Emits: !consumer);
 

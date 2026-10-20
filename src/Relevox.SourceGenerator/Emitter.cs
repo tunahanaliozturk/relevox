@@ -119,7 +119,7 @@ internal static class Emitter
         code.Line($"[global::System.CodeDom.Compiler.GeneratedCode(\"Relevox\", \"{Version}\")]");
         code.Open("internal static class RelevoxServiceCollectionExtensions");
         code.Line("/// <summary>");
-        code.Line("/// Registers every handler found at build time, by its concrete type, and the generated mediator as");
+        code.Line("/// Registers every handler found at build time, by its class and its interfaces, and the generated mediator as");
         code.Line("/// <c>IMediator</c>, <c>ISender</c> and <c>IPublisher</c>. Nothing is scanned at run time.");
         code.Line("/// </summary>");
         code.Line("/// <remarks>");
@@ -160,9 +160,13 @@ internal static class Emitter
         // Handlers are added only when the application has not registered them already, as TryAdd would, but
         // against a set built once: TryAdd scans the whole collection on every call, which made startup
         // quadratic in the number of handlers.
+        // A keyed registration is not one for the unkeyed service, as TryAdd also compares the key.
         code.Line("global::System.Collections.Generic.HashSet<global::System.Type> registered = new();");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor existing in services)");
-        code.Line("registered.Add(existing.ServiceType);");
+        code.Line("if (!existing.IsKeyedService)");
+        code.Line("{");
+        code.Line("    registered.Add(existing.ServiceType);");
+        code.Line("}");
         code.Close();
         code.Line();
 
@@ -192,7 +196,10 @@ internal static class Emitter
         code.Line("// application made before this call. A transient handler is never kept.");
         code.Line($"global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> lifetimes = new();");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor descriptor in services)");
-        code.Line("lifetimes[descriptor.ServiceType] = descriptor.Lifetime;");
+        code.Line("if (!descriptor.IsKeyedService)");
+        code.Line("{");
+        code.Line("    lifetimes[descriptor.ServiceType] = descriptor.Lifetime;");
+        code.Line("}");
         code.Close();
         code.Line();
         code.Line($"bool[] keep = new bool[{plan.HandlerTypes.Length}];");
@@ -200,6 +207,30 @@ internal static class Emitter
         {
             code.Line($"keep[{index}] = lifetimes.TryGetValue(typeof({plan.HandlerTypes[index]}), out {DependencyInjection}.ServiceLifetime lifetime{index}) && lifetime{index} != {DependencyInjection}.ServiceLifetime.Transient;");
         }
+
+        code.Line();
+        // MediatR registers each handler under its interface, so code that injects IRequestHandler<,> or
+        // IEnumerable<INotificationHandler<>> directly works there. The mediator itself never resolves these: it
+        // asks for the class (ADR 0004). Each one forwards to the class registration, so it is the same instance
+        // the mediator would use, and a replacement registered for the class applies here too. One the application
+        // registered under the interface itself is kept. Each takes the lifetime of the class registration in force,
+        // so ValidateOnBuild sees a scoped handler injected into a singleton, as it would the class.
+        code.Line("global::System.Collections.Generic.HashSet<(global::System.Type, global::System.Type?)> contracts = new();");
+        code.Open($"foreach ({DependencyInjection}.ServiceDescriptor existing in services)");
+        code.Line("contracts.Add((existing.ServiceType, existing.IsKeyedService ? null : existing.ImplementationType));");
+        code.Close();
+        code.Line();
+        foreach (ServiceRegistration contract in plan.HandlerContracts)
+        {
+            bool notification = contract.ServiceType.StartsWith("global::Relevox.INotificationHandler<", System.StringComparison.Ordinal);
+            code.Line(notification
+                ? $"if (contracts.Add((typeof({contract.ServiceType}), typeof({contract.ImplementationType}))))"
+                : $"if (registered.Add(typeof({contract.ServiceType})))");
+            code.Line("{");
+            code.Line($"    services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({contract.ServiceType}), static provider => {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<{contract.ImplementationType}>(provider), lifetimes[typeof({contract.ImplementationType})]));");
+            code.Line("}");
+        }
+
 
         code.Line();
         int requestCount = plan.Requests.Count(static request => !request.Request.IsAbstract);

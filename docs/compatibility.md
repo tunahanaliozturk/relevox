@@ -154,6 +154,16 @@ handler by registering its class before `AddRelevox` (`services.AddTransient<Pla
 with the fake deriving from it), and put cross-cutting work in a pipeline behaviour, which is resolved through
 its interface as in MediatR.
 
+Code of your own that takes a handler through its interface still works, as under MediatR: a handler that
+injects `IRequestHandler<GetStock, int>` to call another handler directly, or a class that injects
+`IEnumerable<INotificationHandler<OrderPlaced>>`. `AddRelevox` registers every handler under the interface it
+implements, and a handler for a base type or an interface under each concrete notification it reaches, in the
+order they run. Each of those registrations hands out the class registration, with its lifetime, so it is the
+same instance the mediator would use. Two cases still come out shorter than MediatR's list. The list for an
+abstract or interface notification type holds only the handlers written for exactly that type. A generic
+notification handler is registered under its interface only for the notification types it was closed over at
+build time, where MediatR registers it open and the container closes it for any type.
+
 **Two handlers for one request is a build error (`RVX0002`).** That includes a concrete handler and a
 concrete subclass of it. MediatR keeps whichever its scan registered first.
 
