@@ -335,6 +335,7 @@ mechanical change today and gets more expensive after the first release.
 - 0010 The name: Relevox, and RVX for the diagnostics.
 - 0011 `Relevox.Internal` only grows within a major version.
 - 0012 A testing package with a fake mediator and a notification recorder.
+- 0013 Telemetry names, and telemetry off by default.
 
 ## 10. Open questions
 

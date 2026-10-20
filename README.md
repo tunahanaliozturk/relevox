@@ -165,6 +165,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [10. The name: Relevox](docs/adr/0010-name-relevox.md)
 - [11. `Relevox.Internal` is a contract between generated code and the runtime](docs/adr/0011-internal-api-is-a-contract.md)
 - [12. A testing package with a fake mediator and a notification recorder](docs/adr/0012-testing-package.md)
+- [13. Telemetry names, and telemetry off by default](docs/adr/0013-telemetry-names.md)
 
 ## Roadmap
 
