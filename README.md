@@ -151,6 +151,11 @@ costs a send nothing measurable; on with nothing listening, about 0.9 ns
 [web sample](samples/Relevox.Samples.Web#seeing-the-telemetry) exports both over OTLP and shows how to watch them
 in the standalone Aspire dashboard.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/telemetry-dashboard-dark.png">
+  <img src="docs/images/telemetry-dashboard-light.png" alt="The Aspire dashboard showing one trace from the web sample: POST /orders/{id:int}/cancel, with send CancelOrder under it and publish OrderCancelled under that" width="900">
+</picture>
+
 ## How it works
 
 <picture>
