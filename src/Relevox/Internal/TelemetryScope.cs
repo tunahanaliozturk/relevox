@@ -78,6 +78,13 @@ public readonly struct TelemetryScope
 
     private bool IsEmpty => _activity is null && _operation is null;
 
+    /// <summary>Whether anything listens for Relevox's spans or measurements.</summary>
+    /// <remarks>
+    /// Read by the generated code before it builds a scope, so that with telemetry on and nothing listening a
+    /// call skips the scope, the try block and the copies of a five-field struct; those cost about 8 ns a send.
+    /// </remarks>
+    public static bool Listening => Source.HasListeners() || Duration.Enabled;
+
     /// <summary>Starts the span for a send.</summary>
     /// <param name="spanName">The span name, such as <c>send PlaceOrder</c>.</param>
     /// <param name="messageType">The request's full type name.</param>

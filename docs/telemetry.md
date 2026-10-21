@@ -175,6 +175,18 @@ histogram_quantile(0.95,
 )
 ```
 
+## What it costs
+
+Measured for a typed send to a singleton handler ([results](benchmark-results/2026-10-21-telemetry.md)):
+
+| | Per send | Allocated |
+|---|---:|---:|
+| Telemetry off | 1.1 ns | 0 B |
+| On, nothing listening | 2.0 ns | 0 B |
+| On, listening | about 240 ns | 576 B |
+
+Off is what a send costs without telemetry. Listening is mostly the cost of creating and stopping an `Activity`.
+
 ## What is not covered
 
 - A duration measurement per notification handler. Handlers can get a span each, but a publish is one
