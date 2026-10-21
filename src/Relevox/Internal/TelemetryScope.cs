@@ -1,13 +1,15 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Text;
 
 namespace Relevox.Internal;
 
 /// <summary>
-/// The span around one send, publish or stream enumeration, when telemetry is on. Used by generated code.
+/// The span and the duration measurement around one send, publish or stream enumeration, when telemetry is on.
+/// Used by generated code.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,6 +19,10 @@ namespace Relevox.Internal;
 /// a task still running is followed by a continuation, and the caller gets a task that finishes the same way,
 /// every exception and the cancellation included. Names come from the generated code as string constants, so
 /// nothing is worked out with reflection when a span starts (ADR 0013).
+/// </para>
+/// <para>
+/// The span and the measurement are independent: a tracer without a meter gets spans only, and the other way
+/// round. With neither listening, starting a scope asks the two whether anyone listens and returns an empty one.
 /// </para>
 /// <para>
 /// The span becomes <see cref="Activity.Current"/> while the handler runs, so a send from inside a handler is
@@ -34,9 +40,21 @@ public readonly struct TelemetryScope
     private const string HandlerCount = "relevox.notification.handler_count";
     private const string ErrorType = "error.type";
 
-    private static readonly ActivitySource Source = new(
-        RelevoxTelemetry.SourceName,
-        typeof(TelemetryScope).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+    private static readonly string? Version =
+        typeof(TelemetryScope).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+    private static readonly ActivitySource Source = new(RelevoxTelemetry.SourceName, Version);
+
+    private static readonly Meter Meter = new(RelevoxTelemetry.SourceName, Version);
+
+    // Buckets in seconds, as OpenTelemetry advises for HTTP durations: the SDK's default buckets assume
+    // milliseconds and would put nearly every call in the first one.
+    private static readonly Histogram<double> Duration = Meter.CreateHistogram<double>(
+        "relevox.operation.duration",
+        unit: "s",
+        description: "How long a send, a publish or one enumeration of a stream took.",
+        tags: null,
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10] });
 
     // Notification types the build never saw, named once each. Bounded by the types the application publishes.
     private static readonly ConcurrentDictionary<Type, (string Span, string Message)> RuntimeNames = new();
@@ -44,11 +62,21 @@ public readonly struct TelemetryScope
     private readonly Activity? _activity;
     private readonly Activity? _previous;
 
-    private TelemetryScope(Activity activity, Activity? previous)
+    // Set only when the duration is measured.
+    private readonly string? _operation;
+    private readonly string? _messageType;
+    private readonly long _started;
+
+    private TelemetryScope(Activity? activity, Activity? previous, string? operation, string? messageType, long started)
     {
         _activity = activity;
         _previous = previous;
+        _operation = operation;
+        _messageType = messageType;
+        _started = started;
     }
+
+    private bool IsEmpty => _activity is null && _operation is null;
 
     /// <summary>Starts the span for a send.</summary>
     /// <param name="spanName">The span name, such as <c>send PlaceOrder</c>.</param>
@@ -83,7 +111,7 @@ public readonly struct TelemetryScope
     public static TelemetryScope StartPublish(Type notificationType, OpenNotificationHandlers? handlers)
     {
         ArgumentNullException.ThrowIfNull(notificationType);
-        if (!Source.HasListeners())
+        if (!Source.HasListeners() && !Duration.Enabled)
         {
             return default;
         }
@@ -98,13 +126,12 @@ public readonly struct TelemetryScope
     /// <param name="exception">The exception, which the caller rethrows.</param>
     public void Fail(Exception exception)
     {
-        if (_activity is null)
+        if (IsEmpty)
         {
             return;
         }
 
-        Record(_activity, exception);
-        _activity.Stop();
+        End(exception);
         Activity.Current = _previous;
     }
 
@@ -113,14 +140,14 @@ public readonly struct TelemetryScope
     /// <returns>The same task when it has finished, otherwise one that finishes the same way.</returns>
     public Task Complete(Task task)
     {
-        if (_activity is null)
+        if (IsEmpty)
         {
             return task;
         }
 
         if (task is null || task.IsCompleted)
         {
-            End(_activity, task);
+            End(ExceptionOf(task));
             Activity.Current = _previous;
             return task!;
         }
@@ -131,10 +158,10 @@ public readonly struct TelemetryScope
         return task.ContinueWith(
                 static (finished, state) =>
                 {
-                    End((Activity)state!, finished);
+                    ((TelemetryScope)state!).End(ExceptionOf(finished));
                     return finished;
                 },
-                _activity,
+                this,
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default)
@@ -147,14 +174,14 @@ public readonly struct TelemetryScope
     /// <returns>The same task when it has finished, otherwise one that finishes the same way.</returns>
     public Task<TResponse> Complete<TResponse>(Task<TResponse> task)
     {
-        if (_activity is null)
+        if (IsEmpty)
         {
             return task;
         }
 
         if (task is null || task.IsCompleted)
         {
-            End(_activity, task);
+            End(ExceptionOf(task));
             Activity.Current = _previous;
             return task!;
         }
@@ -163,10 +190,10 @@ public readonly struct TelemetryScope
         return task.ContinueWith(
                 static (finished, state) =>
                 {
-                    End((Activity)state!, finished);
+                    ((TelemetryScope)state!).End(ExceptionOf(finished));
                     return finished;
                 },
-                _activity,
+                this,
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default)
@@ -179,62 +206,78 @@ public readonly struct TelemetryScope
     /// <returns>The stream, followed.</returns>
     public IAsyncEnumerable<TResponse> Enumerate<TResponse>(IAsyncEnumerable<TResponse> stream)
     {
-        if (_activity is null)
+        if (IsEmpty)
         {
             return stream;
         }
 
         Activity.Current = _previous;
-        return new TracedStream<TResponse>(stream, _activity);
+        return new TracedStream<TResponse>(stream, this);
     }
 
     private static TelemetryScope Start(string spanName, string operation, string messageType, string extraTag, object extraValue)
     {
-        if (!Source.HasListeners())
+        bool tracing = Source.HasListeners();
+        bool measuring = Duration.Enabled;
+        if (!tracing && !measuring)
         {
             return default;
         }
 
         Activity? previous = Activity.Current;
-        Activity? activity = Source.StartActivity(spanName, ActivityKind.Internal);
-        if (activity is null)
-        {
-            return default;
-        }
-
-        if (activity.IsAllDataRequested)
+        Activity? activity = tracing ? Source.StartActivity(spanName, ActivityKind.Internal) : null;
+        if (activity is { IsAllDataRequested: true })
         {
             activity.SetTag(Operation, operation);
             activity.SetTag(MessageType, messageType);
             activity.SetTag(extraTag, extraValue);
         }
 
-        return new TelemetryScope(activity, previous);
+        return measuring
+            ? new TelemetryScope(activity, previous, operation, messageType, Stopwatch.GetTimestamp())
+            : new TelemetryScope(activity, previous, null, null, 0);
     }
 
-    private static void End(Activity activity, Task? finished)
+    // The exception awaiting the task would throw, or null for a task that succeeded.
+    private static Exception? ExceptionOf(Task? finished) =>
+        finished is { IsFaulted: true } ? finished.Exception!.InnerException ?? finished.Exception
+        : finished is { IsCanceled: true } ? new TaskCanceledException(finished)
+        : null;
+
+    /// <summary>Ends the span and records the duration, with the failure when there is one.</summary>
+    private void End(Exception? exception)
     {
-        if (finished is { IsFaulted: true })
+        if (_operation is not null)
         {
-            // The exception awaiting the task throws.
-            Record(activity, finished.Exception!.InnerException ?? finished.Exception);
-        }
-        else if (finished is { IsCanceled: true })
-        {
-            Record(activity, new TaskCanceledException(finished));
+            TagList tags = new()
+            {
+                { Operation, _operation },
+                { MessageType, _messageType },
+            };
+            if (exception is not null)
+            {
+                tags.Add(ErrorType, exception.GetType().FullName);
+            }
+
+            Duration.Record(Stopwatch.GetElapsedTime(_started).TotalSeconds, tags);
         }
 
-        activity.Stop();
-    }
-
-    private static void Record(Activity activity, Exception exception)
-    {
-        activity.SetStatus(ActivityStatusCode.Error);
-        if (activity.IsAllDataRequested)
+        if (_activity is null)
         {
-            activity.SetTag(ErrorType, exception.GetType().FullName);
-            activity.AddException(exception);
+            return;
         }
+
+        if (exception is not null)
+        {
+            _activity.SetStatus(ActivityStatusCode.Error);
+            if (_activity.IsAllDataRequested)
+            {
+                _activity.SetTag(ErrorType, exception.GetType().FullName);
+                _activity.AddException(exception);
+            }
+        }
+
+        _activity.Stop();
     }
 
     /// <summary>
@@ -292,7 +335,7 @@ public readonly struct TelemetryScope
     /// <c>MoveNextAsync</c> is still a throw, and a faulted result still a faulted result.
     /// </remarks>
     [StackTraceHidden, DebuggerNonUserCode, DebuggerStepThrough]
-    private sealed class TracedStream<TResponse>(IAsyncEnumerable<TResponse> source, Activity activity)
+    private sealed class TracedStream<TResponse>(IAsyncEnumerable<TResponse> source, TelemetryScope scope)
         : IAsyncEnumerable<TResponse>, IAsyncEnumerator<TResponse>
     {
         private IAsyncEnumerator<TResponse>? _inner;
@@ -304,7 +347,7 @@ public readonly struct TelemetryScope
         public IAsyncEnumerator<TResponse> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             Activity? previous = Activity.Current;
-            Activity.Current = activity;
+            Activity.Current = scope._activity ?? previous;
             try
             {
                 _inner = source.GetAsyncEnumerator(cancellationToken);
@@ -329,7 +372,7 @@ public readonly struct TelemetryScope
             }
 
             Activity? previous = Activity.Current;
-            Activity.Current = activity;
+            Activity.Current = scope._activity ?? previous;
             try
             {
                 ValueTask<bool> move = _inner!.MoveNextAsync();
@@ -411,12 +454,7 @@ public readonly struct TelemetryScope
             }
 
             _ended = true;
-            if (exception is not null)
-            {
-                Record(activity, exception);
-            }
-
-            activity.Stop();
+            scope.End(exception);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Relevox;
@@ -8,8 +9,8 @@ using Relevox.Samples.Aot;
 // Every kind of dispatch Relevox generates, in a NativeAOT binary. Each line checks its own answer; the process
 // exits with 1 on the first wrong one, so CI fails on a wrong result as well as on a build warning.
 
-// Telemetry is on, with a listener standing in for OpenTelemetry's AddSource, so the spans are built in this
-// binary too and any trimming or AOT warning they would raise fails the build.
+// Telemetry is on, with listeners standing in for OpenTelemetry's AddSource and AddMeter, so spans and
+// measurements are built in this binary too and any trimming or AOT warning they would raise fails the build.
 List<string> spans = [];
 using ActivityListener listener = new()
 {
@@ -18,6 +19,20 @@ using ActivityListener listener = new()
     ActivityStopped = activity => spans.Add(activity.OperationName),
 };
 ActivitySource.AddActivityListener(listener);
+
+int measured = 0;
+using MeterListener meters = new()
+{
+    InstrumentPublished = (instrument, subscriber) =>
+    {
+        if (instrument.Meter.Name == RelevoxTelemetry.SourceName)
+        {
+            subscriber.EnableMeasurementEvents(instrument);
+        }
+    },
+};
+meters.SetMeasurementEventCallback<double>((_, _, _, _) => measured++);
+meters.Start();
 
 ServiceCollection services = new();
 services.AddSingleton<Journal>();
@@ -71,6 +86,7 @@ Check("span for a send", spans.Contains("send Greet"), true);
 Check("span for a publish", spans.Contains("publish Shipped"), true);
 Check("span for a notification type the build never saw", spans.Contains("publish Created<Customer>"), true);
 Check("span for a stream", spans.Contains("stream Countdown"), true);
+Check("one duration per span", measured, spans.Count);
 
 Console.WriteLine("All checks passed.");
 return 0;
