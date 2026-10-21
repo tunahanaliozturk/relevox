@@ -24,8 +24,8 @@ project around it:
 docker run --rm -it -p 18888:18888 -p 4317:18889 --name aspire-dashboard mcr.microsoft.com/dotnet/aspire-dashboard:13.5.2
 ```
 
-Port 18888 is the dashboard itself and 4317 is where it takes OTLP over gRPC. The container prints a login link
-with a token when it starts; open that link rather than the bare address.
+Port 18888 is the dashboard itself and 4317 is where it takes OTLP over gRPC, with no key. The container prints a
+login link with a token when it starts; open that link rather than the bare address.
 
 In a second terminal, run the sample pointed at it:
 
