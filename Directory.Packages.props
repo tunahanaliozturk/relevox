@@ -21,6 +21,16 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Samples">
+    <!--
+      OpenTelemetry's own packages (Apache-2.0), used only by the web sample to export over OTLP. Relevox itself
+      depends on none of them: it emits through System.Diagnostics, which OpenTelemetry listens to.
+    -->
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Testing and measurement">
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />

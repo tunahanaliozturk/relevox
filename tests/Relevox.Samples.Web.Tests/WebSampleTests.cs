@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -91,6 +93,33 @@ public sealed class WebSampleTests : IDisposable
         {
             OrderBody[]? orders = await Client(customer).GetFromJsonAsync<OrderBody[]>("/orders");
             orders!.ShouldHaveSingleItem().Customer.ShouldBe(customer);
+        }
+    }
+
+    [Fact]
+    public async Task With_telemetry_on_a_send_is_a_span_under_the_request_that_caused_it()
+    {
+        // Started spans rather than stopped ones: the request's own span can still be open when the response
+        // arrives. Other tests run alongside, so every send recorded must sit under some request, not one in
+        // particular.
+        ConcurrentQueue<Activity> started = new();
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = static source => source.Name is "Microsoft.AspNetCore" || source.Name == RelevoxTelemetry.SourceName,
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStarted = started.Enqueue,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        HttpResponseMessage placed = await Client("ada").PostAsJsonAsync("/orders", new { product = "kettle", quantity = 2 });
+        placed.StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        Activity[] sends = [.. started.Where(span => span.OperationName == "send PlaceOrder")];
+        sends.ShouldNotBeEmpty();
+        HashSet<ActivitySpanId> requests = [.. started.Where(span => span.Source.Name == "Microsoft.AspNetCore").Select(span => span.SpanId)];
+        foreach (Activity send in sends)
+        {
+            requests.ShouldContain(send.ParentSpanId);
         }
     }
 

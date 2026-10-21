@@ -3,7 +3,8 @@
   <!--
     An ASP.NET Core minimal API on Relevox, shaped the way most applications using a mediator are: endpoints that
     send, a scoped service the handlers depend on, a validation behaviour, a pre-processor, a notification with
-    two listeners, and a streamed list. tests/Relevox.Samples.Web.Tests drives it over HTTP in CI.
+    two listeners, and a streamed list, with Relevox telemetry on. tests/Relevox.Samples.Web.Tests drives it over
+    HTTP in CI.
   -->
 
   <PropertyGroup>
@@ -20,6 +21,13 @@
     <ProjectReference Include="../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Exports the spans and metrics over OTLP when OTEL_EXPORTER_OTLP_ENDPOINT is set. See README.md. -->
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
   </ItemGroup>
 
 </Project>
