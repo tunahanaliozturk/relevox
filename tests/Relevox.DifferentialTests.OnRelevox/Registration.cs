@@ -5,6 +5,13 @@ namespace Scenarios;
 
 public static partial class Library
 {
+    /// <summary>
+    /// Turns telemetry on for containers built in this async flow, so the telemetry tests can run every scenario
+    /// again with spans recorded and compare it with MediatR. An AsyncLocal, so tests running alongside are not
+    /// affected.
+    /// </summary>
+    public static AsyncLocal<bool> TelemetryOn { get; } = new();
+
     static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile, Trace trace)
     {
         if (profile == Profile.EarlyBehavior)
@@ -21,6 +28,7 @@ public static partial class Library
         services.AddRelevox(options =>
         {
             options.Lifetime = lifetime;
+            options.Telemetry.Enabled = TelemetryOn.Value;
 
             if (profile == Profile.WhenAll)
             {

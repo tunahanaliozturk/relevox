@@ -141,6 +141,12 @@ drive it over HTTP.
 published, in place of a mocked `IMediator`, and a recorder for the notifications the real mediator publishes
 in an integration test. [docs/testing.md](docs/testing.md) shows both, next to the Moq version.
 
+## Telemetry
+
+`options.Telemetry.Enabled = true` gives every send, publish and stream a span on the `Relevox` activity
+source, named after the message, such as `send PlaceOrder`. [docs/telemetry.md](docs/telemetry.md) shows how
+to turn it on and what it emits.
+
 ## How it works
 
 <picture>

@@ -36,12 +36,13 @@ internal static class Containers
     }
 
     /// <summary>Relevox with its default transient handlers, or with singleton handlers to compare like with like.</summary>
-    public static ServiceProvider Relevox(ServiceLifetime lifetime, bool withPipeline = false, bool withProcessors = false)
+    public static ServiceProvider Relevox(ServiceLifetime lifetime, bool withPipeline = false, bool withProcessors = false, bool telemetry = false)
     {
         ServiceCollection services = new();
         services.AddRelevox(options =>
         {
             options.HandlerLifetime = lifetime;
+            options.Telemetry.Enabled = telemetry;
             if (withPipeline)
             {
                 options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.First>();

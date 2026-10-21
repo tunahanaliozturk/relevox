@@ -81,6 +81,15 @@ public sealed class OpenNotificationHandlers
         return publisher.Publish(executors, notification, cancellationToken);
     }
 
+    /// <summary>How many generic handlers a publish of the notification type reaches, for its span.</summary>
+    /// <param name="notificationType">The notification's runtime type.</param>
+    /// <returns>The number of handlers closed over it; zero when none can be.</returns>
+    public int HandlerCount(Type notificationType)
+    {
+        ArgumentNullException.ThrowIfNull(notificationType);
+        return _closings.GetOrAdd(notificationType, Close, _definitions).Handlers.Length;
+    }
+
     private static async Task Sequentially(Invoker invoker, object[] handlers, INotification notification, CancellationToken cancellationToken)
     {
         foreach (object handler in handlers)
