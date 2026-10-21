@@ -38,7 +38,8 @@ internal sealed record StreamEntry(MessageShape Request, string ResponseSyntax, 
 /// <summary>One handler a notification reaches, and the notification type that handler was written for.</summary>
 /// <param name="HandlerType">The handler class.</param>
 /// <param name="HandledSyntax">The annotated type in its <c>INotificationHandler&lt;T&gt;</c>, which may be a base type.</param>
-internal sealed record NotificationTarget(string HandlerType, string HandledSyntax);
+/// <param name="HandlerName">The handler's name in <c>relevox.handler.type</c> on its own span.</param>
+internal sealed record NotificationTarget(string HandlerType, string HandledSyntax, string HandlerName);
 
 /// <summary>A concrete notification and every handler it reaches, in the order they run.</summary>
 internal sealed record NotificationEntry(MessageShape Notification, EquatableArray<NotificationTarget> Targets);
@@ -194,7 +195,7 @@ internal static class Planner
             [
                 .. notificationHandlers
                     .Where(handler => handler.IsClosure && handler.Message.Type == message.Shape.Type)
-                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax)),
+                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax, handler.HandlerName)),
             ];
 
             if (!directlyHandled.Contains(message.Shape.Type))
@@ -216,7 +217,7 @@ internal static class Planner
                     .Select(group => group
                         .OrderBy(handler => IndexOf(message.AssignableTo, handler.Message.Type))
                         .First())
-                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax)),
+                    .Select(static handler => new NotificationTarget(handler.HandlerType, handler.Message.Syntax, handler.HandlerName)),
                 .. closings,
             ];
 
