@@ -119,6 +119,27 @@ public sealed class EmissionTests
     }
 
     [Fact]
+    public void A_namespace_written_with_an_escaped_keyword_is_named_without_the_escape()
+    {
+        GeneratorRun run = GeneratorHarness.Run("""
+            using Relevox;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Shop.@class;
+
+            public sealed record Enrol(int Id) : IRequest<int>;
+            public sealed class EnrolHandler : IRequestHandler<Enrol, int>
+            {
+                public Task<int> Handle(Enrol request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        run.Mediator.ShouldContain("StartSend(\"send Enrol\", \"Shop.class.Enrol\", \"Shop.class.EnrolHandler\")");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Generic_and_nested_names_are_written_the_way_the_runtime_names_a_type()
     {
         // A notification type the build never saw is named from Type.Name and Type.FullName at run time, so

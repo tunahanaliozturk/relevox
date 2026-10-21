@@ -74,7 +74,8 @@ and `Send(object)`. A request with no handler fails before a span starts.
 | `error.type` | failed spans | the exception's full type name, such as `System.TimeoutException` |
 
 Type names are the runtime's names: `System.Int32` rather than `int`, `System.Nullable<System.Int32>` rather
-than `int?`, and a dot between a nested type and the type around it. The generator writes them into the
+than `int?`, a dot between a nested type and the type around it, and no `@` where C# needed one for a keyword,
+so `namespace Shop.@class` names its types `Shop.class.Enrol`. The generator writes them into the
 generated mediator as string constants, so starting a span involves no reflection.
 
 ### Failures
