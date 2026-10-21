@@ -35,3 +35,28 @@ public sealed class ProbeHandler : IRequestHandler<Probe, string>
     public Task<string> Handle(Probe request, CancellationToken cancellationToken) =>
         Task.FromResult(System.Diagnostics.Activity.Current?.OperationName ?? "none");
 }
+
+/// <summary>
+/// Two handlers, the second of which faults its task after a yield, so a span per handler has one failure to
+/// find among them.
+/// </summary>
+public sealed record Brownout(string Grid) : INotification;
+
+public sealed class BrownoutLogger(Trace trace) : INotificationHandler<Brownout>
+{
+    public Task Handle(Brownout notification, CancellationToken cancellationToken)
+    {
+        trace.Add($"BrownoutLogger({notification.Grid})");
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class BrownoutBreaker(Trace trace) : INotificationHandler<Brownout>
+{
+    public async Task Handle(Brownout notification, CancellationToken cancellationToken)
+    {
+        trace.Add($"BrownoutBreaker({notification.Grid})");
+        await Task.Yield();
+        throw new TimeoutException("tripped after a yield");
+    }
+}

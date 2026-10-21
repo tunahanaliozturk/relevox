@@ -164,6 +164,21 @@ public sealed class EmissionTests
     }
 
     [Fact]
+    public void Handler_spans_live_in_paths_of_their_own_so_a_publish_without_them_does_nothing_extra_per_handler()
+    {
+        string mediator = GeneratorHarness.Run(Everything).Mediator;
+        string untraced = Between(mediator, "private global::System.Threading.Tasks.Task PublishUntraced0(", "private global::System.Threading.Tasks.Task PublishWithHandlerSpans0(");
+        string traced = Between(mediator, "private global::System.Threading.Tasks.Task PublishTraced0(", "[global::System.Runtime.CompilerServices.MethodImpl");
+
+        // The option is read once per traced publish, never per handler, and never with telemetry off.
+        untraced.ShouldNotContain("TelemetryScope");
+        untraced.ShouldNotContain("_handlerSpans");
+        traced.ShouldContain("_handlerSpans ? PublishWithHandlerSpans0(notification, cancellationToken) : PublishUntraced0(notification, cancellationToken)");
+        mediator.ShouldContain("TelemetryScope.Handle<global::Shop.Orders.OrderPlaced>(\"handle OrderPlaced\", \"Shop.Orders.OrderPlaced\", \"Shop.Orders.SendReceipt\", handler0, notification!, cancellationToken)");
+        mediator.ShouldContain("TelemetryScope.Handle<global::Shop.Orders.OrderPlaced>(\"handle OrderPlaced\", \"Shop.Orders.OrderPlaced\", \"Shop.Orders.SendReceipt\", handler0, ((global::Shop.Orders.OrderPlaced)message)!, token)");
+    }
+
+    [Fact]
     public void The_namespace_comes_from_the_assembly_name_made_valid()
     {
         GeneratorRun run = GeneratorHarness.Run("My-App.2nd.Api", [], Everything);

@@ -246,7 +246,7 @@ public sealed class TelemetryTests
         (await listened.GetRequiredService<ISender>().Send(new S.Probe())).ShouldBe("send Probe");
     }
 
-    private static void ShouldBeFailed(Activity span, Exception exception)
+    internal static void ShouldBeFailed(Activity span, Exception exception)
     {
         span.Status.ShouldBe(ActivityStatusCode.Error);
         span.GetTagItem("error.type").ShouldBe(exception.GetType().FullName);
@@ -269,16 +269,20 @@ public sealed class TelemetryTests
         throw new ShouldAssertException("Expected an exception.");
     }
 
-    internal static ServiceProvider Build(bool telemetry = true)
+    internal static ServiceProvider Build(bool telemetry = true, Action<RelevoxOptions>? configure = null)
     {
         ServiceCollection services = new();
         services.AddSingleton<S.Trace>();
-        Registration.AddRelevox(services, options => options.Telemetry.Enabled = telemetry);
+        Registration.AddRelevox(services, options =>
+        {
+            options.Telemetry.Enabled = telemetry;
+            configure?.Invoke(options);
+        });
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
     /// <summary>Records every Relevox span that ends while it is alive, as an in-memory exporter would.</summary>
-    private sealed class Spans : IDisposable
+    internal sealed class Spans : IDisposable
     {
         /// <summary>Stands in for the application's own spans, such as an ASP.NET Core request.</summary>
         public static readonly ActivitySource Caller = new(CallerName);

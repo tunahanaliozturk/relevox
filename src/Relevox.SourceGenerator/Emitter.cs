@@ -65,6 +65,7 @@ internal static class Emitter
         code.Line("private readonly global::Relevox.Internal.PipelineState<RelevoxMediator> _pipelines;");
         code.Line("private global::Relevox.INotificationPublisher? _publisher;");
         code.Line("private readonly bool _telemetry;");
+        code.Line("private readonly bool _handlerSpans;");
         if (plan.OpenNotificationHandlers.Length > 0)
         {
             code.Line($"private static readonly global::Relevox.Internal.OpenNotificationHandlers OpenNotificationHandlers = new({string.Join(", ", plan.OpenNotificationHandlers.Select(static definition => $"typeof({definition})"))});");
@@ -86,11 +87,16 @@ internal static class Emitter
         code.Line("/// </param>");
         code.Line("/// <param name=\"pipelines\">Which requests this container has no behaviours for, learned on first use.</param>");
         code.Line("/// <param name=\"telemetry\">Whether sends, publishes and streams get spans, from <c>options.Telemetry.Enabled</c>.</param>");
-        code.Open("public RelevoxMediator(global::System.IServiceProvider services, bool[] keep, global::Relevox.Internal.PipelineState<RelevoxMediator> pipelines, bool telemetry = false)");
+        code.Line("/// <param name=\"handlerSpans\">");
+        code.Line("/// Whether each notification handler gets a span of its own as well, from");
+        code.Line("/// <c>options.Telemetry.NotificationHandlerSpans</c>. Ignored while telemetry is off.");
+        code.Line("/// </param>");
+        code.Open("public RelevoxMediator(global::System.IServiceProvider services, bool[] keep, global::Relevox.Internal.PipelineState<RelevoxMediator> pipelines, bool telemetry = false, bool handlerSpans = false)");
         code.Line("global::System.ArgumentNullException.ThrowIfNull(keep);");
         code.Line("_services = services;");
         code.Line("_pipelines = pipelines;");
         code.Line("_telemetry = telemetry;");
+        code.Line("_handlerSpans = telemetry && handlerSpans;");
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"_keep{handler.Value} = keep[{handler.Value}];");
@@ -159,6 +165,7 @@ internal static class Emitter
         code.Line($"{DependencyInjection}.ServiceLifetime lifetime = options.Lifetime;");
         code.Line($"{DependencyInjection}.ServiceLifetime handlerLifetime = options.HandlerLifetime;");
         code.Line("bool telemetry = options.Telemetry.Enabled;");
+        code.Line("bool handlerSpans = options.Telemetry.NotificationHandlerSpans;");
         code.Line();
 
         // Handlers are added only when the application has not registered them already, as TryAdd would, but
@@ -327,7 +334,7 @@ internal static class Emitter
         code.Line("// Whether each handler can be kept is read from the registration in force when the first mediator is built,");
         code.Line("// not when this runs: a handler the application registers again afterwards, as transient, is never kept.");
         code.Line("bool[]? keep = null;");
-        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep ??= Keep(services), {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider), telemetry), lifetime));");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep ??= Keep(services), {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider), telemetry, handlerSpans), lifetime));");
         foreach (string contract in new[] { "global::Relevox.IMediator", "global::Relevox.ISender", "global::Relevox.IPublisher" })
         {
             code.Line($"if (registered.Add(typeof({contract})))");
@@ -631,7 +638,9 @@ internal static class Emitter
                 code,
                 $"StartPublish({Literal("publish " + shape.ShortName)}, {Literal(shape.FullName)}, {notification.Targets.Length})",
                 Task,
-                $"PublishUntraced{index}(notification, cancellationToken)",
+                notification.Targets.Length == 0
+                    ? $"PublishUntraced{index}(notification, cancellationToken)"
+                    : $"_handlerSpans ? PublishWithHandlerSpans{index}(notification, cancellationToken) : PublishUntraced{index}(notification, cancellationToken)",
                 "Complete");
             code.Close();
 
@@ -647,67 +656,89 @@ internal static class Emitter
                 continue;
             }
 
-            // Every handler is resolved before the first one runs, as MediatR does, so a handler whose
-            // construction fails throws out of Publish rather than after earlier handlers have already run.
-            List<string> arguments = ["notification"];
-            for (int target = 0; target < notification.Targets.Length; target++)
-            {
-                NotificationTarget handler = notification.Targets[target];
-                code.Line($"global::Relevox.INotificationHandler<{handler.HandledSyntax}> handler{target} = Handler{handlerIndex[handler.HandlerType]}();");
-                arguments.Add($"handler{target}");
-            }
+            EmitHandlerCalls(code, index, notification, handlerIndex, spans: false);
 
-            arguments.Add("cancellationToken");
-            code.Line("return _pipelines.SequentialPublish(_services)");
-            code.Line($"    ? PublishSequentially{index}({string.Join(", ", arguments)})");
-            code.Line($"    : PublishThrough{index}({string.Join(", ", arguments)});");
-            code.Close();
-
-            // A configured publisher gets one executor per handler, in the same order, as MediatR builds them.
-            List<string> throughParameters = [$"{shape.Syntax} notification"];
-            for (int target = 0; target < notification.Targets.Length; target++)
-            {
-                throughParameters.Add($"global::Relevox.INotificationHandler<{notification.Targets[target].HandledSyntax}> handler{target}");
-            }
-
-            throughParameters.Add($"{Token} cancellationToken");
+            // The same paths with a span around each handler call, in methods of their own, so a publish without
+            // per-handler spans does no extra work per handler, not even a flag read (ADR 0013).
             code.Line();
-            code.Open($"private {Task} PublishThrough{index}({string.Join(", ", throughParameters)})");
-            // An array initializer rather than a collection expression: the generated code compiles as part of the
-            // user's project, which may pin C# 11.
-            code.Line("global::Relevox.NotificationHandlerExecutor[] executors = new global::Relevox.NotificationHandlerExecutor[]");
-            code.Line("{");
-            for (int target = 0; target < notification.Targets.Length; target++)
-            {
-                // The null-forgiving operator, here and below, because a handler may name the notification with
-                // other nullable annotations, Envelope<string> for an Envelope<string?>: the same type at run time,
-                // and CS8620 under warnings as errors without it.
-                code.Line($"    new(handler{target}, (message, token) => handler{target}.Handle((({shape.Syntax})message)!, token)),");
-            }
-
-            code.Line("};");
-            code.Line("return Publisher().Publish(executors, notification, cancellationToken);");
-            code.Close();
-
-            // Async even for one handler, so an exception a handler throws before its first await ends up in
-            // the returned task rather than escaping from Publish, as with MediatR's default publisher. When
-            // every handler completes synchronously this allocates nothing: the builder returns a cached task.
-            List<string> parameters = [$"{shape.Syntax} notification"];
-            for (int target = 0; target < notification.Targets.Length; target++)
-            {
-                parameters.Add($"global::Relevox.INotificationHandler<{notification.Targets[target].HandledSyntax}> handler{target}");
-            }
-
-            parameters.Add($"{Token} cancellationToken");
-            code.Line();
-            code.Open($"private static async {Task} PublishSequentially{index}({string.Join(", ", parameters)})");
-            for (int target = 0; target < notification.Targets.Length; target++)
-            {
-                code.Line($"await handler{target}.Handle(notification!, cancellationToken).ConfigureAwait(false);");
-            }
-
-            code.Close();
+            code.Open($"private {Task} PublishWithHandlerSpans{index}({shape.Syntax} notification, {Token} cancellationToken)");
+            EmitHandlerCalls(code, index, notification, handlerIndex, spans: true);
         }
+    }
+
+    /// <summary>
+    /// The rest of a publish to known handlers, from inside the method that starts it: resolve every handler, then
+    /// run them one after another or hand them to the configured publisher. With <paramref name="spans"/>, each
+    /// handler call goes through <c>TelemetryScope.Handle</c>, which runs it inside a span of its own.
+    /// </summary>
+    private static void EmitHandlerCalls(CodeWriter code, int index, NotificationEntry notification, Dictionary<string, int> handlerIndex, bool spans)
+    {
+        MessageShape shape = notification.Notification;
+        string suffix = spans ? "WithHandlerSpans" : "";
+
+        // Every handler is resolved before the first one runs, as MediatR does, so a handler whose
+        // construction fails throws out of Publish rather than after earlier handlers have already run.
+        List<string> arguments = ["notification"];
+        for (int target = 0; target < notification.Targets.Length; target++)
+        {
+            NotificationTarget handler = notification.Targets[target];
+            code.Line($"global::Relevox.INotificationHandler<{handler.HandledSyntax}> handler{target} = Handler{handlerIndex[handler.HandlerType]}();");
+            arguments.Add($"handler{target}");
+        }
+
+        arguments.Add("cancellationToken");
+        code.Line("return _pipelines.SequentialPublish(_services)");
+        code.Line($"    ? PublishSequentially{suffix}{index}({string.Join(", ", arguments)})");
+        code.Line($"    : PublishThrough{suffix}{index}({string.Join(", ", arguments)});");
+        code.Close();
+
+        List<string> parameters = [$"{shape.Syntax} notification"];
+        for (int target = 0; target < notification.Targets.Length; target++)
+        {
+            parameters.Add($"global::Relevox.INotificationHandler<{notification.Targets[target].HandledSyntax}> handler{target}");
+        }
+
+        parameters.Add($"{Token} cancellationToken");
+
+        // One handler's call, with the notification and the token written as given.
+        string Call(int target, string message, string token)
+        {
+            NotificationTarget handler = notification.Targets[target];
+            return spans
+                ? $"global::Relevox.Internal.TelemetryScope.Handle<{handler.HandledSyntax}>({Literal("handle " + shape.ShortName)}, {Literal(shape.FullName)}, {Literal(handler.HandlerName)}, handler{target}, {message}, {token})"
+                : $"handler{target}.Handle({message}, {token})";
+        }
+
+        // A configured publisher gets one executor per handler, in the same order, as MediatR builds them.
+        code.Line();
+        code.Open($"private {Task} PublishThrough{suffix}{index}({string.Join(", ", parameters)})");
+        // An array initializer rather than a collection expression: the generated code compiles as part of the
+        // user's project, which may pin C# 11.
+        code.Line("global::Relevox.NotificationHandlerExecutor[] executors = new global::Relevox.NotificationHandlerExecutor[]");
+        code.Line("{");
+        for (int target = 0; target < notification.Targets.Length; target++)
+        {
+            // The null-forgiving operator, here and below, because a handler may name the notification with
+            // other nullable annotations, Envelope<string> for an Envelope<string?>: the same type at run time,
+            // and CS8620 under warnings as errors without it.
+            code.Line($"    new(handler{target}, (message, token) => {Call(target, $"(({shape.Syntax})message)!", "token")}),");
+        }
+
+        code.Line("};");
+        code.Line("return Publisher().Publish(executors, notification, cancellationToken);");
+        code.Close();
+
+        // Async even for one handler, so an exception a handler throws before its first await ends up in
+        // the returned task rather than escaping from Publish, as with MediatR's default publisher. When
+        // every handler completes synchronously this allocates nothing: the builder returns a cached task.
+        code.Line();
+        code.Open($"private static async {Task} PublishSequentially{suffix}{index}({string.Join(", ", parameters)})");
+        for (int target = 0; target < notification.Targets.Length; target++)
+        {
+            code.Line($"await {Call(target, "notification!", "cancellationToken")}.ConfigureAwait(false);");
+        }
+
+        code.Close();
     }
 
     private static void EmitInterfaceMembers(CodeWriter code, EmitPlan plan)
@@ -847,14 +878,14 @@ internal static class Emitter
         code.Open($"private {Task} PublishUnlisted(global::Relevox.INotification notification, {Token} cancellationToken)");
         code.Line("if (!_telemetry)");
         code.Line("{");
-        code.Line($"    return {Unlisted(plan)};");
+        code.Line($"    return {Unlisted(plan, traced: false)};");
         code.Line("}");
         code.Line();
         Traced(
             code,
             $"StartPublish(notification.GetType(), {(plan.OpenNotificationHandlers.Length > 0 ? "OpenNotificationHandlers" : "null")})",
             Task,
-            Unlisted(plan),
+            Unlisted(plan, traced: true),
             "Complete");
         code.Close();
     }
@@ -884,9 +915,10 @@ internal static class Emitter
         Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(text, quote: true);
 
     // A notification type with no entry: nothing written handles it, but a generic handler may still close over it.
-    private static string Unlisted(EmitPlan plan) =>
+    // Traced, the generic handlers closed at run time also get a span each when the option asks for them.
+    private static string Unlisted(EmitPlan plan, bool traced) =>
         plan.OpenNotificationHandlers.Length > 0
-            ? "OpenNotificationHandlers.Publish(_services, notification, _pipelines.SequentialPublish(_services) ? null : Publisher(), cancellationToken)"
+            ? $"OpenNotificationHandlers.Publish(_services, notification, _pipelines.SequentialPublish(_services) ? null : Publisher(), {(traced ? "_handlerSpans, " : "")}cancellationToken)"
             : $"_pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(notification, cancellationToken)";
 
     private static void EmitHandlerAccessors(CodeWriter code, Dictionary<string, int> handlerIndex)

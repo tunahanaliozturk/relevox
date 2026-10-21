@@ -55,6 +55,7 @@ sits under that handler's span. After `Send` returns, the caller's current activ
 | `Send` | `send PlaceOrder` | `Internal` |
 | `Publish` | `publish OrderPlaced` | `Internal` |
 | `CreateStream` | `stream ListOrders` | `Internal` |
+| each notification handler, when [turned on](#a-span-per-notification-handler) | `handle OrderPlaced` | `Internal` |
 
 The type in the name is the short name, with generic arguments written out (`send Paged<Int32>`). The full
 name is in an attribute.
@@ -66,9 +67,9 @@ and `Send(object)`. A request with no handler fails before a span starts.
 
 | Attribute | On | Value |
 |---|---|---|
-| `relevox.operation` | every span | `send`, `publish` or `stream` |
+| `relevox.operation` | every span | `send`, `publish`, `stream`, or `handle` on a handler's span |
 | `relevox.message.type` | every span | the message's full type name, such as `Shop.Orders.PlaceOrder` |
-| `relevox.handler.type` | send and stream spans | the handler's full type name |
+| `relevox.handler.type` | send, stream and handler spans | the handler's full type name |
 | `relevox.notification.handler_count` | publish spans | how many handlers the notification reaches |
 | `error.type` | failed spans | the exception's full type name, such as `System.TimeoutException` |
 
@@ -97,6 +98,49 @@ reaches only generic handlers closed at run time ([ADR 0009](adr/0009-open-notif
 Its publish is traced as well. The name is worked out from the type the first time it is published and then
 cached, written the same way as the generated constants: `publish EntityCreated<Invoice>`, with
 `relevox.message.type` set to `Shop.EntityCreated<Shop.Invoice>`.
+
+### A span per notification handler
+
+A publish is one span, which says how long the whole thing took and whether it failed, but not which handler
+was slow or which one threw. When a notification has several handlers and that is the question, turn on a span
+per handler:
+
+```csharp
+builder.Services.AddRelevox(options =>
+{
+    options.Telemetry.Enabled = true;
+    options.Telemetry.NotificationHandlerSpans = true;
+});
+```
+
+Each handler then runs inside a span of its own, a child of the publish span:
+
+```text
+POST /orders                      (ASP.NET Core)
+  send PlaceOrder                 (Relevox)
+    publish OrderPlaced           (Relevox)
+      handle OrderPlaced          relevox.handler.type = Shop.Orders.SendReceipt
+      handle OrderPlaced          relevox.handler.type = Shop.Billing.ReserveStock
+```
+
+Every handler span has the publish's name with `handle` in place of `publish`, so the spans of one notification
+group together in a trace view; `relevox.handler.type` says which handler each one is. `relevox.operation` is
+`handle` and `relevox.message.type` is the notification's full name. A handler that throws, or whose task
+faults, gets status `Error`, `error.type` and an exception event, like any other failed span, and the publish
+span above it fails too when the failure reaches the caller, as it does with both built-in publishers.
+
+It works with every publisher. With `ForeachAwaitPublisher` the spans follow one another; with
+`TaskWhenAllPublisher` they overlap, and each still ends when its own handler does. A publisher of your own
+gets executors whose `HandlerCallback` runs the handler inside its span, so whatever order or concurrency it
+chooses shows up as it happened. A notification type the build never saw gets handler spans too, named from
+its type as its publish span is.
+
+Leave it off unless you need it. It adds one span per handler to every publish, which for a notification with
+five handlers is six spans where there was one, and that is what the tracing backend stores and bills. With the
+option off, publishing does no extra work per handler. The option does nothing while `Enabled` is off.
+
+Handler spans have no measurement of their own. The publish is already measured, and a second measurement per
+handler under `relevox.operation.duration` would count the same time twice.
 
 ## Metrics
 
@@ -133,8 +177,8 @@ histogram_quantile(0.95,
 
 ## What is not covered
 
-- Each notification handler on its own. A publish is one span and one measurement, with the handler count as
-  an attribute on the span.
+- A duration measurement per notification handler. Handlers can get a span each, but a publish is one
+  measurement.
 - Behaviours and processors on their own. Their time is inside the span and the measurement of the call they
   belong to.
 

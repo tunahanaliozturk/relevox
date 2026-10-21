@@ -44,7 +44,20 @@ public sealed class OpenNotificationHandlers
     /// <param name="publisher">The configured publisher, or null to run the handlers one after another.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
     /// <returns>A task that completes when the handlers have run.</returns>
-    public Task Publish(IServiceProvider services, INotification notification, INotificationPublisher? publisher, CancellationToken cancellationToken)
+    public Task Publish(IServiceProvider services, INotification notification, INotificationPublisher? publisher, CancellationToken cancellationToken) =>
+        Publish(services, notification, publisher, handlerSpans: false, cancellationToken);
+
+    /// <summary>
+    /// Publishes a notification to every generic handler that can be closed over its type, with a span per handler
+    /// when <paramref name="handlerSpans"/> is set.
+    /// </summary>
+    /// <param name="services">The container or scope.</param>
+    /// <param name="notification">The notification.</param>
+    /// <param name="publisher">The configured publisher, or null to run the handlers one after another.</param>
+    /// <param name="handlerSpans">Whether each handler runs inside a span of its own (ADR 0013).</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns>A task that completes when the handlers have run.</returns>
+    public Task Publish(IServiceProvider services, INotification notification, INotificationPublisher? publisher, bool handlerSpans, CancellationToken cancellationToken)
     {
         Closing closing = _closings.GetOrAdd(notification.GetType(), Close, _definitions);
         if (closing.Failure is { } failure)
@@ -68,14 +81,19 @@ public sealed class OpenNotificationHandlers
 
         if (publisher is null)
         {
-            return Sequentially(closing.Invoker!, handlers, notification, cancellationToken);
+            return handlerSpans
+                ? SequentiallyWithSpans(closing, handlers, notification, cancellationToken)
+                : Sequentially(closing.Invoker!, handlers, notification, cancellationToken);
         }
 
         NotificationHandlerExecutor[] executors = new NotificationHandlerExecutor[handlers.Length];
         for (int index = 0; index < handlers.Length; index++)
         {
             object handler = handlers[index];
-            executors[index] = new(handler, (message, token) => closing.Invoker!.Handle(handler, message, token));
+            string name = closing.HandlerNames[index];
+            executors[index] = handlerSpans
+                ? new(handler, (message, token) => closing.Invoker!.HandleWithSpan(closing.SpanName, closing.MessageName, name, handler, message, token))
+                : new(handler, (message, token) => closing.Invoker!.Handle(handler, message, token));
         }
 
         return publisher.Publish(executors, notification, cancellationToken);
@@ -95,6 +113,14 @@ public sealed class OpenNotificationHandlers
         foreach (object handler in handlers)
         {
             await invoker.Handle(handler, notification, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task SequentiallyWithSpans(Closing closing, object[] handlers, INotification notification, CancellationToken cancellationToken)
+    {
+        for (int index = 0; index < handlers.Length; index++)
+        {
+            await closing.Invoker!.HandleWithSpan(closing.SpanName, closing.MessageName, closing.HandlerNames[index], handlers[index], notification, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -126,26 +152,35 @@ public sealed class OpenNotificationHandlers
                 // NativeAOT has no code for this closing: nothing in the build closed the handler over a reference
                 // type, so the compiler kept no shared code to build it from. Skipping it would change which
                 // handlers run without a word, so every publish of this type says so instead.
-                return new Closing([], null, new NotSupportedException(
+                return new Closing([], null, "", "", [], new NotSupportedException(
                     $"'{definition}' could not be closed over '{notification}' in this NativeAOT build. Handle '{notification}' in a handler the build can see, so the handler is closed while the project builds.",
                     exception));
             }
         }
 
+        // The names a span per handler would carry are worked out here, once per notification type, in case
+        // that option is on: cheap next to the closing itself, and never again on a publish.
         return handlers.Count == 0
             ? Closing.None
-            : new Closing([.. handlers], (Invoker)Activator.CreateInstance(typeof(Invoker<>).MakeGenericType(notification))!);
+            : new Closing(
+                [.. handlers],
+                (Invoker)Activator.CreateInstance(typeof(Invoker<>).MakeGenericType(notification))!,
+                "handle " + TelemetryScope.Name(notification, full: false),
+                TelemetryScope.Name(notification, full: true),
+                [.. handlers.Select(static handler => TelemetryScope.Name(handler, full: true))]);
     }
 
-    private sealed record Closing(Type[] Handlers, Invoker? Invoker, NotSupportedException? Failure = null)
+    private sealed record Closing(Type[] Handlers, Invoker? Invoker, string SpanName, string MessageName, string[] HandlerNames, NotSupportedException? Failure = null)
     {
-        public static Closing None { get; } = new([], null);
+        public static Closing None { get; } = new([], null, "", "", []);
     }
 
     /// <summary>Calls a closed handler held as an object, without reflection on each call.</summary>
     private abstract class Invoker
     {
         public abstract Task Handle(object handler, INotification notification, CancellationToken cancellationToken);
+
+        public abstract Task HandleWithSpan(string spanName, string messageType, string handlerType, object handler, INotification notification, CancellationToken cancellationToken);
     }
 
     private sealed class Invoker<TNotification> : Invoker
@@ -153,5 +188,8 @@ public sealed class OpenNotificationHandlers
     {
         public override Task Handle(object handler, INotification notification, CancellationToken cancellationToken) =>
             ((INotificationHandler<TNotification>)handler).Handle((TNotification)notification, cancellationToken);
+
+        public override Task HandleWithSpan(string spanName, string messageType, string handlerType, object handler, INotification notification, CancellationToken cancellationToken) =>
+            TelemetryScope.Handle(spanName, messageType, handlerType, (INotificationHandler<TNotification>)handler, (TNotification)notification, cancellationToken);
     }
 }

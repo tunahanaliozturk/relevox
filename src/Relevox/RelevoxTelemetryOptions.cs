@@ -17,4 +17,17 @@ public sealed class RelevoxTelemetryOptions
     /// records nothing until something listens to <see cref="Relevox.RelevoxTelemetry.SourceName"/>.
     /// </remarks>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Whether each notification handler also gets a span of its own, named <c>handle OrderPlaced</c> and tagged
+    /// with <c>relevox.handler.type</c>, as a child of the publish span. Off by default, and ignored while
+    /// <see cref="Enabled"/> is off.
+    /// </summary>
+    /// <remarks>
+    /// Useful when a notification has several handlers and one of them is slow or failing, which a single publish
+    /// span cannot show. It adds a span per handler on every publish, so it is a separate choice. Off, publishing
+    /// does no extra work per handler. It applies to every publisher: the built-in ones and one of your own, which
+    /// gets executors that each run their handler inside its span.
+    /// </remarks>
+    public bool NotificationHandlerSpans { get; set; }
 }

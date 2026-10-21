@@ -12,6 +12,9 @@ public static partial class Library
     /// </summary>
     public static AsyncLocal<bool> TelemetryOn { get; } = new();
 
+    /// <summary>With <see cref="TelemetryOn"/>, gives every notification handler a span of its own as well.</summary>
+    public static AsyncLocal<bool> HandlerSpansOn { get; } = new();
+
     static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile, Trace trace)
     {
         if (profile == Profile.EarlyBehavior)
@@ -29,6 +32,7 @@ public static partial class Library
         {
             options.Lifetime = lifetime;
             options.Telemetry.Enabled = TelemetryOn.Value;
+            options.Telemetry.NotificationHandlerSpans = HandlerSpansOn.Value;
 
             if (profile == Profile.WhenAll)
             {

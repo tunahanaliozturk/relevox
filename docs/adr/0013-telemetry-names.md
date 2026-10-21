@@ -93,3 +93,30 @@ may be added. A value's format may not change: `relevox.message.type` stays the 
   full name is in `relevox.message.type` for anyone who needs it.
 - **`AddRelevox(o => o.EnableTelemetry())`.** Reads well, but a method with options of its own would be a second
   way to configure the same thing once per-handler spans arrive.
+
+## Addendum: a span per notification handler
+
+Date: 2026-10-21
+
+`options.Telemetry.NotificationHandlerSpans`, off by default and ignored while `Enabled` is off, gives every
+notification handler a span of its own, as a child of the publish span. These names join the ones above and
+come under the same stability promise.
+
+- **Span name.** `handle OrderPlaced`: the operation and the notification's short name, the same rule as every
+  other span. All the handlers of one publish share the name, and the handler is told apart by its attribute.
+- **Attributes.** `relevox.operation` is `handle`, `relevox.message.type` is the notification's full type name,
+  and `relevox.handler.type` is the handler's full type name, written as for send and stream spans. A failure
+  adds `error.type`, sets the status to `Error` and records the exception, as on every other span.
+- **No measurement.** Handler spans add nothing to `relevox.operation.duration`. The publish is already
+  measured, and a measurement per handler under the same instrument would count its time twice.
+- **Where the span starts.** Around the handler's own call, in the executor a publisher is given and in the
+  generated loop that stands in for `ForeachAwaitPublisher`, so the built-in publishers and one an application
+  writes are covered alike. The paths with handler spans are separate generated methods: with the option off,
+  a publish does no extra work per handler.
+
+Two alternatives were considered. Naming the span after the handler, `handle SendReceipt`, reads better in a
+trace view, but it breaks the rule that a span is named by its operation and message type, and a query for
+everything a notification caused would need the handler names. Recording a duration per handler would make a
+slow handler a metric query rather than a trace search, but it needs either a second instrument or a
+`relevox.operation` value that makes the existing histogram double count; it can be added later without
+changing anything decided here.

@@ -122,6 +122,61 @@ public readonly struct TelemetryScope
         return StartPublish(span, message, handlers?.HandlerCount(notificationType) ?? 0);
     }
 
+    /// <summary>
+    /// Runs one notification handler inside a span of its own, a child of the publish, when per-handler spans are
+    /// on (ADR 0013).
+    /// </summary>
+    /// <remarks>
+    /// The span has no duration measurement of its own: the publish already has one, and a second under the same
+    /// instrument would count the handler's time twice.
+    /// </remarks>
+    /// <typeparam name="TNotification">The notification type the handler was written for.</typeparam>
+    /// <param name="spanName">The span name, such as <c>handle OrderPlaced</c>.</param>
+    /// <param name="messageType">The notification's full type name.</param>
+    /// <param name="handlerType">The handler's full type name.</param>
+    /// <param name="handler">The handler.</param>
+    /// <param name="notification">The notification.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns>The handler's task, or one that finishes the same way.</returns>
+    public static Task Handle<TNotification>(
+        string spanName,
+        string messageType,
+        string handlerType,
+        INotificationHandler<TNotification> handler,
+        TNotification notification,
+        CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        if (!Source.HasListeners())
+        {
+            return handler.Handle(notification, cancellationToken);
+        }
+
+        Activity? previous = Activity.Current;
+        Activity? activity = Source.StartActivity(spanName, ActivityKind.Internal);
+        if (activity is { IsAllDataRequested: true })
+        {
+            activity.SetTag(Operation, "handle");
+            activity.SetTag(MessageType, messageType);
+            activity.SetTag(HandlerType, handlerType);
+        }
+
+        TelemetryScope scope = new(activity, previous, null, null, 0);
+        Task task;
+        try
+        {
+            task = handler.Handle(notification, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            scope.Fail(exception);
+            throw;
+        }
+
+        return scope.Complete(task);
+    }
+
     /// <summary>Records an exception thrown before the operation returned, and ends the span.</summary>
     /// <param name="exception">The exception, which the caller rethrows.</param>
     public void Fail(Exception exception)
@@ -287,7 +342,7 @@ public readonly struct TelemetryScope
     /// <remarks>
     /// Only <c>Name</c>, <c>FullName</c> and the generic arguments are read, which trimming and NativeAOT keep.
     /// </remarks>
-    private static string Name(Type type, bool full)
+    internal static string Name(Type type, bool full)
     {
         if (type.IsArray)
         {

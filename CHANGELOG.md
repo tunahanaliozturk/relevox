@@ -17,6 +17,11 @@ All notable changes to this project are written down here. The format follows
 - The `relevox.operation.duration` histogram, in seconds, on the `Relevox` meter, under the same switch. Each
   measurement carries `relevox.operation` and `relevox.message.type`, and `error.type` when the operation
   failed, so errors per message type are a query rather than a second instrument.
+- `options.Telemetry.NotificationHandlerSpans`, which gives each notification handler a span of its own,
+  `handle OrderPlaced`, tagged with `relevox.handler.type`, under the publish span. A failing handler's span is
+  marked `Error`. It works with `ForeachAwaitPublisher`, `TaskWhenAllPublisher` and a custom publisher, and for
+  notification types known only at run time. Off by default even with telemetry on; with it off, a publish does
+  no extra work per handler.
 
 ## [1.1.0] - 2026-10-20
 
