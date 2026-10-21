@@ -896,6 +896,13 @@ internal static class Emitter
     /// </summary>
     private static void Traced(CodeWriter code, string start, string returns, string call, string complete)
     {
+        // Nothing listening is the usual state of an application with telemetry switched on but no exporter yet;
+        // it takes the untraced call as it is.
+        code.Line("if (!global::Relevox.Internal.TelemetryScope.Listening)");
+        code.Line("{");
+        code.Line($"    return {call};");
+        code.Line("}");
+        code.Line();
         code.Line($"global::Relevox.Internal.TelemetryScope scope = global::Relevox.Internal.TelemetryScope.{start};");
         code.Line($"{returns} result;");
         code.Line("try");
