@@ -145,7 +145,9 @@ in an integration test. [docs/testing.md](docs/testing.md) shows both, next to t
 
 `options.Telemetry.Enabled = true` gives every send, publish and stream a span on the `Relevox` activity
 source, named after the message, such as `send PlaceOrder`, and a `relevox.operation.duration` measurement on
-the `Relevox` meter. [docs/telemetry.md](docs/telemetry.md) shows how to turn it on and what it emits.
+the `Relevox` meter. [docs/telemetry.md](docs/telemetry.md) shows how to turn it on and what it emits. The
+[web sample](samples/Relevox.Samples.Web#seeing-the-telemetry) exports both over OTLP and shows how to watch them
+in the standalone Aspire dashboard.
 
 ## How it works
 
