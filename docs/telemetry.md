@@ -183,7 +183,7 @@ Measured for a typed send to a singleton handler ([results](benchmark-results/20
 |---|---:|---:|
 | Telemetry off | 1.1 ns | 0 B |
 | On, nothing listening | 2.0 ns | 0 B |
-| On, listening | about 240 ns | 576 B |
+| On, listening | about 260 ns | 576 B |
 
 Off is what a send costs without telemetry. Listening is mostly the cost of creating and stopping an `Activity`.
 
