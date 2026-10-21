@@ -174,6 +174,11 @@ public sealed class EmissionTests
         untraced.ShouldNotContain("TelemetryScope");
         untraced.ShouldNotContain("_handlerSpans");
         traced.ShouldContain("_handlerSpans ? PublishWithHandlerSpans0(notification, cancellationToken) : PublishUntraced0(notification, cancellationToken)");
+
+        // With nothing listening, a traced publish goes straight to the untraced path, handler spans or not.
+        string quiet = Between(traced, "if (!global::Relevox.Internal.TelemetryScope.Listening)", "}");
+        quiet.ShouldContain("return PublishUntraced0(notification, cancellationToken);");
+        quiet.ShouldNotContain("_handlerSpans");
         mediator.ShouldContain("TelemetryScope.Handle<global::Shop.Orders.OrderPlaced>(\"handle OrderPlaced\", \"Shop.Orders.OrderPlaced\", \"Shop.Orders.SendReceipt\", handler0, notification!, cancellationToken)");
         mediator.ShouldContain("TelemetryScope.Handle<global::Shop.Orders.OrderPlaced>(\"handle OrderPlaced\", \"Shop.Orders.OrderPlaced\", \"Shop.Orders.SendReceipt\", handler0, ((global::Shop.Orders.OrderPlaced)message)!, token)");
     }
