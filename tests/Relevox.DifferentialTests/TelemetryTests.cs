@@ -209,6 +209,21 @@ public sealed class TelemetryTests
     }
 
     [Fact]
+    public async Task A_send_from_a_stream_disposed_early_is_a_child_of_the_stream_span()
+    {
+        using Spans spans = new();
+        await using ServiceProvider provider = Build();
+
+        await foreach (int item in provider.GetRequiredService<ISender>().CreateStream(new S.Lingering()))
+        {
+            item.ShouldBe(1);
+            break;
+        }
+
+        spans.Named("send Tally").ParentSpanId.ShouldBe(spans.Named("stream Lingering").SpanId);
+    }
+
+    [Fact]
     public async Task Nothing_is_created_when_nothing_listens_or_when_telemetry_is_off()
     {
         await using (ServiceProvider on = Build())
@@ -265,7 +280,9 @@ public sealed class TelemetryTests
     private sealed class Spans : IDisposable
     {
         /// <summary>Stands in for the application's own spans, such as an ASP.NET Core request.</summary>
-        public static readonly ActivitySource Caller = new("Relevox.Tests.Caller");
+        public static readonly ActivitySource Caller = new(CallerName);
+
+        private const string CallerName = "Relevox.Tests.Caller";
 
         private readonly ConcurrentQueue<Activity> _recorded = new();
         private readonly ActivityListener _listener;
@@ -274,7 +291,9 @@ public sealed class TelemetryTests
         {
             _listener = new ActivityListener
             {
-                ShouldListenTo = source => source.Name == RelevoxTelemetry.SourceName || source == Caller,
+                // By name, not by reference to Caller: the static field can be initialised while this listener is
+                // being added, and a comparison against it then misses the source for good.
+                ShouldListenTo = static source => source.Name == RelevoxTelemetry.SourceName || source.Name == CallerName,
                 Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
                 ActivityStopped = activity =>
                 {

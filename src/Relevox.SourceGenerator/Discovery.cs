@@ -600,6 +600,12 @@ internal static partial class Discovery
             return TelemetryName(array.ElementType, full) + "[" + new string(',', array.Rank - 1) + "]";
         }
 
+        // dynamic is System.Object to the runtime, which is how a type known only at run time is named.
+        if (type.TypeKind == TypeKind.Dynamic)
+        {
+            return full ? "System.Object" : "Object";
+        }
+
         if (type is not INamedTypeSymbol named)
         {
             return type.Name;

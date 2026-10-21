@@ -360,6 +360,14 @@ public readonly struct TelemetryScope
 
         public async ValueTask DisposeAsync()
         {
+            // Stopped early, the iterator's finally blocks run here, and what they do belongs under the stream's
+            // span, which is still open. Set inside this async method, the current activity reverts for the caller
+            // when it returns.
+            if (!_ended)
+            {
+                Activity.Current = activity;
+            }
+
             try
             {
                 if (_inner is not null)

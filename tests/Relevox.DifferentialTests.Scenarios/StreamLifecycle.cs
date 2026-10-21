@@ -20,6 +20,25 @@ public sealed class SputterHandler(Trace trace) : IStreamRequestHandler<Sputter,
     }
 }
 
+/// <summary>Sends a request from its finally block, so the send runs when enumeration stops early.</summary>
+public sealed record Lingering : IStreamRequest<int>;
+
+public sealed class LingeringHandler(ISender sender) : IStreamRequestHandler<Lingering, int>
+{
+    public async IAsyncEnumerable<int> Handle(Lingering request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        try
+        {
+            yield return 1;
+            yield return 2;
+        }
+        finally
+        {
+            await sender.Send(new Tally("cleanup"), cancellationToken);
+        }
+    }
+}
+
 /// <summary>Yields until the token it was handed is cancelled, then says so.</summary>
 public sealed record Watch : IStreamRequest<int>;
 
