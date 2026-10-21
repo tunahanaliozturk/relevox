@@ -101,10 +101,15 @@ public class SendBenchmarks
 }
 
 /// <summary>
-/// What telemetry costs a send when nothing listens: off, the generated mediator reads one flag; on, it also
-/// asks the activity source and the duration histogram whether anyone listens (ADR 0013). Singleton handlers, so the dispatch is all there
-/// is to measure.
+/// What telemetry costs a send: off, the generated mediator reads one flag; on with nothing listening, it also
+/// asks the activity source and the duration histogram whether anyone listens (ADR 0013); on with a listener, it
+/// creates and stops a span and records a measurement, as an application exporting them would. Singleton
+/// handlers, so the dispatch is all there is to measure.
 /// </summary>
+/// <remarks>
+/// BenchmarkDotNet runs each case in a process of its own, so the listener the last case adds is never there for
+/// the others.
+/// </remarks>
 [MemoryDiagnoser]
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
 public class TelemetryBenchmarks
@@ -114,8 +119,11 @@ public class TelemetryBenchmarks
     private ServiceProvider _on = null!;
     private RelevoxMediator _offTyped = null!;
     private RelevoxMediator _onTyped = null!;
+    // Static: there is one process per case, and listeners are process-wide anyway.
+    private static System.Diagnostics.ActivityListener? s_spans;
+    private static System.Diagnostics.Metrics.MeterListener? s_measurements;
 
-    [GlobalSetup]
+    [GlobalSetup(Targets = [nameof(Off), nameof(OnWithoutListener)])]
     public void Setup()
     {
         _off = Containers.Relevox(ServiceLifetime.Singleton);
@@ -124,9 +132,37 @@ public class TelemetryBenchmarks
         _onTyped = _on.GetRequiredService<RelevoxMediator>();
     }
 
+    // Records every span and measurement and throws them away, which is what an exporter costs the caller before
+    // it batches anything.
+    [GlobalSetup(Target = nameof(OnWithListener))]
+    public void SetupWithListener()
+    {
+        Setup();
+        s_spans = new System.Diagnostics.ActivityListener
+        {
+            ShouldListenTo = static source => source.Name == global::Relevox.RelevoxTelemetry.SourceName,
+            Sample = static (ref System.Diagnostics.ActivityCreationOptions<System.Diagnostics.ActivityContext> _) => System.Diagnostics.ActivitySamplingResult.AllDataAndRecorded,
+        };
+        System.Diagnostics.ActivitySource.AddActivityListener(s_spans);
+        s_measurements = new System.Diagnostics.Metrics.MeterListener
+        {
+            InstrumentPublished = static (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == global::Relevox.RelevoxTelemetry.SourceName)
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        s_measurements.SetMeasurementEventCallback<double>(static (_, _, _, _) => { });
+        s_measurements.Start();
+    }
+
     [GlobalCleanup]
     public void Cleanup()
     {
+        s_spans?.Dispose();
+        s_measurements?.Dispose();
         _off.Dispose();
         _on.Dispose();
     }
@@ -136,6 +172,9 @@ public class TelemetryBenchmarks
 
     [Benchmark(Description = "Relevox singletons, typed, telemetry on, no listener")]
     public Task<int> OnWithoutListener() => _onTyped.Send(_ping);
+
+    [Benchmark(Description = "Relevox singletons, typed, telemetry on, listening")]
+    public Task<int> OnWithListener() => _onTyped.Send(_ping);
 }
 
 /// <summary>The same send with three behaviours in front of the handler.</summary>
