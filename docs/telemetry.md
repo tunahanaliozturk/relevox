@@ -1,14 +1,15 @@
 # Telemetry
 
 With telemetry on, every send, publish and stream enumeration gets a span on the `ActivitySource` named
-`Relevox`. The names and attributes are fixed for the whole 1.x line by
+`Relevox` and a duration measurement on the `Meter` of the same name. The names and attributes are fixed for
+the whole 1.x line by
 [ADR 0013](adr/0013-telemetry-names.md), so dashboards and alerts built on them keep working across upgrades.
 
 Telemetry is off by default. An application that never turns it on pays for one `bool` read per call.
 
 ## Turning it on
 
-Set the switch in `AddRelevox`, then tell OpenTelemetry to listen to the source:
+Set the switch in `AddRelevox`, then tell OpenTelemetry to listen to the source and the meter:
 
 ```csharp
 builder.Services.AddRelevox(options => options.Telemetry.Enabled = true);
@@ -17,14 +18,22 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation()
         .AddSource(RelevoxTelemetry.SourceName)
+        .AddOtlpExporter())
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddMeter(RelevoxTelemetry.SourceName)
         .AddOtlpExporter());
 ```
 
-`RelevoxTelemetry.SourceName` is the string `"Relevox"`. Relevox itself does not depend on OpenTelemetry: it
-uses `System.Diagnostics.ActivitySource`, which any listener can subscribe to, OpenTelemetry's included.
+Tracing and metrics are independent. Add only the source, or only the meter, and you get only that one.
 
-With the switch on and nothing listening, the mediator asks `ActivitySource.HasListeners()` and does nothing
-else. Spans are only built once something subscribes.
+`RelevoxTelemetry.SourceName` is the string `"Relevox"`. Relevox itself does not depend on OpenTelemetry: it
+uses `System.Diagnostics.ActivitySource` and `System.Diagnostics.Metrics.Meter`, which any listener can
+subscribe to, OpenTelemetry's included.
+
+With the switch on and nothing listening, the mediator asks `ActivitySource.HasListeners()` and whether the
+histogram is enabled, and does nothing else. Spans are only built, and durations only measured, once something
+subscribes.
 
 ## What a trace looks like
 
@@ -89,12 +98,47 @@ Its publish is traced as well. The name is worked out from the type the first ti
 cached, written the same way as the generated constants: `publish EntityCreated<Invoice>`, with
 `relevox.message.type` set to `Shop.EntityCreated<Shop.Invoice>`.
 
-## What is not traced
+## Metrics
 
-- Each notification handler on its own. A publish is one span, with the handler count as an attribute.
-- Behaviours and processors on their own. Their time is inside the span of the call they belong to.
+| Instrument | Type | Unit | Attributes |
+|---|---|---|---|
+| `relevox.operation.duration` | histogram | `s` | `relevox.operation`, `relevox.message.type`, and `error.type` when the operation failed |
+
+One measurement is recorded per span, with the same start and end: a send or a publish from the call to the
+end of its task, a stream from the first `MoveNextAsync` to the end of that enumeration. The attribute values
+are the same as on the span, so a notification type the build never saw is measured under its runtime name too.
+
+The histogram suggests bucket boundaries in seconds, from 5 ms to 10 s, the ones OpenTelemetry recommends for
+HTTP durations. An SDK view can replace them.
+
+There is no separate error counter. A failed operation is a measurement with `error.type` set, so the count of
+errors is the histogram's count filtered on that attribute. With the Prometheus exporter, which turns the dots
+into underscores and adds the unit, errors per second for each message type over the last five minutes are:
+
+```promql
+sum by (relevox_message_type, error_type) (
+  rate(relevox_operation_duration_seconds_count{error_type!=""}[5m])
+)
+```
+
+and the 95th percentile duration of each request type:
+
+```promql
+histogram_quantile(0.95,
+  sum by (relevox_message_type, le) (
+    rate(relevox_operation_duration_seconds_bucket{relevox_operation="send"}[5m])
+  )
+)
+```
+
+## What is not covered
+
+- Each notification handler on its own. A publish is one span and one measurement, with the handler count as
+  an attribute on the span.
+- Behaviours and processors on their own. Their time is inside the span and the measurement of the call they
+  belong to.
 
 ## Under NativeAOT
 
 Telemetry works the same in a NativeAOT binary and raises no trimming or AOT warnings. The
-[AOT sample](../samples/Relevox.Samples.Aot) turns it on and checks the spans it gets.
+[AOT sample](../samples/Relevox.Samples.Aot) turns it on and checks the spans and measurements it gets.

@@ -102,7 +102,7 @@ public class SendBenchmarks
 
 /// <summary>
 /// What telemetry costs a send when nothing listens: off, the generated mediator reads one flag; on, it also
-/// asks the activity source whether anyone listens (ADR 0013). Singleton handlers, so the dispatch is all there
+/// asks the activity source and the duration histogram whether anyone listens (ADR 0013). Singleton handlers, so the dispatch is all there
 /// is to measure.
 /// </summary>
 [MemoryDiagnoser]

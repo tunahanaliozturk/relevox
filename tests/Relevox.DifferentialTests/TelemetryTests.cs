@@ -29,6 +29,7 @@ public sealed class TelemetryTests
     public async Task With_telemetry_on_Relevox_still_behaves_like_MediatR(string scenario)
     {
         using Spans spans = new();
+        using Measurements measurements = new();
         string mediatr = await DifferentialTests.Invoke(DifferentialTests.OnMediatR, scenario);
 
         S.Library.TelemetryOn.Value = true;
@@ -239,7 +240,7 @@ public sealed class TelemetryTests
         recorded.Tags.ShouldContain(new KeyValuePair<string, object?>("exception.type", exception.GetType().FullName));
     }
 
-    private static async Task<Exception> Caught(Func<Task> call)
+    internal static async Task<Exception> Caught(Func<Task> call)
     {
         try
         {
@@ -253,7 +254,7 @@ public sealed class TelemetryTests
         throw new ShouldAssertException("Expected an exception.");
     }
 
-    private static ServiceProvider Build(bool telemetry = true)
+    internal static ServiceProvider Build(bool telemetry = true)
     {
         ServiceCollection services = new();
         services.AddSingleton<S.Trace>();

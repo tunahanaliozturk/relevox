@@ -14,6 +14,9 @@ All notable changes to this project are written down here. The format follows
   `error.type` and an exception event, and reaches the caller unchanged. A stream gets one span per
   enumeration, and a notification type known only at run time is named from its type. Off by default; with it
   off, each call reads one flag.
+- The `relevox.operation.duration` histogram, in seconds, on the `Relevox` meter, under the same switch. Each
+  measurement carries `relevox.operation` and `relevox.message.type`, and `error.type` when the operation
+  failed, so errors per message type are a query rather than a second instrument.
 
 ## [1.1.0] - 2026-10-20
 
