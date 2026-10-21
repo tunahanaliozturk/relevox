@@ -13,8 +13,8 @@ namespace Relevox.DifferentialTests;
 /// </remarks>
 public sealed class DifferentialTests
 {
-    private static readonly Type OnMediatR = typeof(onmediatr::Scenarios.Scenarios);
-    private static readonly Type OnRelevox = typeof(onrelevox::Scenarios.Scenarios);
+    internal static readonly Type OnMediatR = typeof(onmediatr::Scenarios.Scenarios);
+    internal static readonly Type OnRelevox = typeof(onrelevox::Scenarios.Scenarios);
 
     public static TheoryData<string> ScenarioNames()
     {
@@ -174,6 +174,6 @@ public sealed class DifferentialTests
         (await Invoke(OnRelevox, "PublishWithACustomPublisherAndNoHandlers")).ShouldContain("ReversePublisher(Quiet, 0)");
     }
 
-    private static Task<string> Invoke(Type scenarios, string name) =>
+    internal static Task<string> Invoke(Type scenarios, string name) =>
         (Task<string>)scenarios.GetMethod(name, BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!;
 }

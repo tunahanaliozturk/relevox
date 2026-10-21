@@ -261,6 +261,7 @@ internal static partial class Discovery
                 // and the plain name, Audit<Envelope<string>>, fails that cast with CS8619. A class name is never
                 // annotated at the top level, so the name still works in typeof.
                 AnnotatedName(symbol),
+                TelemetryName(symbol, full: true),
                 Shape(message),
                 response is null ? null : Plain(response),
                 response is null ? null : AnnotatedName(response),
@@ -578,7 +579,54 @@ internal static partial class Discovery
         AnnotatedName(type),
         type.IsValueType,
         type.IsValueType || type.IsSealed,
-        type.IsAbstract || type.TypeKind == TypeKind.Interface);
+        type.IsAbstract || type.TypeKind == TypeKind.Interface,
+        TelemetryName(type, full: false),
+        TelemetryName(type, full: true));
+
+    /// <summary>
+    /// A type's name for spans and their attributes: the CLR name, without arity marks, nested types joined
+    /// with a dot, generic arguments in angle brackets, such as <c>Shop.Paged&lt;System.Int32&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// Not the C# display name, because a notification type the build never saw is named at run time from
+    /// <c>Type.Name</c> and <c>Type.FullName</c>, and the two have to agree: <c>Int32</c> rather than <c>int</c>,
+    /// <c>Nullable&lt;Int32&gt;</c> rather than <c>int?</c>. A nested type takes every generic argument of the
+    /// types around it, outermost first, as <c>Type.GetGenericArguments</c> lists them.
+    /// </remarks>
+    private static string TelemetryName(ITypeSymbol type, bool full)
+    {
+        if (type is IArrayTypeSymbol array)
+        {
+            return TelemetryName(array.ElementType, full) + "[" + new string(',', array.Rank - 1) + "]";
+        }
+
+        if (type is not INamedTypeSymbol named)
+        {
+            return type.Name;
+        }
+
+        named = named.TupleUnderlyingType ?? named;
+        string name = named.Name;
+        List<ITypeSymbol> arguments = [.. named.TypeArguments];
+        for (INamedTypeSymbol? containing = named.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            if (full)
+            {
+                name = containing.Name + "." + name;
+            }
+
+            arguments.InsertRange(0, containing.TypeArguments);
+        }
+
+        if (full && named.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace)
+        {
+            name = containingNamespace.ToDisplayString() + "." + name;
+        }
+
+        return arguments.Count == 0
+            ? name
+            : name + "<" + string.Join(", ", arguments.Select(argument => TelemetryName(argument, full))) + ">";
+    }
 
     /// <summary>
     /// Whether generated code in this compilation can name the type: the type itself, every type it is nested

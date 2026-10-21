@@ -36,6 +36,9 @@ public sealed class RelevoxOptions
     /// </remarks>
     public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Transient;
 
+    /// <summary>Tracing for sends, publishes and streams. Off by default; see <c>docs/telemetry.md</c>.</summary>
+    public RelevoxTelemetryOptions Telemetry { get; } = new();
+
     /// <summary>
     /// Pipeline behaviours to register, in order. The first one registered runs outermost.
     /// </summary>

@@ -40,6 +40,12 @@ internal static class Sanity
         Expect(await send.RelevoxSingletonInterface(), 42, "Relevox singleton ISender send");
         send.Cleanup();
 
+        TelemetryBenchmarks telemetry = new();
+        telemetry.Setup();
+        Expect(await telemetry.Off(), 42, "Relevox send, telemetry off");
+        Expect(await telemetry.OnWithoutListener(), 42, "Relevox send, telemetry on without a listener");
+        telemetry.Cleanup();
+
         PipelineBenchmarks pipeline = new();
         pipeline.Setup();
         Expect(await pipeline.MediatR(), 42, "MediatR pipeline send");

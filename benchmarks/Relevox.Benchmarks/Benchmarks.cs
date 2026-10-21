@@ -100,6 +100,44 @@ public class SendBenchmarks
     public ValueTask<object?> MediatorObject() => _mediatorSender.Send((object)_mediatorPing);
 }
 
+/// <summary>
+/// What telemetry costs a send when nothing listens: off, the generated mediator reads one flag; on, it also
+/// asks the activity source whether anyone listens (ADR 0013). Singleton handlers, so the dispatch is all there
+/// is to measure.
+/// </summary>
+[MemoryDiagnoser]
+[HideColumns("Error", "StdDev", "Median", "RatioSD")]
+public class TelemetryBenchmarks
+{
+    private readonly RelevoxPeer.Ping _ping = new(1);
+    private ServiceProvider _off = null!;
+    private ServiceProvider _on = null!;
+    private RelevoxMediator _offTyped = null!;
+    private RelevoxMediator _onTyped = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _off = Containers.Relevox(ServiceLifetime.Singleton);
+        _on = Containers.Relevox(ServiceLifetime.Singleton, telemetry: true);
+        _offTyped = _off.GetRequiredService<RelevoxMediator>();
+        _onTyped = _on.GetRequiredService<RelevoxMediator>();
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _off.Dispose();
+        _on.Dispose();
+    }
+
+    [Benchmark(Baseline = true, Description = "Relevox singletons, typed, telemetry off")]
+    public Task<int> Off() => _offTyped.Send(_ping);
+
+    [Benchmark(Description = "Relevox singletons, typed, telemetry on, no listener")]
+    public Task<int> OnWithoutListener() => _onTyped.Send(_ping);
+}
+
 /// <summary>The same send with three behaviours in front of the handler.</summary>
 [MemoryDiagnoser]
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]

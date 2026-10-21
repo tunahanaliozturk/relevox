@@ -11,7 +11,8 @@ namespace Relevox.SourceGenerator;
 /// <param name="ResponseType">Plain response type, for typeof, or null for a request that returns nothing.</param>
 /// <param name="ResponseSyntax">Annotated response type, or null for a request that returns nothing.</param>
 /// <param name="HandlerType">The handler class.</param>
-internal sealed record RequestEntry(MessageShape Request, string? ResponseType, string? ResponseSyntax, string HandlerType);
+/// <param name="HandlerName">The handler's full name for telemetry.</param>
+internal sealed record RequestEntry(MessageShape Request, string? ResponseType, string? ResponseSyntax, string HandlerType, string HandlerName);
 
 /// <summary>A closed service registration, such as a pre-processor under its <c>IRequestPreProcessor&lt;T&gt;</c>.</summary>
 internal sealed record ServiceRegistration(string ServiceType, string ImplementationType);
@@ -32,7 +33,7 @@ internal sealed record ExceptionCatalogEntry(
     EquatableArray<string> ActionExceptions);
 
 /// <summary>A stream request with exactly one handler, ready to emit.</summary>
-internal sealed record StreamEntry(MessageShape Request, string ResponseSyntax, string HandlerType);
+internal sealed record StreamEntry(MessageShape Request, string ResponseSyntax, string HandlerType, string HandlerName);
 
 /// <summary>One handler a notification reaches, and the notification type that handler was written for.</summary>
 /// <param name="HandlerType">The handler class.</param>
@@ -122,7 +123,7 @@ internal static class Planner
         {
             if (Single(group, MessageKind.Request) is { } handler)
             {
-                requests.Add(new RequestEntry(handler.Message, handler.ResponseType, handler.ResponseSyntax, handler.HandlerType));
+                requests.Add(new RequestEntry(handler.Message, handler.ResponseType, handler.ResponseSyntax, handler.HandlerType, handler.HandlerName));
                 contracts.Add(new ServiceRegistration(
                     handler.ResponseType is null
                         ? $"global::Relevox.IRequestHandler<{handler.Message.Syntax}>"
@@ -136,7 +137,7 @@ internal static class Planner
         {
             if (Single(group, MessageKind.Stream) is { } handler)
             {
-                streams.Add(new StreamEntry(handler.Message, handler.ResponseSyntax!, handler.HandlerType));
+                streams.Add(new StreamEntry(handler.Message, handler.ResponseSyntax!, handler.HandlerType, handler.HandlerName));
                 contracts.Add(new ServiceRegistration(
                     $"global::Relevox.IStreamRequestHandler<{handler.Message.Syntax}, {handler.ResponseSyntax}>",
                     handler.HandlerType));

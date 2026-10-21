@@ -6,6 +6,15 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Spans for `Send`, `Publish` and `CreateStream` on the `Relevox` activity source, turned on with
+  `options.Telemetry.Enabled = true` ([docs/telemetry.md](docs/telemetry.md), ADR 0013). Span names and
+  attributes come from constants in the generated code. A failure sets the span status to `Error`, adds
+  `error.type` and an exception event, and reaches the caller unchanged. A stream gets one span per
+  enumeration, and a notification type known only at run time is named from its type. Off by default; with it
+  off, each call reads one flag.
+
 ## [1.1.0] - 2026-10-20
 
 ### Added
