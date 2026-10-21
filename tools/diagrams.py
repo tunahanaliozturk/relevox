@@ -152,17 +152,17 @@ def migration(t):
     ]
 
 
-# The README's benchmark table, from docs/benchmark-results/2026-10-20-1.1.0.md: (label, MediatR, Relevox, unit,
+# The README's benchmark table, from docs/benchmark-results/2026-10-21-1.2.0.md: (label, MediatR, Relevox, unit,
 # ratio). The ratio is BenchmarkDotNet's, as published, not one worked out from the rounded means here, which can
 # differ in the last digit.
 BENCHMARKS = [
-    ("Send through ISender", 39.8, 12.8, "ns", 0.32),
-    ("Send, generated mediator", 39.8, 8.5, "ns", 0.22),
-    ("Send, three behaviours", 108, 58.8, "ns", 0.55),
-    ("Publish to five handlers", 140, 56.6, "ns", 0.40),
-    ("Stream of 100 items", 3.07, 1.51, "µs", 0.49),
-    ("Register and send once", 129, 5.3, "µs", 0.04),
-    ("8 of 500 request types", 71.8, 23.2, "ns", 0.32),
+    ("Send through ISender", 37.0, 13.6, "ns", 0.37),
+    ("Send, generated mediator", 37.0, 9.5, "ns", 0.26),
+    ("Send, three behaviours", 100, 45.3, "ns", 0.45),
+    ("Publish to five handlers", 112, 44.5, "ns", 0.40),
+    ("Stream of 100 items", 2.80, 1.37, "µs", 0.49),
+    ("Register and send once", 92.5, 3.8, "µs", 0.04),
+    ("8 of 500 request types", 64.4, 22.3, "ns", 0.35),
 ]
 
 

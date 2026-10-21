@@ -6,6 +6,12 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-21
+
+OpenTelemetry tracing and metrics, off by default. The names are fixed in
+[ADR 0013](docs/adr/0013-telemetry-names.md) and do not change within 1.x; [docs/telemetry.md](docs/telemetry.md)
+shows how to turn them on and what they emit.
+
 ### Added
 
 - Spans for `Send`, `Publish` and `CreateStream` on the `Relevox` activity source, turned on with
@@ -22,6 +28,16 @@ All notable changes to this project are written down here. The format follows
   marked `Error`. It works with `ForeachAwaitPublisher`, `TaskWhenAllPublisher` and a custom publisher, and for
   notification types known only at run time. Off by default even with telemetry on; with it off, a publish does
   no extra work per handler.
+- `RelevoxTelemetry.SourceName`, for `AddSource` and `AddMeter`.
+- The web sample exports its spans and metrics over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and its
+  README shows how to watch them in the standalone Aspire dashboard.
+
+### Performance
+
+- Telemetry off costs a send one flag read: 1.08 ns for a singleton handler's typed send, against 1.06 ns in the
+  send benchmark. On with nothing listening, 2.0 ns; on with a listener, about 230 ns and 576 B, almost all of it
+  the `Activity`. Every benchmark was run on this code
+  ([results](docs/benchmark-results/2026-10-21-1.2.0.md), [telemetry](docs/benchmark-results/2026-10-21-telemetry.md)).
 
 ## [1.1.0] - 2026-10-20
 
