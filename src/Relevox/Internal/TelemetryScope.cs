@@ -406,9 +406,9 @@ public readonly struct TelemetryScope
             // Stopped early, the iterator's finally blocks run here, and what they do belongs under the stream's
             // span, which is still open. Set inside this async method, the current activity reverts for the caller
             // when it returns.
-            if (!_ended)
+            if (!_ended && scope._activity is not null)
             {
-                Activity.Current = activity;
+                Activity.Current = scope._activity;
             }
 
             try
