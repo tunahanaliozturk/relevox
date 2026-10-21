@@ -64,6 +64,7 @@ internal static class Emitter
         code.Line("private readonly global::System.IServiceProvider _services;");
         code.Line("private readonly global::Relevox.Internal.PipelineState<RelevoxMediator> _pipelines;");
         code.Line("private global::Relevox.INotificationPublisher? _publisher;");
+        code.Line("private readonly bool _telemetry;");
         if (plan.OpenNotificationHandlers.Length > 0)
         {
             code.Line($"private static readonly global::Relevox.Internal.OpenNotificationHandlers OpenNotificationHandlers = new({string.Join(", ", plan.OpenNotificationHandlers.Select(static definition => $"typeof({definition})"))});");
@@ -84,10 +85,12 @@ internal static class Emitter
         code.Line("/// and the first one can be kept.");
         code.Line("/// </param>");
         code.Line("/// <param name=\"pipelines\">Which requests this container has no behaviours for, learned on first use.</param>");
-        code.Open("public RelevoxMediator(global::System.IServiceProvider services, bool[] keep, global::Relevox.Internal.PipelineState<RelevoxMediator> pipelines)");
+        code.Line("/// <param name=\"telemetry\">Whether sends, publishes and streams get spans, from <c>options.Telemetry.Enabled</c>.</param>");
+        code.Open("public RelevoxMediator(global::System.IServiceProvider services, bool[] keep, global::Relevox.Internal.PipelineState<RelevoxMediator> pipelines, bool telemetry = false)");
         code.Line("global::System.ArgumentNullException.ThrowIfNull(keep);");
         code.Line("_services = services;");
         code.Line("_pipelines = pipelines;");
+        code.Line("_telemetry = telemetry;");
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line($"_keep{handler.Value} = keep[{handler.Value}];");
@@ -155,6 +158,7 @@ internal static class Emitter
         code.Line("configure?.Invoke(options);");
         code.Line($"{DependencyInjection}.ServiceLifetime lifetime = options.Lifetime;");
         code.Line($"{DependencyInjection}.ServiceLifetime handlerLifetime = options.HandlerLifetime;");
+        code.Line("bool telemetry = options.Telemetry.Enabled;");
         code.Line();
 
         // Handlers are added only when the application has not registered them already, as TryAdd would, but
@@ -323,7 +327,7 @@ internal static class Emitter
         code.Line("// Whether each handler can be kept is read from the registration in force when the first mediator is built,");
         code.Line("// not when this runs: a handler the application registers again afterwards, as transient, is never kept.");
         code.Line("bool[]? keep = null;");
-        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep ??= Keep(services), {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider)), lifetime));");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep ??= Keep(services), {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider), telemetry), lifetime));");
         foreach (string contract in new[] { "global::Relevox.IMediator", "global::Relevox.ISender", "global::Relevox.IPublisher" })
         {
             code.Line($"if (registered.Add(typeof({contract})))");
@@ -501,7 +505,13 @@ internal static class Emitter
 
             // The send itself is kept to a byte read and a call so the JIT can inline it: a method with an
             // exception handler is never inlined, and the M2 benchmark showed the cost (a singleton send went
-            // from 0.46 ns to 1.9 ns). Everything else is in a helper that the direct path never reaches.
+            // from 0.46 ns to 1.9 ns). Everything else is in a helper that the direct path never reaches. With
+            // telemetry off, the flag read is all tracing costs (ADR 0013).
+            code.Line("if (_telemetry)");
+            code.Line("{");
+            code.Line($"    return SendTraced{position}(request, cancellationToken);");
+            code.Line("}");
+            code.Line();
             code.Line($"if (_pipelines.TryDirect({position}, out bool asynchronous) && !asynchronous)");
             code.Line("{");
             code.Line($"    return {direct};");
@@ -533,6 +543,18 @@ internal static class Emitter
             code.Line($"    return {faulted};");
             code.Line("}");
             code.Close();
+
+            // The same two paths inside a span. The exception handler that keeps this out of the send above is
+            // fine here: telemetry is on, and a span costs far more than the call.
+            code.Line();
+            code.Open($"private {returns} SendTraced{position}({request.Request.Syntax} request, {Token} cancellationToken)");
+            Traced(
+                code,
+                $"StartSend({Literal("send " + request.Request.ShortName)}, {Literal(request.Request.FullName)}, {Literal(request.HandlerName)})",
+                returns,
+                $"_pipelines.TryDirect({position}, out bool asynchronous) && !asynchronous ? {direct} : SendThroughPipeline{position}(request, cancellationToken)",
+                "Complete");
+            code.Close();
         }
     }
 
@@ -558,7 +580,7 @@ internal static class Emitter
             code.Open($"public {AsyncEnumerable}<{stream.ResponseSyntax}> CreateStream({stream.Request.Syntax} request, {Token} cancellationToken = default)");
             NullCheck(code, "request", stream.Request);
             RuntimeTypeCheck(code, "request", stream.Request, $"CreateStream<{stream.ResponseSyntax}>((global::Relevox.IStreamRequest<{stream.ResponseSyntax}>)request, cancellationToken)");
-            code.Line($"return new global::Relevox.Internal.DeferredEnumerable<RelevoxMediator, {stream.Request.Syntax}, {stream.ResponseSyntax}>(this, request, {Lambda}static (mediator, message, token) => mediator.OpenStream{index}(message, token), cancellationToken);");
+            code.Line($"return new global::Relevox.Internal.DeferredEnumerable<RelevoxMediator, {stream.Request.Syntax}, {stream.ResponseSyntax}>(this, request, {Lambda}static (mediator, message, token) => mediator._telemetry ? mediator.OpenTracedStream{index}(message, token) : mediator.OpenStream{index}(message, token), cancellationToken);");
             code.Close();
 
             // Called on the first MoveNextAsync, with the combined token: the handler is resolved when enumeration
@@ -570,6 +592,17 @@ internal static class Emitter
             code.Line("return behaviors is null");
             code.Line($"    ? (({contract})Handler{handler}()).Handle(request, cancellationToken)");
             code.Line($"    : global::Relevox.Internal.StreamPipeline.Run(this, request, behaviors, {Lambda}static (mediator, message, token) => (({contract})mediator.Handler{handler}()).Handle(message, token), cancellationToken);");
+            code.Close();
+
+            // Opened once per enumeration, so each enumeration is a span of its own (ADR 0013).
+            code.Line();
+            code.Open($"private {AsyncEnumerable}<{stream.ResponseSyntax}> OpenTracedStream{index}({stream.Request.Syntax} request, {Token} cancellationToken)");
+            Traced(
+                code,
+                $"StartStream({Literal("stream " + stream.Request.ShortName)}, {Literal(stream.Request.FullName)}, {Literal(stream.HandlerName)})",
+                $"{AsyncEnumerable}<{stream.ResponseSyntax}>",
+                $"OpenStream{index}(request, cancellationToken)",
+                "Enumerate");
             code.Close();
         }
     }
@@ -589,7 +622,23 @@ internal static class Emitter
             code.Open($"public {Task} Publish({shape.Syntax} notification, {Token} cancellationToken = default)");
             NullCheck(code, "notification", shape);
             RuntimeTypeCheck(code, "notification", shape, "Publish((object)notification, cancellationToken)");
+            code.Line($"return _telemetry ? PublishTraced{index}(notification, cancellationToken) : PublishUntraced{index}(notification, cancellationToken);");
+            code.Close();
 
+            code.Line();
+            code.Open($"private {Task} PublishTraced{index}({shape.Syntax} notification, {Token} cancellationToken)");
+            Traced(
+                code,
+                $"StartPublish({Literal("publish " + shape.ShortName)}, {Literal(shape.FullName)}, {notification.Targets.Length})",
+                Task,
+                $"PublishUntraced{index}(notification, cancellationToken)",
+                "Complete");
+            code.Close();
+
+            // Inlined into Publish, so with telemetry off the split costs nothing beyond the flag read.
+            code.Line();
+            code.Line("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
+            code.Open($"private {Task} PublishUntraced{index}({shape.Syntax} notification, {Token} cancellationToken)");
             if (notification.Targets.Length == 0)
             {
                 // A configured publisher is still called with no handlers, as MediatR calls it.
@@ -773,7 +822,7 @@ internal static class Emitter
         code.Line("    throw new global::System.ArgumentException($\"'{notification.GetType()}' does not implement INotification.\", nameof(notification));");
         code.Line("}");
         code.Line();
-        code.Line(Unlisted(plan, "known"));
+        code.Line("return PublishUnlisted(known, cancellationToken);");
         code.Close();
 
         code.Line();
@@ -790,15 +839,55 @@ internal static class Emitter
         code.Line("    return dispatcher.Publish(this, notification, cancellationToken);");
         code.Line("}");
         code.Line();
-        code.Line(Unlisted(plan, "notification"));
+        code.Line("return PublishUnlisted(notification, cancellationToken);");
+        code.Close();
+
+        // Named from its runtime type, once per type, since nothing at build time knew it (ADR 0013).
+        code.Line();
+        code.Open($"private {Task} PublishUnlisted(global::Relevox.INotification notification, {Token} cancellationToken)");
+        code.Line("if (!_telemetry)");
+        code.Line("{");
+        code.Line($"    return {Unlisted(plan)};");
+        code.Line("}");
+        code.Line();
+        Traced(
+            code,
+            $"StartPublish(notification.GetType(), {(plan.OpenNotificationHandlers.Length > 0 ? "OpenNotificationHandlers" : "null")})",
+            Task,
+            Unlisted(plan),
+            "Complete");
         code.Close();
     }
 
+    /// <summary>
+    /// The body of a traced call: start the span, make the untraced call, and record a synchronous throw before
+    /// rethrowing it, so it stays a throw. What the call returned goes through the scope unchanged.
+    /// </summary>
+    private static void Traced(CodeWriter code, string start, string returns, string call, string complete)
+    {
+        code.Line($"global::Relevox.Internal.TelemetryScope scope = global::Relevox.Internal.TelemetryScope.{start};");
+        code.Line($"{returns} result;");
+        code.Line("try");
+        code.Line("{");
+        code.Line($"    result = {call};");
+        code.Line("}");
+        code.Line("catch (global::System.Exception exception)");
+        code.Line("{");
+        code.Line("    scope.Fail(exception);");
+        code.Line("    throw;");
+        code.Line("}");
+        code.Line();
+        code.Line($"return scope.{complete}(result);");
+    }
+
+    private static string Literal(string text) =>
+        Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(text, quote: true);
+
     // A notification type with no entry: nothing written handles it, but a generic handler may still close over it.
-    private static string Unlisted(EmitPlan plan, string notification) =>
+    private static string Unlisted(EmitPlan plan) =>
         plan.OpenNotificationHandlers.Length > 0
-            ? $"return OpenNotificationHandlers.Publish(_services, {notification}, _pipelines.SequentialPublish(_services) ? null : Publisher(), cancellationToken);"
-            : $"return _pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty({notification}, cancellationToken);";
+            ? "OpenNotificationHandlers.Publish(_services, notification, _pipelines.SequentialPublish(_services) ? null : Publisher(), cancellationToken)"
+            : $"_pipelines.SequentialPublish(_services) ? {Task}.CompletedTask : PublishEmpty(notification, cancellationToken)";
 
     private static void EmitHandlerAccessors(CodeWriter code, Dictionary<string, int> handlerIndex)
     {

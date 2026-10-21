@@ -282,7 +282,7 @@ public sealed class EdgeCaseTests
 
         // Handler fields are numbered by name, AMail 0 and ZAudit 1; the publish order is what matters.
         string mediator = host.Mediator;
-        string publish = mediator[mediator.IndexOf("Publish(global::Shop.Orders.Placed notification", StringComparison.Ordinal)..];
+        string publish = mediator[mediator.IndexOf("Untraced0(global::Shop.Orders.Placed notification", StringComparison.Ordinal)..];
         publish = publish[..publish.IndexOf("return ", StringComparison.Ordinal)];
 
         publish.ShouldContain("handler0 = Handler1();");

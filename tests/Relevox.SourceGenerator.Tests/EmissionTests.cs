@@ -108,6 +108,62 @@ public sealed class EmissionTests
     }
 
     [Fact]
+    public void Span_names_and_attribute_values_are_constants_in_the_generated_code()
+    {
+        string mediator = GeneratorHarness.Run(Everything).Mediator;
+
+        mediator.ShouldContain("StartSend(\"send PlaceOrder\", \"Shop.Orders.PlaceOrder\", \"Shop.Orders.PlaceOrderHandler\")");
+        mediator.ShouldContain("StartSend(\"send CancelOrder\", \"Shop.Orders.CancelOrder\", \"Shop.Orders.CancelOrderHandler\")");
+        mediator.ShouldContain("StartPublish(\"publish OrderPlaced\", \"Shop.Orders.OrderPlaced\", 1)");
+        mediator.ShouldContain("StartStream(\"stream ListOrders\", \"Shop.Orders.ListOrders\", \"Shop.Orders.ListOrdersHandler\")");
+    }
+
+    [Fact]
+    public void Generic_and_nested_names_are_written_the_way_the_runtime_names_a_type()
+    {
+        // A notification type the build never saw is named from Type.Name and Type.FullName at run time, so
+        // these use CLR names too: Int32 rather than int, Nullable<Int32> rather than int?, a dot for nesting.
+        GeneratorRun run = GeneratorHarness.Run("""
+            using Relevox;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Shop;
+
+            public sealed record Paged<T>(T Item) : IRequest<string>;
+            public sealed class PagedHandler : IRequestHandler<Paged<int?>, string>
+            {
+                public Task<string> Handle(Paged<int?> request, CancellationToken cancellationToken) => Task.FromResult("p");
+            }
+
+            public static class Catalog
+            {
+                public sealed record Lookup(int Id) : IRequest<string>;
+                public sealed class LookupHandler : IRequestHandler<Lookup, string>
+                {
+                    public Task<string> Handle(Lookup request, CancellationToken cancellationToken) => Task.FromResult("l");
+                }
+            }
+            """);
+
+        run.Mediator.ShouldContain("StartSend(\"send Paged<Nullable<Int32>>\", \"Shop.Paged<System.Nullable<System.Int32>>\", \"Shop.PagedHandler\")");
+        run.Mediator.ShouldContain("StartSend(\"send Lookup\", \"Shop.Catalog.Lookup\", \"Shop.Catalog.LookupHandler\")");
+        run.CompilationErrors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void With_telemetry_off_a_send_reads_one_flag_before_the_direct_path()
+    {
+        string mediator = GeneratorHarness.Run(Everything).Mediator;
+        string send = Between(mediator, "Send(global::Shop.Orders.PlaceOrder request", "private ");
+
+        // The span, its try block and everything else live in SendTraced, which the direct path never reaches.
+        send.ShouldContain("if (_telemetry)");
+        send.ShouldNotContain("TelemetryScope");
+        send.ShouldNotContain("catch");
+    }
+
+    [Fact]
     public void The_namespace_comes_from_the_assembly_name_made_valid()
     {
         GeneratorRun run = GeneratorHarness.Run("My-App.2nd.Api", [], Everything);

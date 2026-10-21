@@ -47,11 +47,14 @@ internal enum HandlerKind
 /// has to check before it trusts the static type.
 /// </param>
 /// <param name="IsAbstract">An abstract class or an interface, which can never be the runtime type.</param>
-internal sealed record MessageShape(string Type, string Syntax, bool IsValueType, bool IsSealed, bool IsAbstract);
+/// <param name="ShortName">The name in the message's span name, such as <c>Paged&lt;Order&gt;</c> (ADR 0013).</param>
+/// <param name="FullName">The name in <c>relevox.message.type</c>, such as <c>Shop.Paged&lt;Shop.Order&gt;</c>.</param>
+internal sealed record MessageShape(string Type, string Syntax, bool IsValueType, bool IsSealed, bool IsAbstract, string ShortName, string FullName);
 
 /// <summary>One handler contract one class implements. A class handling two messages yields two.</summary>
 /// <param name="Kind">The contract.</param>
 /// <param name="HandlerType">Fully qualified handler class.</param>
+/// <param name="HandlerName">The handler's name in <c>relevox.handler.type</c>, written as message names are.</param>
 /// <param name="Message">The request or notification type it handles.</param>
 /// <param name="ResponseType">Plain response or stream item type, for typeof, or null when there is none.</param>
 /// <param name="ResponseSyntax">Annotated response or stream item type, or null when there is none.</param>
@@ -76,6 +79,7 @@ internal sealed record MessageShape(string Type, string Syntax, bool IsValueType
 internal sealed record HandlerModel(
     HandlerKind Kind,
     string HandlerType,
+    string HandlerName,
     MessageShape Message,
     string? ResponseType,
     string? ResponseSyntax,
