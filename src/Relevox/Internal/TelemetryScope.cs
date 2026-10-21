@@ -207,6 +207,19 @@ public readonly struct TelemetryScope
             return task;
         }
 
+        // Recording a faulted task's exception marks it observed, and with telemetry on TaskScheduler.UnobservedTaskException
+        // would then stay silent for a send nobody awaited. The caller gets a task faulted with the same exceptions
+        // instead, unobserved as the handler's own was. Only a failure pays for it.
+        if (task is { IsFaulted: true })
+        {
+            AggregateException error = task.Exception!;
+            End(error.InnerException ?? error);
+            Activity.Current = _previous;
+            TaskCompletionSource faulted = new();
+            faulted.SetException(error.InnerExceptions);
+            return faulted.Task;
+        }
+
         if (task is null || task.IsCompleted)
         {
             End(ExceptionOf(task));
@@ -239,6 +252,17 @@ public readonly struct TelemetryScope
         if (IsEmpty)
         {
             return task;
+        }
+
+        // As above: the caller gets the exceptions on a task of its own, still unobserved.
+        if (task is { IsFaulted: true })
+        {
+            AggregateException error = task.Exception!;
+            End(error.InnerException ?? error);
+            Activity.Current = _previous;
+            TaskCompletionSource<TResponse> faulted = new();
+            faulted.SetException(error.InnerExceptions);
+            return faulted.Task;
         }
 
         if (task is null || task.IsCompleted)
@@ -303,8 +327,24 @@ public readonly struct TelemetryScope
     // The exception awaiting the task would throw, or null for a task that succeeded.
     private static Exception? ExceptionOf(Task? finished) =>
         finished is { IsFaulted: true } ? finished.Exception!.InnerException ?? finished.Exception
-        : finished is { IsCanceled: true } ? new TaskCanceledException(finished)
+        : finished is { IsCanceled: true } ? CancellationOf(finished)
         : null;
+
+    // The exception awaiting a cancelled task throws, which is the handler's own OperationCanceledException when it
+    // threw one, with its stack trace, rather than a TaskCanceledException made up here. Only reached on failure.
+    private static Exception CancellationOf(Task cancelled)
+    {
+        try
+        {
+            cancelled.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException exception)
+        {
+            return exception;
+        }
+
+        return new TaskCanceledException(cancelled);
+    }
 
     /// <summary>Ends the span and records the duration, with the failure when there is one.</summary>
     private void End(Exception? exception)

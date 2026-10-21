@@ -624,9 +624,11 @@ internal static partial class Discovery
             arguments.InsertRange(0, containing.TypeArguments);
         }
 
-        if (full && named.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace)
+        // From each namespace's Name, not ToDisplayString, which writes a keyword such as class as @class; the
+        // runtime's FullName has no @.
+        for (INamespaceSymbol? space = full ? named.ContainingNamespace : null; space is { IsGlobalNamespace: false }; space = space.ContainingNamespace)
         {
-            name = containingNamespace.ToDisplayString() + "." + name;
+            name = space.Name + "." + name;
         }
 
         return arguments.Count == 0

@@ -60,3 +60,29 @@ public sealed class BrownoutBreaker(Trace trace) : INotificationHandler<Brownout
         throw new TimeoutException("tripped after a yield");
     }
 }
+
+/// <summary>Fails before its first real await, so Send returns a task that has already faulted.</summary>
+public sealed record FaultsNow : IRequest<int>;
+
+public sealed class FaultsNowHandler : IRequestHandler<FaultsNow, int>
+{
+    public async Task<int> Handle(FaultsNow request, CancellationToken cancellationToken)
+    {
+        await Task.CompletedTask;
+        throw new FaultsNowException();
+    }
+}
+
+public sealed class FaultsNowException() : Exception("faulted before returning");
+
+/// <summary>Gives up after yielding with an OperationCanceledException of its own.</summary>
+public sealed record GivesUp : IRequest<int>;
+
+public sealed class GivesUpHandler : IRequestHandler<GivesUp, int>
+{
+    public async Task<int> Handle(GivesUp request, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        throw new OperationCanceledException("gave up");
+    }
+}

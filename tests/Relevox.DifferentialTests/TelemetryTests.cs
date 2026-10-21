@@ -225,6 +225,65 @@ public sealed class TelemetryTests
     }
 
     [Fact]
+    public async Task A_send_nobody_awaits_still_reports_its_exception_as_unobserved()
+    {
+        // Reading an already faulted task's exception to tag the span would mark it observed, and the
+        // application's UnobservedTaskException handler would hear nothing with telemetry on.
+        using Spans spans = new();
+        await using ServiceProvider provider = Build();
+        ISender sender = provider.GetRequiredService<ISender>();
+        int unobserved = 0;
+        EventHandler<UnobservedTaskExceptionEventArgs> count = (_, args) =>
+        {
+            if (args.Exception.InnerExceptions.Any(static exception => exception is S.FaultsNowException))
+            {
+                Interlocked.Increment(ref unobserved);
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += count;
+        try
+        {
+            SendAndForget(sender, 5);
+            for (int attempt = 0; attempt < 3 && Volatile.Read(ref unobserved) == 0; attempt++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= count;
+        }
+
+        Volatile.Read(ref unobserved).ShouldBeGreaterThan(0);
+        spans.Recorded.Count(span => span.OperationName == "send FaultsNow").ShouldBe(5);
+    }
+
+    // Not inlined, so the tasks are unreachable once it returns and the collector can finalise them.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void SendAndForget(ISender sender, int times)
+    {
+        for (int index = 0; index < times; index++)
+        {
+            _ = sender.Send(new S.FaultsNow());
+        }
+    }
+
+    [Fact]
+    public async Task A_cancelled_send_is_recorded_with_the_exception_the_caller_sees()
+    {
+        using Spans spans = new();
+        await using ServiceProvider provider = Build();
+
+        Exception thrown = await Caught(() => provider.GetRequiredService<ISender>().Send(new S.GivesUp()));
+
+        thrown.ShouldBeOfType<OperationCanceledException>();
+        Activity span = spans.Named("send GivesUp");
+        span.GetTagItem("error.type").ShouldBe("System.OperationCanceledException");
+    }
+
+    [Fact]
     public async Task Nothing_is_created_when_nothing_listens_or_when_telemetry_is_off()
     {
         await using (ServiceProvider on = Build())
