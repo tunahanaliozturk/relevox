@@ -142,6 +142,7 @@ public class TelemetryBenchmarks
         {
             ShouldListenTo = static source => source.Name == global::Relevox.RelevoxTelemetry.SourceName,
             Sample = static (ref System.Diagnostics.ActivityCreationOptions<System.Diagnostics.ActivityContext> _) => System.Diagnostics.ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = static _ => { },
         };
         System.Diagnostics.ActivitySource.AddActivityListener(s_spans);
         s_measurements = new System.Diagnostics.Metrics.MeterListener

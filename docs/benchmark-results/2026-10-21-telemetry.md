@@ -10,15 +10,16 @@ Intel Core Ultra 7 255H 2.00GHz, 16 logical and 16 physical cores
 ```
 
 A typed send to a singleton handler with no behaviours, so the dispatch is all there is to measure. Each case
-runs in a process of its own; the listening case adds an `ActivityListener` that samples every span and a
-`MeterListener` that takes every measurement and throws it away, which is what an exporter costs the caller
-before it batches anything.
+runs in a process of its own; the listening case adds an `ActivityListener` that samples every span and is handed
+each one when it stops, and a `MeterListener` that takes every measurement, and both throw what they get away.
+That is the caller's share of exporting, up to the point where an exporter would queue the span or the
+measurement; an exporter's own queueing and batching come on top.
 
 | | Run 1 | Run 2 | Allocated |
 |---|---:|---:|---:|
 | Telemetry off | 1.15 ns | 1.14 ns | 0 B |
 | Telemetry on, nothing listening | 2.01 ns | 1.99 ns | 0 B |
-| Telemetry on, listening | 251.9 ns | 236.0 ns | 576 B |
+| Telemetry on, listening | 258.0 ns | 261.2 ns | 576 B |
 
 ## What these show
 
@@ -27,7 +28,7 @@ before it batches anything.
 - **On with nothing listening** adds about 0.9 ns: a check of the activity source and the duration histogram,
   and nothing else.
 - **On with a listener** is dominated by `Activity` itself: creating, tagging and stopping a span is most of the
-  250 ns and all of the 576 B. That is the price of tracing in .NET, not of Relevox, and it is paid only when
+  260 ns and all of the 576 B. That is the price of tracing in .NET, not of Relevox, and it is paid only when
   something is actually recording.
 
 ## A regression this run caught
