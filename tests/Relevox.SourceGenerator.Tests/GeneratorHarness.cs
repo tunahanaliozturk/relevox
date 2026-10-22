@@ -193,7 +193,7 @@ public static class GeneratorHarness
         return builder.ToImmutable();
     }
 
-    private static readonly AnalyzerConfigOptionsProvider MessageMapOn = new GlobalOptionsProvider(new() { [MessageMap.Switch] = "true" });
+    internal static readonly AnalyzerConfigOptionsProvider MessageMapOn = new GlobalOptionsProvider(new() { [MessageMap.Switch] = "true" });
 
     /// <summary>Build properties as the compiler hands them to generators, with nothing set per file.</summary>
     private sealed class GlobalOptionsProvider(Dictionary<string, string> values) : AnalyzerConfigOptionsProvider

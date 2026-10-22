@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -68,13 +69,18 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             .Select(static (compilation, cancellationToken) => Discovery.CloseGenerics(compilation, cancellationToken))
             .WithTrackingName(TrackingNames.Closings);
 
-        // Read from syntax alone: the call cannot bind until this generator has written the method.
-        IncrementalValueProvider<bool> callsAddRelevox = context.SyntaxProvider
+        // Found from syntax alone: the call cannot bind until this generator has written the method. Its options
+        // lambda is read here too, for the message map; the plan only needs to know a call exists.
+        IncrementalValueProvider<ImmutableArray<PipelineOptions>> addRelevoxCalls = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => IsAddRelevoxCall(node),
-                transform: static (call, cancellationToken) => !GeneratedCode.Contains(call.Node.SyntaxTree, call.SemanticModel.Compilation, cancellationToken))
-            .Collect()
-            .Select(static (calls, _) => calls.Contains(true));
+                transform: static (call, cancellationToken) => GeneratedCode.Contains(call.Node.SyntaxTree, call.SemanticModel.Compilation, cancellationToken)
+                    ? null
+                    : MessageMap.Read((InvocationExpressionSyntax)call.Node, call.SemanticModel, cancellationToken))
+            .Where(static options => options is not null)
+            .Select(static (options, _) => options!)
+            .Collect();
+        IncrementalValueProvider<bool> callsAddRelevox = addRelevoxCalls.Select(static (calls, _) => calls.Length > 0);
 
         IncrementalValueProvider<EmitPlan> plan = fromSource
             .Combine(fromReferences)
@@ -102,15 +108,18 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
         });
 
         // Off by default. With it off this step yields null on every edit, so the output below stays cached and
-        // the generated code is what it was before the map existed.
+        // the generated code is what it was before the map existed. With it on, the step binds names against the
+        // compilation, so it runs on every edit, and its output only changes when the map does.
         IncrementalValueProvider<bool> mapRequested = context.AnalyzerConfigOptionsProvider
             .Select(static (options, _) => options.GlobalOptions.TryGetValue(MessageMap.Switch, out string? value)
                 && string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase));
 
         IncrementalValueProvider<(string Namespace, string Json)?> map = plan
             .Combine(mapRequested)
-            .Select(static (pair, _) => pair.Right && pair.Left.Emits
-                ? (pair.Left.Namespace, MessageMap.Json(pair.Left))
+            .Combine(addRelevoxCalls)
+            .Combine(context.CompilationProvider)
+            .Select(static (pair, _) => pair.Left.Left.Right && pair.Left.Left.Left.Emits
+                ? (pair.Left.Left.Left.Namespace, MessageMap.Json(pair.Left.Left.Left, pair.Left.Right, pair.Right))
                 : ((string, string)?)null)
             .WithTrackingName(TrackingNames.MessageMap);
 
