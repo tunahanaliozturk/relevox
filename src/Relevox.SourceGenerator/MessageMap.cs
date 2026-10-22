@@ -86,7 +86,9 @@ internal static class MessageMap
             .Select(static argument => argument.Expression)
             .OfType<AnonymousFunctionExpressionSyntax>()
             .FirstOrDefault();
-        int passed = call.ArgumentList.Arguments.Count - (call.Expression is IdentifierNameSyntax ? 1 : 0);
+        // The service collection is an argument too when the call is written as a static one, with or without the
+        // class name; anything else is options.
+        int passed = call.ArgumentList.Arguments.Count(argument => !IsServices(model.GetTypeInfo(argument.Expression, cancellationToken).Type));
         string? written = passed > 0 ? Text(call) : null;
         if (lambda is null)
         {
@@ -109,7 +111,9 @@ internal static class MessageMap
         // Chained calls nest the first one innermost, so source order of the method names is the order they run in.
         foreach (SyntaxNode node in lambda.Body.DescendantNodesAndSelf().OrderBy(static node => Anchor(node)))
         {
-            if (node is AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AutoRegisterRequestProcessors" } } assignment)
+            if (node is AssignmentExpressionSyntax { Left: var left } assignment
+                && Member(left) == "AutoRegisterRequestProcessors"
+                && IsOptions(Owner(left), parameters))
             {
                 if (assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression) || assignment.Right.IsKind(SyntaxKind.FalseLiteralExpression))
                 {
@@ -178,15 +182,34 @@ internal static class MessageMap
     // What a call is made on, after any chain of known options calls, which return the options.
     private static ExpressionSyntax? Receiver(InvocationExpressionSyntax invocation)
     {
-        ExpressionSyntax? receiver = (invocation.Expression as MemberAccessExpressionSyntax)?.Expression;
-        while (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }
-            && Methods.ContainsKey(access.Name.Identifier.ValueText))
+        ExpressionSyntax? receiver = Owner(invocation.Expression);
+        while (receiver is InvocationExpressionSyntax inner && Member(inner.Expression) is { } name && Methods.ContainsKey(name))
         {
-            receiver = access.Expression;
+            receiver = Owner(inner.Expression);
         }
 
         return receiver;
     }
+
+    // What a member is used on: options in options.X and in options?.X.
+    private static ExpressionSyntax? Owner(ExpressionSyntax member) => member switch
+    {
+        MemberAccessExpressionSyntax access => access.Expression,
+        MemberBindingExpressionSyntax binding => binding.FirstAncestorOrSelf<ConditionalAccessExpressionSyntax>()?.Expression,
+        _ => null,
+    };
+
+    private static string? Member(ExpressionSyntax member) => member switch
+    {
+        MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+        MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
+        _ => null,
+    };
+
+    private static bool IsServices(ITypeSymbol? type) =>
+        type is not null && (IsServiceCollection(type) || type.AllInterfaces.Any(IsServiceCollection));
+
+    private static bool IsServiceCollection(ITypeSymbol type) => type.ToDisplayString() == "Microsoft.Extensions.DependencyInjection.IServiceCollection";
 
     private static bool IsOptions(ExpressionSyntax? expression, string[] parameters) =>
         expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } && parameters.Contains(identifier);

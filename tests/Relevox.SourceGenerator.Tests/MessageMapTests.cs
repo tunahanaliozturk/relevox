@@ -292,10 +292,14 @@ public sealed class MessageMapTests
     [Fact]
     public void The_map_reads_options_as_the_runtime_applies_them()
     {
-        // Named arguments out of order, a behaviour added twice and kept once by TryAddEnumerable: the same map.
-        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
-            "options.AddBehavior<LookCache>();",
-            "options.AddBehavior(implementationType: typeof(LookCache), serviceType: typeof(IPipelineBehavior<Look, string>)); options.AddOpenBehavior(typeof(Logging<,>));"));
+        // Named arguments out of order, a behaviour added twice and kept once by TryAddEnumerable, and calls through
+        // a null-conditional: the same map.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline
+            .Replace(
+                "options.AddBehavior<LookCache>();",
+                "options.AddBehavior(implementationType: typeof(LookCache), serviceType: typeof(IPipelineBehavior<Look, string>)); options.AddOpenBehavior(typeof(Logging<,>));")
+            // Last, as the compiler takes options for maybe null after it.
+            .Replace("options.AddRequestPreProcessor<Audit>();", "options?.AddRequestPreProcessor<Audit>();"));
 
         run.CompilationErrors.ShouldBeEmpty();
         Json(run.Compilation).ShouldBe(Json(GeneratorHarness.RunWithMessageMap(Pipeline).Compilation));
@@ -318,6 +322,44 @@ public sealed class MessageMapTests
         string map = Json(run.Compilation).ShouldNotBeNull();
         map.ShouldNotContain("Shop.LookCache");
         map.ShouldContain("\"unread\": []");
+    }
+
+    [Fact]
+    public void A_flag_of_the_same_name_on_something_else_leaves_scanned_processors_off()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline
+            .Replace("options.AutoRegisterRequestProcessors = true;", "new Flags().AutoRegisterRequestProcessors = true;")
+            .Replace("options.AddRequestPreProcessor<Audit>();", "options.AddOpenRequestPreProcessor(typeof(Noop<>));") + """
+
+            public sealed class Flags
+            {
+                public bool AutoRegisterRequestProcessors { get; set; }
+            }
+            public sealed class Noop<TRequest> : IRequestPreProcessor<TRequest> where TRequest : notnull
+            {
+                public Task Process(TRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain("Shop.Noop<Shop.Place>");
+        map.ShouldNotContain("Shop.Audit");
+    }
+
+    [Fact]
+    public void A_call_written_as_a_static_method_passes_no_options()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers + """
+
+            public static class Setup
+            {
+                public static IServiceCollection Add(IServiceCollection services) => RelevoxServiceCollectionExtensions.AddRelevox(services);
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation).ShouldNotBeNull().ShouldContain("\"unread\": []");
     }
 
     [Fact]
