@@ -363,6 +363,41 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void Options_the_build_does_not_follow_are_listed_as_unread()
+    {
+        // An alias, and a lambda that may run later or never.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "var pipeline = options; pipeline.AddBehavior<LookCache>(); Action later = () => options.AddBehavior<LookCache>();"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldNotContain("Shop.LookCache");
+        map.ShouldContain(Lf("""
+              "unread": [
+                "var pipeline = options;",
+                "() => options.AddBehavior<LookCache>()"
+              ]
+            """));
+    }
+
+    [Fact]
+    public void Another_librarys_AddRelevox_is_not_read()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline + """
+
+            public static class Other
+            {
+                public static IServiceCollection AddRelevox(this IServiceCollection services, int retries) => services;
+                public static IServiceCollection Add(IServiceCollection services) => services.AddRelevox(3);
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation).ShouldBe(Json(GeneratorHarness.RunWithMessageMap(Pipeline).Compilation));
+    }
+
+    [Fact]
     public void With_two_AddRelevox_calls_the_options_are_listed_as_unread()
     {
         // The generated AddRelevox returns early the second time, so only one call's options ever apply.
