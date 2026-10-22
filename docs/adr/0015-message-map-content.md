@@ -24,8 +24,8 @@ which bind even though the lambda's parameter has no type until the generator ha
 Registrations run in source order of their method names, which is also the order of a chain such as
 `options.AddOpenBehavior(a).AddOpenBehavior(b)`.
 
-Anything the build cannot read, such as a `Type` in a variable or a method group passed instead of a lambda, is
-listed in the map's `unread` field as written. The map says what it does not know rather than guessing.
+Anything the build cannot read, such as a `Type` in a variable, a method group passed instead of a lambda, or a
+call the options are handed to (`Configure(options)`), is listed in the map's `unread` field as written. The map says what it does not know rather than guessing.
 
 **Open behaviours are checked against each request**, as the container checks them: it closes an open
 registration over the service's type arguments in order and leaves it out when a constraint fails. The map uses

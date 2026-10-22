@@ -95,16 +95,24 @@ internal static class MessageMap
             return new PipelineOptions(EquatableArray<OptionRegistration>.Empty, unread.ToEquatableArray(), false, false, false);
         }
 
+        string[] parameters = lambda switch
+        {
+            SimpleLambdaExpressionSyntax simple => [simple.Parameter.Identifier.ValueText],
+            ParenthesizedLambdaExpressionSyntax parenthesized => [.. parenthesized.ParameterList.Parameters.Select(static parameter => parameter.Identifier.ValueText)],
+            AnonymousMethodExpressionSyntax { ParameterList: { } list } => [.. list.Parameters.Select(static parameter => parameter.Identifier.ValueText)],
+            _ => [],
+        };
+
         // Chained calls nest the first one innermost, so source order of the method names is the order they run in.
         foreach (SyntaxNode node in lambda.Body.DescendantNodesAndSelf().OrderBy(static node => Anchor(node)))
         {
             if (node is AssignmentExpressionSyntax { Left: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AutoRegisterRequestProcessors" } } assignment)
             {
-                if (assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression))
+                if (assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression) || assignment.Right.IsKind(SyntaxKind.FalseLiteralExpression))
                 {
-                    auto = true;
+                    auto = assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression);
                 }
-                else if (!assignment.Right.IsKind(SyntaxKind.FalseLiteralExpression))
+                else
                 {
                     unread.Add(Text(assignment));
                 }
@@ -112,10 +120,19 @@ internal static class MessageMap
                 continue;
             }
 
-            if (node is not InvocationExpressionSyntax invocation
-                || MethodName(invocation) is not { } name
-                || !Methods.TryGetValue(name.Identifier.ValueText, out var method))
+            if (node is not InvocationExpressionSyntax invocation)
             {
+                continue;
+            }
+
+            if (MethodName(invocation) is not { } name || !Methods.TryGetValue(name.Identifier.ValueText, out var method))
+            {
+                // A call handed the options, such as Configure(options), may register anything.
+                if (Receives(invocation, parameters))
+                {
+                    unread.Add(Text(invocation));
+                }
+
                 continue;
             }
 
@@ -124,9 +141,11 @@ internal static class MessageMap
             List<ITypeSymbol?> types = name is GenericNameSyntax generic
                 ? [.. generic.TypeArgumentList.Arguments.Select(argument => Bind(argument, model, cancellationToken))]
                 : [.. invocation.ArgumentList.Arguments
+                    // A named implementationType goes after the service type whatever its position, as C# binds it.
+                    .OrderBy(static argument => argument.NameColon?.Name.Identifier.ValueText == "implementationType" ? 1 : 0)
                     .Select(static argument => argument.Expression)
-                    // The types come first; a lifetime may follow.
-                    .TakeWhile(static expression => expression is TypeOfExpressionSyntax or ArrayCreationExpressionSyntax
+                    // The lifetime is the one argument that is not a type.
+                    .Where(static expression => expression is TypeOfExpressionSyntax or ArrayCreationExpressionSyntax
                         or ImplicitArrayCreationExpressionSyntax or CollectionExpressionSyntax or BaseObjectCreationExpressionSyntax)
                     .SelectMany(expression => TypesIn(expression, model, cancellationToken))];
 
@@ -141,6 +160,29 @@ internal static class MessageMap
         }
 
         return new PipelineOptions(registrations.ToEquatableArray(), unread.ToEquatableArray(), auto, pre, post);
+    }
+
+    // Whether the call is passed the options, or made on them (an extension method, or a change to one of the
+    // lists such as options.BehaviorsToRegister), after any chain of known options calls, which return them.
+    private static bool Receives(InvocationExpressionSyntax invocation, string[] parameters)
+    {
+        if (invocation.ArgumentList.Arguments.Any(argument => IsOptions(argument.Expression)))
+        {
+            return true;
+        }
+
+        ExpressionSyntax? receiver = (invocation.Expression as MemberAccessExpressionSyntax)?.Expression;
+        while (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }
+            && Methods.ContainsKey(access.Name.Identifier.ValueText))
+        {
+            receiver = access.Expression;
+        }
+
+        return receiver is not null
+            && (IsOptions(receiver)
+                || receiver is MemberAccessExpressionSyntax { Expression: var list, Name.Identifier.ValueText: var member } && member.EndsWith("ToRegister", System.StringComparison.Ordinal) && IsOptions(list));
+
+        bool IsOptions(ExpressionSyntax expression) => expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } && parameters.Contains(identifier);
     }
 
     private static int Anchor(SyntaxNode node) => node is InvocationExpressionSyntax invocation && MethodName(invocation) is { } name ? name.SpanStart : node.SpanStart;
@@ -252,7 +294,8 @@ internal static class MessageMap
     public static string Json(EmitPlan plan, ImmutableArray<PipelineOptions> calls, Compilation compilation)
     {
         Names names = new(compilation);
-        OptionRegistration[] options = [.. calls.SelectMany(static call => call.Registrations)];
+        // TryAddEnumerable registers a service and implementation pair once, however often it is added.
+        OptionRegistration[] options = [.. calls.SelectMany(static call => call.Registrations).Distinct()];
         bool auto = calls.Any(static call => call.AutoRegisterRequestProcessors);
         bool pre = calls.Any(static call => call.AddsPreProcessors);
         bool post = calls.Any(static call => call.AddsPostProcessors);
