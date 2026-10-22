@@ -302,6 +302,43 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_method_of_the_same_name_on_something_else_is_not_an_options_call()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "new Helper().AddBehavior(typeof(LookCache));") + """
+
+            public sealed class Helper
+            {
+                public void AddBehavior(Type type) { }
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldNotContain("Shop.LookCache");
+        map.ShouldContain("\"unread\": []");
+    }
+
+    [Fact]
+    public void With_two_AddRelevox_calls_the_options_are_listed_as_unread()
+    {
+        // The generated AddRelevox returns early the second time, so only one call's options ever apply.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline + """
+
+            public static class Again
+            {
+                public static IServiceCollection Add(IServiceCollection services) => services.AddRelevox();
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldNotContain("Shop.Logging");
+        map.ShouldContain("\"unread\": [\n    \"services.AddRelevox(options => { options.AutoRegisterRequestProcessors = true;");
+    }
+
+    [Fact]
     public void A_later_false_turns_scanned_processors_back_off()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
