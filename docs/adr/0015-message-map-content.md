@@ -61,6 +61,8 @@ point.
   was considered and left out: container registrations can come from anywhere, including other libraries, and a
   map that found some of them would look complete when it was not.
 - A registration inside an `if` in the lambda is in the map whether or not the branch runs.
+- Only the first `AddRelevox` call to run applies its options, and the build cannot tell which that is. With more
+  than one call in a project, the ones that pass options go to `unread` whole.
 - The registration's type is read from the lambda's syntax tree. If a behaviour class elsewhere changes the
   interfaces it implements, the IDE's cached reading of the lambda is stale until that file is edited. A real
   build compiles from scratch and is always right; the IDE never writes the file.

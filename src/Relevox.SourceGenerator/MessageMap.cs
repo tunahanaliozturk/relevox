@@ -31,12 +31,14 @@ internal sealed record OptionRegistration(OptionKind Kind, string? Service, stri
 /// <param name="AutoRegisterRequestProcessors">Whether the lambda sets <c>AutoRegisterRequestProcessors = true</c>.</param>
 /// <param name="AddsPreProcessors">Whether it adds any pre-processor, read or not; only then do pre-processors run.</param>
 /// <param name="AddsPostProcessors">The same for post-processors.</param>
+/// <param name="Call">The <c>AddRelevox</c> call as written, when it passes options; null when it passes none.</param>
 internal sealed record PipelineOptions(
     EquatableArray<OptionRegistration> Registrations,
     EquatableArray<string> Unread,
     bool AutoRegisterRequestProcessors,
     bool AddsPreProcessors,
-    bool AddsPostProcessors);
+    bool AddsPostProcessors,
+    string? Call);
 
 /// <summary>
 /// Writes the message map: what this project's mediator dispatches and what runs around it, as JSON, carried out
@@ -85,14 +87,15 @@ internal static class MessageMap
             .OfType<AnonymousFunctionExpressionSyntax>()
             .FirstOrDefault();
         int passed = call.ArgumentList.Arguments.Count - (call.Expression is IdentifierNameSyntax ? 1 : 0);
+        string? written = passed > 0 ? Text(call) : null;
         if (lambda is null)
         {
-            if (passed > 0)
+            if (written is not null)
             {
-                unread.Add(Text(call));
+                unread.Add(written);
             }
 
-            return new PipelineOptions(EquatableArray<OptionRegistration>.Empty, unread.ToEquatableArray(), false, false, false);
+            return new PipelineOptions(EquatableArray<OptionRegistration>.Empty, unread.ToEquatableArray(), false, false, false, written);
         }
 
         string[] parameters = lambda switch
@@ -125,7 +128,9 @@ internal static class MessageMap
                 continue;
             }
 
-            if (MethodName(invocation) is not { } name || !Methods.TryGetValue(name.Identifier.ValueText, out var method))
+            // A method of the same name on something else, such as helper.AddBehavior(...), is not an options call.
+            if (MethodName(invocation) is not { } name || !Methods.TryGetValue(name.Identifier.ValueText, out var method)
+                || !IsOptions(Receiver(invocation), parameters))
             {
                 // A call handed the options, such as Configure(options), may register anything.
                 if (Receives(invocation, parameters))
@@ -159,18 +164,20 @@ internal static class MessageMap
             }
         }
 
-        return new PipelineOptions(registrations.ToEquatableArray(), unread.ToEquatableArray(), auto, pre, post);
+        return new PipelineOptions(registrations.ToEquatableArray(), unread.ToEquatableArray(), auto, pre, post, written);
     }
 
     // Whether the call is passed the options, or made on them (an extension method, or a change to one of the
-    // lists such as options.BehaviorsToRegister), after any chain of known options calls, which return them.
-    private static bool Receives(InvocationExpressionSyntax invocation, string[] parameters)
-    {
-        if (invocation.ArgumentList.Arguments.Any(argument => IsOptions(argument.Expression)))
-        {
-            return true;
-        }
+    // lists such as options.BehaviorsToRegister).
+    private static bool Receives(InvocationExpressionSyntax invocation, string[] parameters) =>
+        invocation.ArgumentList.Arguments.Any(argument => IsOptions(argument.Expression, parameters))
+        || Receiver(invocation) is { } receiver
+            && (IsOptions(receiver, parameters)
+                || receiver is MemberAccessExpressionSyntax { Expression: var list, Name.Identifier.ValueText: var member } && member.EndsWith("ToRegister", System.StringComparison.Ordinal) && IsOptions(list, parameters));
 
+    // What a call is made on, after any chain of known options calls, which return the options.
+    private static ExpressionSyntax? Receiver(InvocationExpressionSyntax invocation)
+    {
         ExpressionSyntax? receiver = (invocation.Expression as MemberAccessExpressionSyntax)?.Expression;
         while (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }
             && Methods.ContainsKey(access.Name.Identifier.ValueText))
@@ -178,12 +185,11 @@ internal static class MessageMap
             receiver = access.Expression;
         }
 
-        return receiver is not null
-            && (IsOptions(receiver)
-                || receiver is MemberAccessExpressionSyntax { Expression: var list, Name.Identifier.ValueText: var member } && member.EndsWith("ToRegister", System.StringComparison.Ordinal) && IsOptions(list));
-
-        bool IsOptions(ExpressionSyntax expression) => expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } && parameters.Contains(identifier);
+        return receiver;
     }
+
+    private static bool IsOptions(ExpressionSyntax? expression, string[] parameters) =>
+        expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } && parameters.Contains(identifier);
 
     private static int Anchor(SyntaxNode node) => node is InvocationExpressionSyntax invocation && MethodName(invocation) is { } name ? name.SpanStart : node.SpanStart;
 
@@ -294,6 +300,17 @@ internal static class MessageMap
     public static string Json(EmitPlan plan, ImmutableArray<PipelineOptions> calls, Compilation compilation)
     {
         Names names = new(compilation);
+        // The generated AddRelevox returns early when it has already run, so only the first call to run applies its
+        // options, and the build cannot tell which that is. With more than one call, the ones passing options are
+        // listed as unread instead.
+        List<object?> unread = calls.Length > 1
+            ? [.. calls.Where(static call => call.Call is not null).Select(static call => call.Call)]
+            : [.. calls.SelectMany(static call => call.Unread)];
+        if (calls.Length > 1)
+        {
+            calls = [];
+        }
+
         // TryAddEnumerable registers a service and implementation pair once, however often it is added.
         OptionRegistration[] options = [.. calls.SelectMany(static call => call.Registrations).Distinct()];
         bool auto = calls.Any(static call => call.AutoRegisterRequestProcessors);
@@ -404,7 +421,7 @@ internal static class MessageMap
             ("requests", Sorted(requests)),
             ("streams", Sorted(streams)),
             ("notifications", Sorted(notifications)),
-            ("unread", calls.SelectMany(static call => call.Unread).ToList<object?>())), 0);
+            ("unread", unread)), 0);
         return json.Append('\n').ToString();
 
         List<object?> Behaviors(OptionKind kind, string service, ITypeSymbol? request, ITypeSymbol? response) =>
