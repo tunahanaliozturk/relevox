@@ -183,6 +183,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [12. A testing package with a fake mediator and a notification recorder](docs/adr/0012-testing-package.md)
 - [13. Telemetry names, and telemetry off by default](docs/adr/0013-telemetry-names.md)
 - [14. The message map leaves the build inside the assembly](docs/adr/0014-message-map-output.md)
+- [15. What the message map says, and how the build learns about behaviours](docs/adr/0015-message-map-content.md)
 
 ## Roadmap
 

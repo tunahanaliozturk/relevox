@@ -12,8 +12,13 @@ All notable changes to this project are written down here. The format follows
   its mediator dispatches to `obj/<configuration>/<framework>/relevox-message-map.json`, or to
   `RelevoxMessageMapPath` ([docs/message-map.md](docs/message-map.md), ADR 0014). The generator compiles the
   map into the assembly and an MSBuild task in the package copies it out, only when it changed. Off by default;
-  with it off, the generated code is unchanged. The content so far is the request names; the full map follows
-  in this release.
+  with it off, the generated code is unchanged.
+- Message map schema version 1 ([docs/message-map.md](docs/message-map.md), ADR 0015): for each request its
+  handler, response, behaviours, pre- and post-processors, exception actions and handlers in the order they run,
+  and the project of each; streams the same way; each notification with its handlers in order. Behaviours are
+  read from the `AddRelevox` options lambda, open ones checked against each request's constraints; registrations
+  the build cannot read are listed under `unread`. The JSON schema is
+  [docs/message-map.schema.json](docs/message-map.schema.json). Within 1.x fields are only added.
 
 ## [1.2.0] - 2026-10-21
 

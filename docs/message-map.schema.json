@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/tunahanaliozturk/relevox/blob/main/docs/message-map.schema.json",
+  "title": "Relevox message map",
+  "description": "What one project's mediator dispatches and what runs around each message. Described in docs/message-map.md. Within schema version 1, fields are only ever added.",
+  "type": "object",
+  "required": ["schemaVersion", "project", "requests", "streams", "notifications", "unread"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "project": { "type": "string" },
+    "requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "response", "project", "handler", "behaviors", "preProcessors", "postProcessors", "exceptionActions", "exceptionHandlers"],
+        "properties": {
+          "type": { "type": "string" },
+          "response": { "type": ["string", "null"] },
+          "project": { "$ref": "#/definitions/project" },
+          "handler": { "$ref": "#/definitions/component" },
+          "behaviors": { "$ref": "#/definitions/components" },
+          "preProcessors": { "$ref": "#/definitions/components" },
+          "postProcessors": { "$ref": "#/definitions/components" },
+          "exceptionActions": { "$ref": "#/definitions/exceptionComponents" },
+          "exceptionHandlers": { "$ref": "#/definitions/exceptionComponents" }
+        }
+      }
+    },
+    "streams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "response", "project", "handler", "behaviors"],
+        "properties": {
+          "type": { "type": "string" },
+          "response": { "type": "string" },
+          "project": { "$ref": "#/definitions/project" },
+          "handler": { "$ref": "#/definitions/component" },
+          "behaviors": { "$ref": "#/definitions/components" }
+        }
+      }
+    },
+    "notifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "project", "handlers"],
+        "properties": {
+          "type": { "type": "string" },
+          "project": { "$ref": "#/definitions/project" },
+          "handlers": { "$ref": "#/definitions/components" }
+        }
+      }
+    },
+    "unread": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "definitions": {
+    "project": { "type": ["string", "null"] },
+    "component": {
+      "type": "object",
+      "required": ["type", "project"],
+      "properties": {
+        "type": { "type": "string" },
+        "project": { "$ref": "#/definitions/project" }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/component" }
+    },
+    "exceptionComponents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "project", "exception"],
+        "properties": {
+          "type": { "type": "string" },
+          "project": { "$ref": "#/definitions/project" },
+          "exception": { "type": "string" }
+        }
+      }
+    }
+  }
+}

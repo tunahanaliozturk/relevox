@@ -15,9 +15,11 @@ namespace Relevox.SourceGenerator.Tests;
 public sealed class EditCostMeasurement
 {
     [Theory(Explicit = true)]
-    [InlineData(500)]
-    [InlineData(2500)]
-    public void An_unrelated_edit(int handlers)
+    [InlineData(500, false)]
+    [InlineData(2500, false)]
+    [InlineData(500, true)]
+    [InlineData(2500, true)]
+    public void An_unrelated_edit(int handlers, bool messageMap)
     {
         CSharpParseOptions parse = new(LanguageVersion.Preview);
         List<SyntaxTree> trees = [];
@@ -33,16 +35,32 @@ public sealed class EditCostMeasurement
             trees.Add(CSharpSyntaxTree.ParseText(source.ToString(), parse, $"F{file}.cs"));
         }
 
+        // With the map on, every request is checked against an open behaviour from the options.
+        trees.Add(CSharpSyntaxTree.ParseText(
+            """
+            using Microsoft.Extensions.DependencyInjection; using Relevox; using System.Threading; using System.Threading.Tasks;
+            public sealed class Logging<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+            {
+                public Task<TResponse> Handle(TRequest r, RequestHandlerDelegate<TResponse> n, CancellationToken c) => n(c);
+            }
+            public static class Setup
+            {
+                public static IServiceCollection Add(IServiceCollection s) => s.AddRelevox(o => o.AddOpenBehavior(typeof(Logging<,>)));
+            }
+            """,
+            parse,
+            "Setup.cs"));
         trees.Add(CSharpSyntaxTree.ParseText(Util(0), parse, "Util.cs"));
         CSharpCompilation compilation = CSharpCompilation.Create("Big", trees, GeneratorHarness.References, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             [new RelevoxGenerator().AsSourceGenerator()],
             parseOptions: parse,
+            optionsProvider: messageMap ? GeneratorHarness.MessageMapOn : null,
             driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
         driver = driver.RunGenerators(compilation, TestContext.Current.CancellationToken);
 
         // Sixty edits and the median of the last twenty, so the JIT and Roslyn's caches have settled.
-        List<(double Total, double Source, double Closings)> samples = [];
+        List<(double Total, double Source, double Closings, double Map)> samples = [];
         for (int edit = 1; edit <= 60; edit++)
         {
             compilation = compilation.ReplaceSyntaxTree(compilation.SyntaxTrees[^1], CSharpSyntaxTree.ParseText(Util(edit), parse, "Util.cs"));
@@ -51,13 +69,13 @@ public sealed class EditCostMeasurement
             double total = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
 
             GeneratorRunResult result = driver.GetRunResult().Results[0];
-            samples.Add((total, Step(result, TrackingNames.Source), Step(result, TrackingNames.Closings)));
+            samples.Add((total, Step(result, TrackingNames.Source), Step(result, TrackingNames.Closings), Step(result, TrackingNames.MessageMap)));
         }
 
-        List<(double Total, double Source, double Closings)> settled = [.. samples.TakeLast(20)];
+        List<(double Total, double Source, double Closings, double Map)> settled = [.. samples.TakeLast(20)];
         string line = string.Create(
             CultureInfo.InvariantCulture,
-            $"{handlers} handlers: {Median(settled.Select(sample => sample.Total)):F0} ms per edit, discovery in source {Median(settled.Select(sample => sample.Source)):F0} ms, closing generics {Median(settled.Select(sample => sample.Closings)):F0} ms");
+            $"{handlers} handlers: {Median(settled.Select(sample => sample.Total)):F0} ms per edit, discovery in source {Median(settled.Select(sample => sample.Source)):F0} ms, closing generics {Median(settled.Select(sample => sample.Closings)):F0} ms, message map {(messageMap ? "on" : "off")} {Median(settled.Select(sample => sample.Map)):F0} ms");
         TestContext.Current.TestOutputHelper?.WriteLine(line);
         Console.WriteLine(line);
     }

@@ -529,6 +529,28 @@ internal static partial class Discovery
         return reaches;
     }
 
+    /// <summary>
+    /// A generic definition closed over <paramref name="arguments"/> in order, as the container closes an open
+    /// registration, or null when that breaks a constraint and the container would leave it out.
+    /// </summary>
+    internal static INamedTypeSymbol? Close(INamedTypeSymbol definition, ITypeSymbol[] arguments, Compilation compilation)
+    {
+        if (definition.TypeParameters.Length != arguments.Length)
+        {
+            return null;
+        }
+
+        Dictionary<ITypeParameterSymbol, ITypeSymbol> map = new(SymbolEqualityComparer.Default);
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            map[definition.TypeParameters[index]] = arguments[index];
+        }
+
+        return definition.TypeParameters.All(parameter => Satisfies(parameter, map[parameter], map, compilation))
+            ? definition.Construct(arguments)
+            : null;
+    }
+
     /// <summary>Whether a type argument meets a type parameter's constraints, as the compiler would check them.</summary>
     private static bool Satisfies(ITypeParameterSymbol parameter, ITypeSymbol argument, Dictionary<ITypeParameterSymbol, ITypeSymbol> map, Compilation compilation)
     {
