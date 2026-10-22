@@ -72,9 +72,12 @@ grep -q "answer 42" <<<"$output" \
   || { echo "$output" >&2; echo "The layered host did not dispatch through the application's mediator." >&2; exit 1; }
 echo "A host below the application layer built clean and dispatched through the application's mediator."
 
-# A project that only uses another project's mediator has no map of its own, even with the switch on.
+# A project that only uses another project's mediator has no map of its own, even with the switch on, and a map
+# left from when it had one is removed rather than left stale.
+stale="$layered/Host/obj/Release/net10.0/relevox-message-map.json"
+echo '{ "stale": true }' >"$stale"
 dotnet build "$layered/Host" --configuration Release -p:RelevoxMessageMap=true -p:RelevoxVersion="$version"
-[[ ! -e "$layered/Host/obj/Release/net10.0/relevox-message-map.json" ]]   || { echo "The layered host wrote a message map for a mediator it does not own." >&2; exit 1; }
+[[ ! -e "$stale" ]] || { echo "The layered host kept a message map for a mediator it does not own." >&2; exit 1; }
 
 # MediatR code left in a contracts-only library: the code fix Relevox.Contracts carries has to run from the command
 # line and leave a library that builds. The compiler skips analyzers once there are errors, so the build alone
