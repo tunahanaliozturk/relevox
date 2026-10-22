@@ -164,6 +164,55 @@ flowchart LR
   notification --> handler2["2. Shop.EmailOnCancel"]
 ```
 
+## Committing the map and checking it in CI
+
+The map is most useful committed: a pull request that adds a handler, reorders a pipeline or sends a message
+from somewhere new shows it in the diff. Three steps.
+
+1. Write the map next to the project instead of under `obj`:
+
+   ```xml
+   <PropertyGroup>
+     <RelevoxMessageMap>true</RelevoxMessageMap>
+     <RelevoxMessageMapPath>message-map.json</RelevoxMessageMapPath>
+   </PropertyGroup>
+   ```
+
+   The build then writes `message-map.json` and `message-map.md` in the project folder. Commit both.
+
+2. The files are written with `\n` line endings on every machine. Tell Git to keep them that way, or a checkout
+   on Windows with `core.autocrlf` turns them into `\r\n` and the check below reports a change that is not one.
+   In `.gitattributes`:
+
+   ```gitattributes
+   message-map.json text eol=lf
+   message-map.md text eol=lf
+   ```
+
+3. After the build in CI, fail when the build changed the map, so a stale one cannot be merged:
+
+   ```yaml
+   - run: dotnet build --configuration Release
+
+   - name: The message map is up to date
+     run: |
+       if [ -n "$(git status --porcelain -- '*message-map.json' '*message-map.md')" ]; then
+         git --no-pager diff -- '*message-map.json' '*message-map.md'
+         echo "::error::The message map changed. Build, then commit message-map.json and message-map.md."
+         exit 1
+       fi
+   ```
+
+   `git status` rather than `git diff` so a map that was never committed fails too. The step needs a POSIX
+   shell, which `ubuntu-latest` and `macos-latest` have; on `windows-latest` add `shell: bash`.
+
+This repository runs the same step on the package smoke application in `tests/Relevox.PackageSmoke`, whose map
+is committed, and checks that the step fails once a line is added above the calls.
+
+Call sites carry line numbers, so an edit that moves a call changes the map. That is the point: the diff says
+where the call went. If that is more churn than a team wants, commit the map without checking it, or check only
+the JSON with a tool that ignores `callSites`.
+
 ## The fields
 
 The JSON schema is [message-map.schema.json](message-map.schema.json); a test checks generated maps against it.

@@ -121,6 +121,25 @@ Less than the first one, which is the point of doing a second.
 - **`dotnet format` only changes files below the directory it runs in.** Found writing the package smoke test,
   not in eShop, and also in the guide now.
 
+### The message map
+
+Later, for 1.3, the migrated eShop was built again with `-p:RelevoxMessageMap=true` against packages from the
+1.3 branch, and the map Ordering.API wrote was checked against the code by hand.
+
+- **Requests.** Nine request types: eight commands, each with its handler, and `IdentifiedCommand<T, R>`, the
+  idempotency wrapper. The wrapper is listed once for each command the build found it closed over, seven times,
+  each with its `IdentifiedCommandHandler` subclass. All right.
+- **Behaviours.** The three open behaviours on every request, in registration order: logging, validation,
+  transaction. All right.
+- **Notifications.** The seven domain events from Ordering.Domain, each with its one handler from Ordering.API.
+  All right.
+- **Call sites.** Nine calls listed, each on the line of a real `Send`: four in `Apis/OrdersApi.cs` and five in
+  the integration event handlers. Two calls are left out, as `docs/message-map.md` says they are: the send
+  inside `IdentifiedCommandHandler`, whose argument is the type parameter `T`, and the `Publish` of domain
+  events, which is in Ordering.Infrastructure, another project.
+
+Nothing in the map was wrong, and nothing the build could have known was missing.
+
 ## Why bother
 
 None of what the first trial found showed up in the repository's own tests, which reference Relevox's projects

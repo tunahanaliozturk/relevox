@@ -157,6 +157,20 @@ in the standalone Aspire dashboard.
   <img src="docs/images/telemetry-dashboard-light.png" alt="The Aspire dashboard showing one trace from the web sample: POST /orders/{id:int}/cancel, with send CancelOrder under it and publish OrderCancelled under that" width="900">
 </picture>
 
+## Message map
+
+`<RelevoxMessageMap>true</RelevoxMessageMap>` makes the build write down what the project's mediator does: for
+each request its handler and the behaviours and processors around it in the order they run, for each
+notification its handlers, and where each message is sent from. It comes as JSON for tools and as Markdown that
+GitHub renders, so a committed map shows a new handler or a reordered pipeline in the pull request, and a CI step
+can fail when it is stale. [docs/message-map.md](docs/message-map.md) has the setup, every field, and what the
+build cannot see.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/message-map-dark.png">
+  <img src="docs/images/message-map-light.png" alt="Part of the web sample's message map as GitHub renders it: PlaceOrder, sent from Program.cs line 48, with a table of its pre-processor, behaviour and handler, and OrderCancelled, published from Orders.cs line 89, drawn as a diagram with its two handlers numbered in order" width="668">
+</picture>
+
 ## How it works
 
 <picture>

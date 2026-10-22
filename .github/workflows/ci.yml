@@ -126,6 +126,29 @@ jobs:
       - name: Pack, install and run
         run: bash eng/package-smoke.sh
 
+      # The check docs/message-map.md tells users to add, on the smoke application, whose map is committed.
+      - name: Build the smoke application with its committed message map
+        run: dotnet build tests/Relevox.PackageSmoke --configuration Release -p:RelevoxMessageMap=true -p:RelevoxMessageMapPath=message-map.json
+
+      - name: The message map is up to date
+        run: |
+          if [ -n "$(git status --porcelain -- '*message-map.json' '*message-map.md')" ]; then
+            git --no-pager diff -- '*message-map.json' '*message-map.md'
+            echo "::error::The message map changed. Build, then commit message-map.json and message-map.md."
+            exit 1
+          fi
+
+      # And the same check fails once the code moves: a line added above every call shifts their call sites.
+      - name: The check catches a stale map
+        run: |
+          sed -i '1i // A line that moves every call site down.' tests/Relevox.PackageSmoke/Program.cs
+          dotnet build tests/Relevox.PackageSmoke --configuration Release -p:RelevoxMessageMap=true -p:RelevoxMessageMapPath=message-map.json
+          if [ -z "$(git status --porcelain -- '*message-map.json' '*message-map.md')" ]; then
+            echo "::error::The map did not change after the code moved; the check would never fail."
+            exit 1
+          fi
+          git checkout -- tests/Relevox.PackageSmoke
+
       # SourceLink, deterministic build and compiler flags, read from the packages. The release workflow runs the
       # same check on the packages it is about to publish.
       - name: Validate packages

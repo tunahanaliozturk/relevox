@@ -24,6 +24,9 @@ All notable changes to this project are written down here. The format follows
   by GitHub.
 - Call sites in the message map (ADR 0017): each request, stream and notification lists the `Send`,
   `Publish` and `CreateStream` calls in the project that pass it, by file relative to the project and line.
+- [docs/message-map.md](docs/message-map.md) shows how to commit the map and fail a GitHub Actions build when it
+  is stale; this repository's CI runs that step on the package smoke application. The map was checked by hand
+  on eShop ([docs/migration-trial.md](docs/migration-trial.md)).
 
 ## [1.2.0] - 2026-10-21
 
