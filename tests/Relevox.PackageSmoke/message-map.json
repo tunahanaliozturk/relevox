@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "project": "Relevox.PackageSmoke",
+  "requests": [
+    {
+      "type": "Smoke.Ping",
+      "response": "string",
+      "project": "Relevox.PackageSmoke",
+      "handler": {
+        "type": "Smoke.PingHandler",
+        "project": "Relevox.PackageSmoke"
+      },
+      "behaviors": [
+        {
+          "type": "Smoke.Counting<Smoke.Ping, string>",
+          "project": "Relevox.PackageSmoke"
+        }
+      ],
+      "preProcessors": [],
+      "postProcessors": [],
+      "exceptionActions": [],
+      "exceptionHandlers": [],
+      "callSites": [
+        {
+          "file": "Program.cs",
+          "line": 20
+        },
+        {
+          "file": "Program.cs",
+          "line": 21
+        },
+        {
+          "file": "Program.cs",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "type": "Smoke.Touch",
+      "response": null,
+      "project": "Relevox.PackageSmoke",
+      "handler": {
+        "type": "Smoke.TouchHandler",
+        "project": "Relevox.PackageSmoke"
+      },
+      "behaviors": [
+        {
+          "type": "Smoke.Counting<Smoke.Touch, Relevox.Unit>",
+          "project": "Relevox.PackageSmoke"
+        }
+      ],
+      "preProcessors": [],
+      "postProcessors": [],
+      "exceptionActions": [],
+      "exceptionHandlers": [],
+      "callSites": [
+        {
+          "file": "Program.cs",
+          "line": 22
+        }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "type": "Smoke.Count",
+      "response": "int",
+      "project": "Relevox.PackageSmoke",
+      "handler": {
+        "type": "Smoke.CountHandler",
+        "project": "Relevox.PackageSmoke"
+      },
+      "behaviors": [],
+      "callSites": [
+        {
+          "file": "Program.cs",
+          "line": 30
+        }
+      ]
+    }
+  ],
+  "notifications": [
+    {
+      "type": "Smoke.Shipped",
+      "project": "Relevox.PackageSmoke",
+      "handlers": [
+        {
+          "type": "Smoke.MailOnShipped",
+          "project": "Relevox.PackageSmoke"
+        },
+        {
+          "type": "Smoke.StockOnShipped",
+          "project": "Relevox.PackageSmoke"
+        }
+      ],
+      "callSites": [
+        {
+          "file": "Program.cs",
+          "line": 26
+        }
+      ]
+    }
+  ],
+  "unread": []
+}
