@@ -23,6 +23,7 @@ internal static class MessageMapMarkdown
         Section(markdown, "Requests", Items(map, "requests"), static (markdown, request) =>
         {
             Intro(markdown, request, Get(request, "response") is string response ? $"Returns {Code(response)}." : "Returns nothing.");
+            From(markdown, request, "Sent from");
             Table(markdown, [
                 .. Rows(request, "preProcessors", "Pre-processor"),
                 .. Rows(request, "behaviors", "Behaviour"),
@@ -36,6 +37,7 @@ internal static class MessageMapMarkdown
         Section(markdown, "Streams", Items(map, "streams"), static (markdown, stream) =>
         {
             Intro(markdown, stream, $"Yields {Code((string)Get(stream, "response")!)}.");
+            From(markdown, stream, "Created from");
             Table(markdown, [
                 .. Rows(stream, "behaviors", "Behaviour"),
                 Row("Handler", (List<(string, object?)>)Get(stream, "handler")!),
@@ -45,6 +47,7 @@ internal static class MessageMapMarkdown
         Section(markdown, "Notifications", Items(map, "notifications"), static (markdown, notification) =>
         {
             Intro(markdown, notification, null);
+            From(markdown, notification, "Published from");
             List<List<(string Name, object? Value)>> handlers = Items(notification, "handlers");
             if (handlers.Count == 0)
             {
@@ -97,6 +100,17 @@ internal static class MessageMapMarkdown
         if (line.Length > 0)
         {
             markdown.Append(line).Append("\n\n");
+        }
+    }
+
+    private static void From(StringBuilder markdown, List<(string Name, object? Value)> entry, string verb)
+    {
+        List<List<(string Name, object? Value)>> sites = Items(entry, "callSites");
+        if (sites.Count > 0)
+        {
+            markdown.Append(verb).Append(' ')
+                .Append(string.Join(", ", sites.Select(static site => Code($"{Get(site, "file")}:{((int)Get(site, "line")!).ToString(System.Globalization.CultureInfo.InvariantCulture)}"))))
+                .Append(".\n\n");
         }
     }
 

@@ -22,6 +22,8 @@ All notable changes to this project are written down here. The format follows
 - A Markdown view of the message map next to the JSON, `relevox-message-map.md` (ADR 0016): a table per request
   and stream with its pipeline in order, and a Mermaid diagram per notification with its handlers, both rendered
   by GitHub.
+- Call sites in the message map (ADR 0017): each request, stream and notification lists the `Send`,
+  `Publish` and `CreateStream` calls in the project that pass it, by file relative to the project and line.
 
 ## [1.2.0] - 2026-10-21
 

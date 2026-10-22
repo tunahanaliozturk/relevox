@@ -114,13 +114,30 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             .Select(static (options, _) => options.GlobalOptions.TryGetValue(MessageMap.Switch, out string? value)
                 && string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase));
 
+        // Send, Publish and CreateStream calls, for where each message is sent from. Read per call, so an edit only
+        // rereads the calls in the file it changed.
+        IncrementalValueProvider<ImmutableArray<CallSite>> callSites = context.SyntaxProvider
+            .CreateSyntaxProvider(static (node, _) => CallSites.IsCandidate(node), CallSites.Read)
+            .Where(static site => site is not null)
+            .Select(static (site, _) => site!)
+            .WithTrackingName(TrackingNames.CallSites)
+            .Collect();
+
+        IncrementalValueProvider<string?> projectDirectory = context.AnalyzerConfigOptionsProvider
+            .Select(static (options, _) => options.GlobalOptions.TryGetValue("build_property.ProjectDir", out string? directory) ? directory : null);
+
         IncrementalValueProvider<(string Namespace, string Json, string Markdown)?> map = plan
             .Combine(mapRequested)
             .Combine(addRelevoxCalls)
+            .Combine(callSites.Combine(projectDirectory))
             .Combine(context.CompilationProvider)
-            .Select(static (pair, _) => pair.Left.Left.Right && pair.Left.Left.Left.Emits
-                ? MessageMap.Render(pair.Left.Left.Left, pair.Left.Right, pair.Right) is var (json, markdown) ? (pair.Left.Left.Left.Namespace, json, markdown) : null
-                : ((string, string, string)?)null)
+            .Select(static (pair, _) =>
+            {
+                (((EmitPlan plan, bool requested), ImmutableArray<PipelineOptions> calls), (ImmutableArray<CallSite> sites, string? directory)) = pair.Left;
+                return requested && plan.Emits
+                    ? MessageMap.Render(plan, calls, sites, directory, pair.Right) is var (json, markdown) ? (plan.Namespace, json, markdown) : null
+                    : ((string, string, string)?)null;
+            })
             .WithTrackingName(TrackingNames.MessageMap);
 
         context.RegisterSourceOutput(map, static (output, map) =>
@@ -154,4 +171,5 @@ internal static class TrackingNames
     public const string Closings = "Closings";
     public const string Plan = "Plan";
     public const string MessageMap = "MessageMap";
+    public const string CallSites = "CallSites";
 }
