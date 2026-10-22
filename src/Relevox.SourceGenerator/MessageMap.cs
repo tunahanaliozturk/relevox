@@ -149,7 +149,9 @@ internal static class MessageMap
                 && Member(left) == "AutoRegisterRequestProcessors"
                 && IsOptions(Owner(left), parameters))
             {
-                if (assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression) || assignment.Right.IsKind(SyntaxKind.FalseLiteralExpression))
+                // Only a plain = with a literal says what the value is; |=, &= and the like depend on what it was.
+                if (assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                    && (assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression) || assignment.Right.IsKind(SyntaxKind.FalseLiteralExpression)))
                 {
                     auto = assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression);
                 }
@@ -428,17 +430,18 @@ internal static class MessageMap
 
             void Collect(List<object?> into, string service, string open, OptionKind kind, ITypeSymbol?[] arguments)
             {
-                List<string> found = [];
+                List<(string Type, bool Open)> found = [];
                 if (auto)
                 {
-                    found.AddRange(plan.Processors.Where(registration => registration.ServiceType == service).Select(static registration => registration.ImplementationType));
-                    found.AddRange(OpenClosings(plan.OpenProcessors.Where(registration => registration.ServiceType.EndsWith(open, System.StringComparison.Ordinal)).Select(static registration => registration.ImplementationType), arguments));
+                    found.AddRange(plan.Processors.Where(registration => registration.ServiceType == service).Select(static registration => (registration.ImplementationType, false)));
+                    found.AddRange(OpenClosings(plan.OpenProcessors.Where(registration => registration.ServiceType.EndsWith(open, System.StringComparison.Ordinal)).Select(static registration => registration.ImplementationType), arguments).Select(static type => (type, true)));
                 }
 
                 found.AddRange(FromOptions(kind, service, arguments));
 
-                // TryAddEnumerable keeps the first registration of a class under one service.
-                into.AddRange(found.Distinct(System.StringComparer.Ordinal).Select(type => Component(names, type)));
+                // TryAddEnumerable keeps the first registration of a class under one service, as registered: an open
+                // registration and a closed one for the same class are two descriptors, and both run.
+                into.AddRange(found.Distinct().Select(step => Component(names, step.Type)));
             }
 
             List<object?> Exceptions(string prefix, string open, ITypeSymbol?[] arguments)
@@ -502,9 +505,10 @@ internal static class MessageMap
         return json.Append('\n').ToString();
 
         List<object?> Behaviors(OptionKind kind, string service, ITypeSymbol? request, ITypeSymbol? response) =>
-            [.. FromOptions(kind, service, [request, response]).Select(type => Component(names, type))];
+            [.. FromOptions(kind, service, [request, response]).Select(step => Component(names, step.Type))];
 
-        IEnumerable<string> FromOptions(OptionKind kind, string service, ITypeSymbol?[] arguments)
+        // Each class with whether it was registered open, which keeps it apart from a closed registration of it.
+        IEnumerable<(string Type, bool Open)> FromOptions(OptionKind kind, string service, ITypeSymbol?[] arguments)
         {
             foreach (OptionRegistration registration in options.Where(registration => registration.Kind == kind))
             {
@@ -512,12 +516,12 @@ internal static class MessageMap
                 {
                     foreach (string closed in OpenClosings([registration.Implementation], arguments))
                     {
-                        yield return closed;
+                        yield return (closed, true);
                     }
                 }
                 else if (registration.Service == service)
                 {
-                    yield return registration.Implementation;
+                    yield return (registration.Implementation, false);
                 }
             }
         }

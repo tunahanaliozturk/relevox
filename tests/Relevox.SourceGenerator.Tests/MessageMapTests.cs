@@ -466,6 +466,38 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_processor_registered_open_and_closed_runs_twice()
+    {
+        // The scan registers Noop<> open and the options add Noop<Place> closed: two descriptors, both resolved.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddRequestPreProcessor<Audit>();",
+            "options.AddRequestPreProcessor<Noop<Place>>();") + """
+
+            public sealed class Noop<TRequest> : IRequestPreProcessor<TRequest> where TRequest : notnull
+            {
+                public Task Process(TRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.Split("\"Shop.Noop<Shop.Place>\"").Length.ShouldBe(3);
+        map.Split("\"Shop.Noop<Shop.Look>\"").Length.ShouldBe(2, "on Look only the scan registers it");
+    }
+
+    [Fact]
+    public void A_compound_assignment_to_the_processor_flag_is_unread()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddRequestPreProcessor<Audit>();",
+            "options.AddRequestPreProcessor<Audit>(); options.AutoRegisterRequestProcessors |= false;"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain("\"options.AutoRegisterRequestProcessors |= false\"");
+    }
+
+    [Fact]
     public void A_later_false_turns_scanned_processors_back_off()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
