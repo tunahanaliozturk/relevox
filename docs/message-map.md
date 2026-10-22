@@ -155,8 +155,9 @@ The map is what the build can know. Three things are only known when the applica
 - **Behaviours and processors registered with the container directly**, such as
   `services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Logging<,>))`. They run, but are not in the map.
   Registering them through the `AddRelevox` options instead puts them in it.
-- **Options the build cannot read**: a `Type` held in a variable, or a method passed to `AddRelevox` instead of a
-  lambda. These are listed in `unread`.
+- **Options the build cannot read**: a `Type` held in a variable, a method passed to `AddRelevox` instead of a
+  lambda, or a call the options are handed to, such as `Configure(options)`, an extension method on them or
+  `options.BehaviorsToRegister.Clear()`. These are listed in `unread`.
 - **Branches in the options lambda.** A registration inside an `if` is in the map whether or not the branch is
   taken.
 

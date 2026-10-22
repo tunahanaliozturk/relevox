@@ -260,16 +260,64 @@ public sealed class MessageMapTests
             public static class Setup
             {
                 public static IServiceCollection Add(IServiceCollection services, System.Type extra) =>
-                    services.AddRelevox(options => options.AddOpenBehavior(extra));
+                    services.AddRelevox(options =>
+                    {
+                        options.AddOpenBehavior(extra);
+                        Configure(options);
+                        options.AddOpenBehavior(typeof(Logging<,>)).Extend();
+                        options.BehaviorsToRegister.Clear();
+                    });
+
+                private static void Configure(RelevoxOptions options) { }
+
+                private static void Extend(this RelevoxOptions options) { }
+            }
+            public sealed class Logging<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+            {
+                public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next(cancellationToken);
             }
             """);
 
         run.CompilationErrors.ShouldBeEmpty();
         Json(run.Compilation).ShouldNotBeNull().ShouldContain(Lf("""
               "unread": [
-                "options.AddOpenBehavior(extra)"
+                "options.AddOpenBehavior(extra)",
+                "Configure(options)",
+                "options.AddOpenBehavior(typeof(Logging<,>)).Extend()",
+                "options.BehaviorsToRegister.Clear()"
               ]
             """));
+    }
+
+    [Fact]
+    public void The_map_reads_options_as_the_runtime_applies_them()
+    {
+        // Named arguments out of order, a behaviour added twice and kept once by TryAddEnumerable: the same map.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "options.AddBehavior(implementationType: typeof(LookCache), serviceType: typeof(IPipelineBehavior<Look, string>)); options.AddOpenBehavior(typeof(Logging<,>));"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation).ShouldBe(Json(GeneratorHarness.RunWithMessageMap(Pipeline).Compilation));
+    }
+
+    [Fact]
+    public void A_later_false_turns_scanned_processors_back_off()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddRequestPreProcessor<Audit>();",
+            "options.AddOpenRequestPreProcessor(typeof(Noop<>)); options.AutoRegisterRequestProcessors = false;") + """
+
+            public sealed class Noop<TRequest> : IRequestPreProcessor<TRequest> where TRequest : notnull
+            {
+                public Task Process(TRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain("Shop.Noop<Shop.Place>");
+        map.ShouldNotContain("Shop.Audit");
     }
 
     [Fact]
