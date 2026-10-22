@@ -398,6 +398,56 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_call_that_reaches_a_referenced_projects_AddRelevox_is_not_read()
+    {
+        // As in RVX0006: inside its own namespace the test project reaches its own AddRelevox; outside it, the app's.
+        MetadataReference app = GeneratorHarness.Library("Shop.Api", [], withGenerator: true, """
+            using Relevox; using System.Threading; using System.Threading.Tasks;
+            [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Shop.Tests")]
+            namespace Shop.Api;
+            public sealed record Ping : IRequest<int>;
+            internal sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap("Shop.Tests", [app], """
+            using Microsoft.Extensions.DependencyInjection; using Relevox; using System.Threading; using System.Threading.Tasks;
+            namespace Shop.Tests
+            {
+                public sealed record Probe : IRequest<int>;
+                public sealed class ProbeHandler : IRequestHandler<Probe, int>
+                {
+                    public Task<int> Handle(Probe request, CancellationToken cancellationToken) => Task.FromResult(2);
+                }
+                public sealed class Own<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+                {
+                    public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next(cancellationToken);
+                }
+                public sealed class Theirs<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+                {
+                    public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next(cancellationToken);
+                }
+                public static class Setup
+                {
+                    public static IServiceCollection Configure(IServiceCollection services) => services.AddRelevox(options => options.AddOpenBehavior(typeof(Own<,>)));
+                }
+            }
+            public static class Outside
+            {
+                public static IServiceCollection Configure(IServiceCollection services) => services.AddRelevox(options => options.AddOpenBehavior(typeof(Shop.Tests.Theirs<,>)));
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = run.Compilation.GetTypeByMetadataName("Shop.Tests.RelevoxMessageMap")?.GetMembers("Json").OfType<IFieldSymbol>().Single().ConstantValue as string ?? "";
+        map.ShouldContain("Shop.Tests.Own<Shop.Tests.Probe, int>");
+        map.ShouldNotContain("Theirs");
+        map.ShouldContain("\"unread\": []");
+    }
+
+    [Fact]
     public void With_two_AddRelevox_calls_the_options_are_listed_as_unread()
     {
         // The generated AddRelevox returns early the second time, so only one call's options ever apply.

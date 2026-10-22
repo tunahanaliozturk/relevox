@@ -80,9 +80,13 @@ internal static class MessageMap
     /// </remarks>
     public static PipelineOptions Read(InvocationExpressionSyntax call, SemanticModel model, CancellationToken cancellationToken)
     {
-        // Relevox's AddRelevox does not exist until the generator writes it, so a call that binds already is to
-        // another library's method of the same name.
-        if (model.GetSymbolInfo(call, cancellationToken).Symbol is IMethodSymbol { ContainingType.Name: not "RelevoxServiceCollectionExtensions" })
+        // This project's AddRelevox does not exist until the generator writes it, so a call that binds already is
+        // to another library's method of the same name, or to a referenced project's generated one (RVX0006). That
+        // configures the referenced project's mediator, unless the call is inside the namespace this project's own
+        // AddRelevox then goes into, where it finds that one first (Planner.RegistrationNamespaceFor).
+        if (model.GetSymbolInfo(call, cancellationToken).Symbol is IMethodSymbol bound
+            && (bound.ContainingType.Name != "RelevoxServiceCollectionExtensions"
+                || !Inside(model.GetEnclosingSymbol(call.SpanStart, cancellationToken)?.ContainingNamespace, Planner.ToNamespace(model.Compilation.AssemblyName ?? ""))))
         {
             return new PipelineOptions(EquatableArray<OptionRegistration>.Empty, EquatableArray<string>.Empty, false, false, false, null, Foreign: true);
         }
@@ -240,6 +244,10 @@ internal static class MessageMap
         type is not null && (IsServiceCollection(type) || type.AllInterfaces.Any(IsServiceCollection));
 
     private static bool IsServiceCollection(ITypeSymbol type) => type.ToDisplayString() == "Microsoft.Extensions.DependencyInjection.IServiceCollection";
+
+    private static bool Inside(INamespaceSymbol? space, string name) =>
+        space?.ToDisplayString() is { } enclosing
+        && (enclosing == name || enclosing.StartsWith(name + ".", System.StringComparison.Ordinal));
 
     private static bool IsOptions(ExpressionSyntax? expression, string[] parameters) =>
         expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } name
