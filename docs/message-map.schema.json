@@ -22,7 +22,8 @@
           "preProcessors": { "$ref": "#/definitions/components" },
           "postProcessors": { "$ref": "#/definitions/components" },
           "exceptionActions": { "$ref": "#/definitions/exceptionComponents" },
-          "exceptionHandlers": { "$ref": "#/definitions/exceptionComponents" }
+          "exceptionHandlers": { "$ref": "#/definitions/exceptionComponents" },
+          "callSites": { "$ref": "#/definitions/callSites" }
         }
       }
     },
@@ -36,7 +37,8 @@
           "response": { "type": "string" },
           "project": { "$ref": "#/definitions/project" },
           "handler": { "$ref": "#/definitions/component" },
-          "behaviors": { "$ref": "#/definitions/components" }
+          "behaviors": { "$ref": "#/definitions/components" },
+          "callSites": { "$ref": "#/definitions/callSites" }
         }
       }
     },
@@ -48,7 +50,8 @@
         "properties": {
           "type": { "type": "string" },
           "project": { "$ref": "#/definitions/project" },
-          "handlers": { "$ref": "#/definitions/components" }
+          "handlers": { "$ref": "#/definitions/components" },
+          "callSites": { "$ref": "#/definitions/callSites" }
         }
       }
     },
@@ -59,6 +62,17 @@
   },
   "definitions": {
     "project": { "type": ["string", "null"] },
+    "callSites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "line"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
     "component": {
       "type": "object",
       "required": ["type", "project"],

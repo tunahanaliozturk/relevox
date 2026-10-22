@@ -114,6 +114,28 @@ public sealed class MessageMapTests
         }
         """;
 
+    // Calls to Handlers' requests and a notification: directly, through each interface, in a lambda and a local
+    // function, chained over two lines, and one passing object, which the map leaves out. File1.cs after Handlers.
+    private const string Callers = """
+        using System; using System.Threading; using System.Threading.Tasks; using Relevox;
+        namespace Shop;
+        public sealed record Shipped : INotification;
+        public sealed class Ship : INotificationHandler<Shipped> { public Task Handle(Shipped notification, CancellationToken cancellationToken) => Task.CompletedTask; }
+        public sealed class Callers(ISender sender, IPublisher publisher, IMediator mediator)
+        {
+            public Task<string> Direct() => sender.Send(new Ping("a"));
+            public Task Published() => publisher.Publish(new Shipped());
+            public Func<Task> Later() => () => mediator.Send(new Touch());
+            public Task Local()
+            {
+                return Run();
+                Task Run() => mediator
+                    .Send(new Ping("b"));
+            }
+            public Task<object?> Untyped() => sender.Send((object)new Ping("c"));
+        }
+        """;
+
     [Fact]
     public void A_request_lists_its_handler_and_what_runs_around_it_in_order()
     {
@@ -146,7 +168,8 @@ public sealed class MessageMapTests
                   "preProcessors": [],
                   "postProcessors": [],
                   "exceptionActions": [],
-                  "exceptionHandlers": []
+                  "exceptionHandlers": [],
+                  "callSites": []
                 },
                 {
                   "type": "Shop.Place",
@@ -180,7 +203,8 @@ public sealed class MessageMapTests
                       "project": "Subject",
                       "exception": "System.InvalidOperationException"
                     }
-                  ]
+                  ],
+                  "callSites": []
                 }
               ],
               "streams": [],
@@ -214,7 +238,8 @@ public sealed class MessageMapTests
                   "preProcessors": [],
                   "postProcessors": [],
                   "exceptionActions": [],
-                  "exceptionHandlers": []
+                  "exceptionHandlers": [],
+                  "callSites": []
                 }
               ],
               "streams": [
@@ -231,7 +256,8 @@ public sealed class MessageMapTests
                       "type": "Shop.Throttle<Shop.Tail, string>",
                       "project": "Subject"
                     }
-                  ]
+                  ],
+                  "callSites": []
                 }
               ],
               "notifications": [
@@ -247,7 +273,8 @@ public sealed class MessageMapTests
                       "type": "Shop.Ledger",
                       "project": "Subject"
                     }
-                  ]
+                  ],
+                  "callSites": []
                 }
               ],
               "unread": []
@@ -787,6 +814,44 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void Each_message_lists_where_it_is_sent_from()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers, Callers);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string markdown = Markdown(run.Compilation).ShouldNotBeNull();
+        markdown.ShouldContain(Lf("""
+            ### `Shop.Ping`
+
+            Returns `string`. Declared in Subject.
+
+            Sent from `File1.cs:7`, `File1.cs:14`.
+            """));
+        markdown.ShouldContain("Sent from `File1.cs:9`.");
+        markdown.ShouldContain("Published from `File1.cs:8`.");
+        Json(run.Compilation).ShouldNotBeNull().ShouldNotContain("\"line\": 16");
+    }
+
+    [Fact]
+    public void A_call_site_is_written_relative_to_the_project()
+    {
+        CallSites.Relative(@"C:\src\Shop\Orders\Endpoints.cs", @"C:\src\Shop\").ShouldBe("Orders/Endpoints.cs");
+        CallSites.Relative("/src/shop/Orders/Endpoints.cs", "/src/shop/").ShouldBe("Orders/Endpoints.cs");
+        CallSites.Relative(@"C:\elsewhere\Linked.cs", @"C:\src\Shop\").ShouldBe("Linked.cs");
+    }
+
+    [Fact]
+    public void An_edit_that_adds_no_call_site_leaves_the_map_alone()
+    {
+        var steps = GeneratorHarness.RunTwice(
+            [Handlers, Callers, "public static class Util { public static int One() => 1; }"],
+            [Handlers, Callers, "public static class Util { public static int One() => 2; }"],
+            messageMap: true);
+
+        steps[TrackingNames.MessageMap].ShouldAllBe(reason => reason == IncrementalStepRunReason.Cached || reason == IncrementalStepRunReason.Unchanged);
+    }
+
+    [Fact]
     public void An_edit_that_changes_no_message_leaves_the_map_alone()
     {
         var steps = GeneratorHarness.RunTwice(
@@ -811,6 +876,7 @@ public sealed class MessageMapTests
         [
             Json(GeneratorHarness.RunWithMessageMap(Pipeline).Compilation)!,
             Json(GeneratorHarness.RunWithMessageMap(Handlers).Compilation)!,
+            Json(GeneratorHarness.RunWithMessageMap(Handlers, Callers).Compilation)!,
             Json(GeneratorHarness.RunWithMessageMap(
                 Handlers,
                 "using Microsoft.Extensions.DependencyInjection; public static class Setup { public static IServiceCollection Add(IServiceCollection s, System.Type t) => s.AddRelevox(o => o.AddOpenBehavior(t)); }").Compilation)!,

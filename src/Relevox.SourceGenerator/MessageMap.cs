@@ -431,9 +431,19 @@ internal static class MessageMap
     /// and to check an open behaviour's constraints against each request, as the container checks them when it
     /// closes the behaviour.
     /// </remarks>
-    public static (string Json, string Markdown) Render(EmitPlan plan, ImmutableArray<PipelineOptions> calls, Compilation compilation)
+    public static (string Json, string Markdown) Render(EmitPlan plan, ImmutableArray<PipelineOptions> calls, ImmutableArray<CallSite> callSites, string? projectDirectory, Compilation compilation)
     {
         Names names = new(compilation);
+
+        // Where each message is sent from, by file and then line.
+        Dictionary<string, List<object?>> sentFrom = callSites
+            .Select(site => (site.Message, File: CallSites.Relative(site.File, projectDirectory), site.Line))
+            .Distinct()
+            .OrderBy(static site => site.File, System.StringComparer.Ordinal)
+            .ThenBy(static site => site.Line)
+            .GroupBy(static site => site.Message, System.StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Select(static site => (object?)Object(("file", site.File), ("line", site.Line))).ToList(), System.StringComparer.Ordinal);
+
         calls = [.. calls.Where(static call => !call.Foreign)];
 
         // The generated AddRelevox returns early when it has already run, so only the first call to run applies its
@@ -483,7 +493,8 @@ internal static class MessageMap
                 ("preProcessors", preProcessors),
                 ("postProcessors", postProcessors),
                 ("exceptionActions", Exceptions($"global::Relevox.Pipeline.IRequestExceptionAction<{req}, ", "IRequestExceptionAction<,>", [request])),
-                ("exceptionHandlers", Exceptions($"global::Relevox.Pipeline.IRequestExceptionHandler<{req}, {resp}, ", "IRequestExceptionHandler<,,>", [request, response]))));
+                ("exceptionHandlers", Exceptions($"global::Relevox.Pipeline.IRequestExceptionHandler<{req}, {resp}, ", "IRequestExceptionHandler<,,>", [request, response])),
+                ("callSites", SentFrom(req))));
 
             void Collect(List<object?> into, string service, string open, OptionKind kind, ITypeSymbol?[] arguments)
             {
@@ -538,7 +549,8 @@ internal static class MessageMap
                 ("response", Display(itemName)),
                 ("project", Names.Project(request)),
                 ("handler", Component(names, entry.HandlerType)),
-                ("behaviors", Behaviors(OptionKind.StreamBehavior, $"global::Relevox.IStreamPipelineBehavior<{entry.Request.Type}, {itemName}>", request, item))));
+                ("behaviors", Behaviors(OptionKind.StreamBehavior, $"global::Relevox.IStreamPipelineBehavior<{entry.Request.Type}, {itemName}>", request, item)),
+                ("callSites", SentFrom(entry.Request.Type))));
         }
 
         List<object?> notifications = [];
@@ -548,7 +560,8 @@ internal static class MessageMap
             notifications.Add(Object(
                 ("type", Display(entry.Notification.Type)),
                 ("project", Names.Project(notification)),
-                ("handlers", entry.Targets.Select(target => Component(names, target.HandlerType)).ToList<object?>())));
+                ("handlers", entry.Targets.Select(target => Component(names, target.HandlerType)).ToList<object?>()),
+                ("callSites", SentFrom(entry.Notification.Type))));
         }
 
         List<(string Name, object? Value)> map = Object(
@@ -561,6 +574,8 @@ internal static class MessageMap
         StringBuilder json = new();
         Write(json, map, 0);
         return (json.Append('\n').ToString(), MessageMapMarkdown.Write(map));
+
+        List<object?> SentFrom(string type) => sentFrom.TryGetValue(Display(type), out List<object?>? sites) ? sites : [];
 
         List<object?> Behaviors(OptionKind kind, string service, ITypeSymbol? request, ITypeSymbol? response) =>
             [.. FromOptions(kind, service, [request, response]).Select(step => Component(names, step.Type))];

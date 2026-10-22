@@ -6,7 +6,7 @@ checked in CI instead of found with grep.
 
 How the map leaves the build is in [ADR 0014](adr/0014-message-map-output.md); what goes into it, and what the
 build cannot see, is in [ADR 0015](adr/0015-message-map-content.md); the Markdown view is
-[ADR 0016](adr/0016-message-map-markdown.md).
+[ADR 0016](adr/0016-message-map-markdown.md); call sites are [ADR 0017](adr/0017-message-map-call-sites.md).
 
 ## Turning it on
 
@@ -66,6 +66,12 @@ With the switch on, the map is also compiled into the assembly as the constants 
           "project": "Shop.Application",
           "exception": "Shop.Orders.OutOfStockException"
         }
+      ],
+      "callSites": [
+        {
+          "file": "Orders/OrderEndpoints.cs",
+          "line": 24
+        }
       ]
     }
   ],
@@ -78,6 +84,12 @@ With the switch on, the map is also compiled into the assembly as the constants 
         {
           "type": "Shop.Billing.SendInvoice",
           "project": "Shop.Application"
+        }
+      ],
+      "callSites": [
+        {
+          "file": "Orders/PlaceOrderHandler.cs",
+          "line": 31
         }
       ]
     }
@@ -101,6 +113,8 @@ From the web sample, shortened:
 
 Returns `int`. Declared in Relevox.Samples.Web.
 
+Sent from `Program.cs:48`.
+
 | Step | Type | Project |
 |---|---|---|
 | Pre-processor | `Shop.Received<Shop.PlaceOrder>` | Relevox.Samples.Web |
@@ -112,6 +126,8 @@ Returns `int`. Declared in Relevox.Samples.Web.
 ### `Shop.OrderCancelled`
 
 Declared in Relevox.Samples.Web.
+
+Published from `Orders.cs:89`.
 
 ```mermaid
 flowchart LR
@@ -127,6 +143,8 @@ Rendered:
 
 Returns `int`. Declared in Relevox.Samples.Web.
 
+Sent from `Program.cs:48`.
+
 | Step | Type | Project |
 |---|---|---|
 | Pre-processor | `Shop.Received<Shop.PlaceOrder>` | Relevox.Samples.Web |
@@ -136,6 +154,8 @@ Returns `int`. Declared in Relevox.Samples.Web.
 ### `Shop.OrderCancelled`
 
 Declared in Relevox.Samples.Web.
+
+Published from `Orders.cs:89`.
 
 ```mermaid
 flowchart LR
@@ -176,6 +196,7 @@ type name; everything inside a message is in the order it runs.
 | `postProcessors` | components | The same for post-processors. |
 | `exceptionActions` | exception components | Exception actions registered for this request, in the order they are tried for one exception type. Which ones run depends on the exception thrown: those for its type, then for each base type up to `Exception`. |
 | `exceptionHandlers` | exception components | The same for exception handlers. |
+| `callSites` | call sites | Where this project sends the request from. |
 
 The pipeline, from the outside in: exception actions and exception handlers (actions outermost with the default
 `ApplyForUnhandledExceptions` strategy, handlers outermost with `ApplyForAllExceptions`), then the
@@ -190,6 +211,7 @@ pre-processors, then the post-processors, then `behaviors`, then the handler.
 | `project` | string or null | The project the type is declared in. |
 | `handler` | component | The handler that runs. |
 | `behaviors` | components | Stream behaviours added through the options, outermost first. |
+| `callSites` | call sites | Where this project creates the stream from. |
 
 ### A notification
 
@@ -198,6 +220,7 @@ pre-processors, then the post-processors, then `behaviors`, then the handler.
 | `type` | string | The notification type. Abstract notification types are left out. |
 | `project` | string or null | The project the type is declared in. |
 | `handlers` | components | The handlers it reaches, in the order they run, including handlers written for a base type or interface and generic handlers closed at build time. |
+| `callSites` | call sites | Where this project publishes the notification from. |
 
 ### A component
 
@@ -208,9 +231,23 @@ pre-processors, then the post-processors, then `behaviors`, then the handler.
 
 An exception component adds `exception`, the exception type it is registered for.
 
+### A call site
+
+A `Send`, `Publish` or `CreateStream` call on `ISender`, `IPublisher`, `IMediator` or a class implementing one
+of them, in this project, whose argument's type is the message's type where it is written. Sorted by file, then
+line.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `file` | string | The file, relative to the project, with `/` between folders. A file outside the project folder, such as a linked one, is written by its name alone. The map never holds an absolute path. |
+| `line` | number | The line of the method name, from 1. |
+
+Moving a call to another line changes the map, so a committed map changes with edits above a call too.
+
 ## What the map cannot see
 
-The map is what the build can know. Three things are only known when the application runs:
+The map is what the build can know. Some things are only known when the application runs, or in another
+project:
 
 - **Behaviours and processors registered with the container directly**, such as
   `services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Logging<,>))`. They run, but are not in the map.
@@ -227,6 +264,12 @@ The map is what the build can know. Three things are only known when the applica
   listed in `unread` and their registrations are left out.
 - **Branches in the options lambda.** A registration inside an `if` is in the map whether or not the branch is
   taken. A change to `AutoRegisterRequestProcessors` inside a branch or a loop is listed in `unread`.
+- **Calls from other projects.** A project's map lists the calls in that project. A request sent from an API
+  project to the application project's mediator is in the API project's map, if it has one, not the
+  application's; there is no map of the whole solution.
+- **Calls whose message type is not known where they are written**: `Send(object)`, a message held as
+  `IRequest<int>` or as a base class, and calls made through a wrapper or an extension method of your own. These
+  are left out, not guessed at.
 
 ## Compatibility
 
