@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Loaded by whichever MSBuild runs the build: .NET in dotnet build, .NET Framework in Visual Studio. Only
+      netstandard2.0 loads in both.
+    -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Compile-time only. Both MSBuild hosts carry these assemblies and bind a task to their own copies, so the
+      package ships none of them.
+    -->
+    <PackageReference Include="Microsoft.Build.Utilities.Core" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="System.Reflection.Metadata" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

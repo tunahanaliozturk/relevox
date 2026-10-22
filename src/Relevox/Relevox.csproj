@@ -8,6 +8,8 @@
     <PackageId>Relevox</PackageId>
     <Description>A mediator for .NET whose dispatch is written by a source generator at build time, with the same handler signatures as MediatR 12. MIT licensed.</Description>
     <PackageTags>mediator;cqrs;mediatr;source-generator;aot;performance</PackageTags>
+    <!-- NuGet warns about any dll outside lib/; the message map task under tasks/ is meant for MSBuild, not the app. -->
+    <NoWarn>$(NoWarn);NU5100</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,10 +33,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The MSBuild task that writes the message map, built before this project and packed beside its targets. -->
+    <ProjectReference Include="../Relevox.Build/Relevox.Build.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="../Relevox.SourceGenerator/bin/$(Configuration)/netstandard2.0/Relevox.SourceGenerator.dll"
           Pack="true"
           PackagePath="analyzers/dotnet/cs"
           Visible="false" />
+    <None Include="../Relevox.Build/bin/$(Configuration)/netstandard2.0/Relevox.Build.dll"
+          Pack="true"
+          PackagePath="tasks/netstandard2.0"
+          Visible="false" />
+    <None Include="buildTransitive/*" Pack="true" PackagePath="buildTransitive" />
   </ItemGroup>
 
 </Project>

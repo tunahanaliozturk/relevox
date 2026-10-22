@@ -47,6 +47,14 @@ unzip -p "$feed/Relevox.Testing.$version.nupkg" Relevox.Testing.nuspec | grep 'i
 
 dotnet run --project "$app" --configuration Release -p:RelevoxVersion="$version"
 
+# The message map (ADR 0014) is off by default, so the build above wrote none. With the switch on, the generator
+# compiles the map into the assembly and the packaged MSBuild task copies it out.
+map="$app/obj/Release/net10.0/relevox-message-map.json"
+[[ ! -e "$map" ]] || { echo "A build without RelevoxMessageMap wrote $map." >&2; exit 1; }
+dotnet build "$app" --configuration Release -p:RelevoxMessageMap=true -p:RelevoxVersion="$version"
+grep -q '"Smoke.Ping"' "$map" || { cat "$map" >&2 2>/dev/null; echo "The message map is missing or does not list Smoke.Ping." >&2; exit 1; }
+echo "The packaged task wrote the message map."
+
 # The analyzer travels in the same package as the generator. A request with no handler has to be reported,
 # and with warnings as errors, fail the build.
 if output="$(dotnet build "$app" --configuration Release -p:SmokeUnhandled=true -p:RelevoxVersion="$version" 2>&1)"; then
@@ -63,6 +71,10 @@ output="$(dotnet run --project "$layered/Host" --configuration Release -p:Relevo
 grep -q "answer 42" <<<"$output" \
   || { echo "$output" >&2; echo "The layered host did not dispatch through the application's mediator." >&2; exit 1; }
 echo "A host below the application layer built clean and dispatched through the application's mediator."
+
+# A project that only uses another project's mediator has no map of its own, even with the switch on.
+dotnet build "$layered/Host" --configuration Release -p:RelevoxMessageMap=true -p:RelevoxVersion="$version"
+[[ ! -e "$layered/Host/obj/Release/net10.0/relevox-message-map.json" ]]   || { echo "The layered host wrote a message map for a mediator it does not own." >&2; exit 1; }
 
 # MediatR code left in a contracts-only library: the code fix Relevox.Contracts carries has to run from the command
 # line and leave a library that builds. The compiler skips analyzers once there are errors, so the build alone

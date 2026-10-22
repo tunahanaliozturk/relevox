@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Imported into every project that references Relevox, directly or through another project, because the
+    generator runs in all of them. This passes the message map switch to the generator (ADR 0014).
+  -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="RelevoxMessageMap" />
+  </ItemGroup>
+
+</Project>
