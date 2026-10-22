@@ -100,6 +100,27 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             output.AddSource("RelevoxMediator.g.cs", SourceText.From(Emitter.Mediator(plan), Encoding.UTF8));
             output.AddSource("RelevoxServiceCollectionExtensions.g.cs", SourceText.From(Emitter.Registration(plan), Encoding.UTF8));
         });
+
+        // Off by default. With it off this step yields null on every edit, so the output below stays cached and
+        // the generated code is what it was before the map existed.
+        IncrementalValueProvider<bool> mapRequested = context.AnalyzerConfigOptionsProvider
+            .Select(static (options, _) => options.GlobalOptions.TryGetValue(MessageMap.Switch, out string? value)
+                && string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase));
+
+        IncrementalValueProvider<(string Namespace, string Json)?> map = plan
+            .Combine(mapRequested)
+            .Select(static (pair, _) => pair.Right && pair.Left.Emits
+                ? (pair.Left.Namespace, MessageMap.Json(pair.Left))
+                : ((string, string)?)null)
+            .WithTrackingName(TrackingNames.MessageMap);
+
+        context.RegisterSourceOutput(map, static (output, map) =>
+        {
+            if (map is { } value)
+            {
+                output.AddSource("RelevoxMessageMap.g.cs", SourceText.From(MessageMap.Source(value.Namespace, value.Json), Encoding.UTF8));
+            }
+        });
     }
 
     /// <summary>
@@ -123,4 +144,5 @@ internal static class TrackingNames
     public const string References = "References";
     public const string Closings = "Closings";
     public const string Plan = "Plan";
+    public const string MessageMap = "MessageMap";
 }

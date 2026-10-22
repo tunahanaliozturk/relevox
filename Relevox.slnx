@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Relevox.Contracts/Relevox.Contracts.csproj" />
     <Project Path="src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj" />
+    <Project Path="src/Relevox.Build/Relevox.Build.csproj" />
     <Project Path="src/Relevox.CodeFixes/Relevox.CodeFixes.csproj" />
     <Project Path="src/Relevox.Migration/Relevox.Migration.csproj" />
     <Project Path="src/Relevox.Testing/Relevox.Testing.csproj" />

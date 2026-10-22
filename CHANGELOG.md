@@ -6,6 +6,15 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The message map switch: `<RelevoxMessageMap>true</RelevoxMessageMap>` in a project writes a JSON map of what
+  its mediator dispatches to `obj/<configuration>/<framework>/relevox-message-map.json`, or to
+  `RelevoxMessageMapPath` ([docs/message-map.md](docs/message-map.md), ADR 0014). The generator compiles the
+  map into the assembly and an MSBuild task in the package copies it out, only when it changed. Off by default;
+  with it off, the generated code is unchanged. The content so far is the request names; the full map follows
+  in this release.
+
 ## [1.2.0] - 2026-10-21
 
 OpenTelemetry tracing and metrics, off by default. The names are fixed in

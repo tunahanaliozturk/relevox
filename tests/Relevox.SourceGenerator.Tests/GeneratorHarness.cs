@@ -47,18 +47,26 @@ public static class GeneratorHarness
     public static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, params string[] sources) =>
         Run(assemblyName, extra, strict, [], sources);
 
+    /// <summary>Runs the generator with the message map switched on, as <c>RelevoxMessageMap=true</c> does in a build.</summary>
+    public static GeneratorRun RunWithMessageMap(params string[] sources) => RunWithMessageMap("Subject", [], sources);
+
+    /// <summary>Like <see cref="RunWithMessageMap(string[])"/>, for a project with references.</summary>
+    public static GeneratorRun RunWithMessageMap(string assemblyName, IEnumerable<MetadataReference> extra, params string[] sources) =>
+        Run(assemblyName, extra, strict: true, [], sources, MessageMapOn);
+
     /// <summary>Like <see cref="Run(string, IEnumerable{MetadataReference}, string[])"/>, with another generator running alongside.</summary>
     public static GeneratorRun RunAlongside(IIncrementalGenerator other, string assemblyName, IEnumerable<MetadataReference> extra, params string[] sources) =>
         Run(assemblyName, extra, strict: false, [other], sources);
 
-    private static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, IIncrementalGenerator[] others, string[] sources)
+    private static GeneratorRun Run(string assemblyName, IEnumerable<MetadataReference> extra, bool strict, IIncrementalGenerator[] others, string[] sources, AnalyzerConfigOptionsProvider? options = null)
     {
         CSharpCompilation compilation = Compile(assemblyName, extra, sources, strict);
 
         GeneratorDriver driver = CSharpGeneratorDriver
             .Create(
                 [new RelevoxGenerator().AsSourceGenerator(), .. others.Select(static other => other.AsSourceGenerator())],
-                parseOptions: strict ? ParseOptions.WithDocumentationMode(DocumentationMode.Diagnose) : ParseOptions)
+                parseOptions: strict ? ParseOptions.WithDocumentationMode(DocumentationMode.Diagnose) : ParseOptions,
+                optionsProvider: options)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
 
         GeneratorDriverRunResult result = driver.GetRunResult();
@@ -112,11 +120,12 @@ public static class GeneratorHarness
     /// The only way to see incrementality. A generator whose models capture a symbol still emits the right
     /// code, so nothing else fails; it just re-runs everything on every keystroke.
     /// </remarks>
-    public static IReadOnlyDictionary<string, IncrementalStepRunReason[]> RunTwice(string[] original, string[] edited)
+    public static IReadOnlyDictionary<string, IncrementalStepRunReason[]> RunTwice(string[] original, string[] edited, bool messageMap = false)
     {
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             [new RelevoxGenerator().AsSourceGenerator()],
             parseOptions: ParseOptions,
+            optionsProvider: messageMap ? MessageMapOn : null,
             driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
 
         // The second compilation reuses the first one's references and changes only syntax trees, which is
@@ -182,5 +191,27 @@ public static class GeneratorHarness
         }
 
         return builder.ToImmutable();
+    }
+
+    private static readonly AnalyzerConfigOptionsProvider MessageMapOn = new GlobalOptionsProvider(new() { [MessageMap.Switch] = "true" });
+
+    /// <summary>Build properties as the compiler hands them to generators, with nothing set per file.</summary>
+    private sealed class GlobalOptionsProvider(Dictionary<string, string> values) : AnalyzerConfigOptionsProvider
+    {
+        private readonly Options _options = new(values);
+
+        public override AnalyzerConfigOptions GlobalOptions => _options;
+
+        public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => Options.Empty;
+
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => Options.Empty;
+
+        private sealed class Options(Dictionary<string, string> values) : AnalyzerConfigOptions
+        {
+            public static readonly Options Empty = new([]);
+
+            public override bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value) =>
+                values.TryGetValue(key, out value);
+        }
     }
 }

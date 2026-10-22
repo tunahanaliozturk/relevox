@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    The message map (ADR 0014). With RelevoxMessageMap set to true the generator compiles the map into the
+    assembly, and this copies it to RelevoxMessageMapPath after every compile. Design-time builds in the IDE
+    compile nothing to disk, so the file only changes on a real build.
+  -->
+  <UsingTask TaskName="Relevox.Build.WriteMessageMap"
+             AssemblyFile="$(MSBuildThisFileDirectory)../tasks/netstandard2.0/Relevox.Build.dll" />
+
+  <Target Name="RelevoxWriteMessageMap"
+          AfterTargets="CoreCompile"
+          Condition="'$(RelevoxMessageMap)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <RelevoxMessageMapPath Condition="'$(RelevoxMessageMapPath)' == ''">$(IntermediateOutputPath)relevox-message-map.json</RelevoxMessageMapPath>
+    </PropertyGroup>
+
+    <WriteMessageMap Assembly="@(IntermediateAssembly->'%(FullPath)')"
+                     File="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(RelevoxMessageMapPath)'))" />
+  </Target>
+
+</Project>
