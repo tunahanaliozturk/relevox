@@ -184,6 +184,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [13. Telemetry names, and telemetry off by default](docs/adr/0013-telemetry-names.md)
 - [14. The message map leaves the build inside the assembly](docs/adr/0014-message-map-output.md)
 - [15. What the message map says, and how the build learns about behaviours](docs/adr/0015-message-map-content.md)
+- [16. The Markdown view of the message map is written by the generator](docs/adr/0016-message-map-markdown.md)
 
 ## Roadmap
 

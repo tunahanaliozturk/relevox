@@ -53,7 +53,8 @@ map="$app/obj/Release/net10.0/relevox-message-map.json"
 [[ ! -e "$map" ]] || { echo "A build without RelevoxMessageMap wrote $map." >&2; exit 1; }
 dotnet build "$app" --configuration Release -p:RelevoxMessageMap=true -p:RelevoxVersion="$version"
 grep -q '"Smoke.Ping"' "$map" || { cat "$map" >&2 2>/dev/null; echo "The message map is missing or does not list Smoke.Ping." >&2; exit 1; }
-echo "The packaged task wrote the message map."
+grep -q '^### `Smoke.Ping`$' "${map%.json}.md" || { cat "${map%.json}.md" >&2 2>/dev/null; echo "The Markdown view is missing or does not list Smoke.Ping." >&2; exit 1; }
+echo "The packaged task wrote the message map and its Markdown view."
 
 # The analyzer travels in the same package as the generator. A request with no handler has to be reported,
 # and with warnings as errors, fail the build.
@@ -76,8 +77,9 @@ echo "A host below the application layer built clean and dispatched through the 
 # left from when it had one is removed rather than left stale.
 stale="$layered/Host/obj/Release/net10.0/relevox-message-map.json"
 echo '{ "stale": true }' >"$stale"
+echo '# stale' >"${stale%.json}.md"
 dotnet build "$layered/Host" --configuration Release -p:RelevoxMessageMap=true -p:RelevoxVersion="$version"
-[[ ! -e "$stale" ]] || { echo "The layered host kept a message map for a mediator it does not own." >&2; exit 1; }
+[[ ! -e "$stale" && ! -e "${stale%.json}.md" ]] || { echo "The layered host kept a message map for a mediator it does not own." >&2; exit 1; }
 
 # MediatR code left in a contracts-only library: the code fix Relevox.Contracts carries has to run from the command
 # line and leave a library that builds. The compiler skips analyzers once there are errors, so the build alone
