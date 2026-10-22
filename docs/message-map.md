@@ -156,8 +156,10 @@ The map is what the build can know. Three things are only known when the applica
   `services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Logging<,>))`. They run, but are not in the map.
   Registering them through the `AddRelevox` options instead puts them in it.
 - **Options the build cannot read**: a `Type` held in a variable, a method passed to `AddRelevox` instead of a
-  lambda, or a call the options are handed to, such as `Configure(options)`, an extension method on them or
-  `options.BehaviorsToRegister.Clear()`. These are listed in `unread`.
+  lambda, a call the options are handed to, such as `Configure(options)`, an extension method on them or
+  `options.BehaviorsToRegister.Clear()`, the options held in another variable, and a lambda or local function
+  inside the options lambda that uses them, since it may run later or never. These are listed in `unread`.
+  Another library's method that happens to be called `AddRelevox` is ignored.
 - **Which of several `AddRelevox` calls runs first.** Only the first call to run applies its options; the next
   returns before calling its lambda. With more than one call in a project, the calls that pass options are
   listed in `unread` and their registrations are left out.

@@ -32,13 +32,15 @@ internal sealed record OptionRegistration(OptionKind Kind, string? Service, stri
 /// <param name="AddsPreProcessors">Whether it adds any pre-processor, read or not; only then do pre-processors run.</param>
 /// <param name="AddsPostProcessors">The same for post-processors.</param>
 /// <param name="Call">The <c>AddRelevox</c> call as written, when it passes options; null when it passes none.</param>
+/// <param name="Foreign">Whether the call is another library's method of the same name, which the map ignores.</param>
 internal sealed record PipelineOptions(
     EquatableArray<OptionRegistration> Registrations,
     EquatableArray<string> Unread,
     bool AutoRegisterRequestProcessors,
     bool AddsPreProcessors,
     bool AddsPostProcessors,
-    string? Call);
+    string? Call,
+    bool Foreign = false);
 
 /// <summary>
 /// Writes the message map: what this project's mediator dispatches and what runs around it, as JSON, carried out
@@ -78,6 +80,13 @@ internal static class MessageMap
     /// </remarks>
     public static PipelineOptions Read(InvocationExpressionSyntax call, SemanticModel model, CancellationToken cancellationToken)
     {
+        // Relevox's AddRelevox does not exist until the generator writes it, so a call that binds already is to
+        // another library's method of the same name.
+        if (model.GetSymbolInfo(call, cancellationToken).Symbol is IMethodSymbol { ContainingType.Name: not "RelevoxServiceCollectionExtensions" })
+        {
+            return new PipelineOptions(EquatableArray<OptionRegistration>.Empty, EquatableArray<string>.Empty, false, false, false, null, Foreign: true);
+        }
+
         List<OptionRegistration> registrations = [];
         List<string> unread = [];
         bool auto = false, pre = false, post = false;
@@ -109,8 +118,29 @@ internal static class MessageMap
         };
 
         // Chained calls nest the first one innermost, so source order of the method names is the order they run in.
-        foreach (SyntaxNode node in lambda.Body.DescendantNodesAndSelf().OrderBy(static node => Anchor(node)))
+        // Nested lambdas and local functions are not walked into: they may run later or never.
+        foreach (SyntaxNode node in lambda.Body
+            .DescendantNodesAndSelf(static node => node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax))
+            .OrderBy(static node => Anchor(node)))
         {
+            if (node is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+            {
+                if (node.DescendantNodes().OfType<IdentifierNameSyntax>().Any(identifier => IsOptions(identifier, parameters)))
+                {
+                    unread.Add(Text(node));
+                }
+
+                continue;
+            }
+
+            // The options used other than through a member or as a call's argument, such as var pipeline = options,
+            // can be registered through where the build does not follow.
+            if (node is IdentifierNameSyntax identifier && IsOptions(identifier, parameters) && !Followed(identifier))
+            {
+                unread.Add(Text(identifier.FirstAncestorOrSelf<StatementSyntax>() ?? identifier.Parent!));
+                continue;
+            }
+
             if (node is AssignmentExpressionSyntax { Left: var left } assignment
                 && Member(left) == "AutoRegisterRequestProcessors"
                 && IsOptions(Owner(left), parameters))
@@ -212,7 +242,21 @@ internal static class MessageMap
     private static bool IsServiceCollection(ITypeSymbol type) => type.ToDisplayString() == "Microsoft.Extensions.DependencyInjection.IServiceCollection";
 
     private static bool IsOptions(ExpressionSyntax? expression, string[] parameters) =>
-        expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } && parameters.Contains(identifier);
+        expression is IdentifierNameSyntax { Identifier.ValueText: var identifier } name
+        && parameters.Contains(identifier)
+        // In x.options, x?.options and Call(options: x) the name is something else.
+        && !(name.Parent is MemberAccessExpressionSyntax access && access.Name == name)
+        && name.Parent is not (MemberBindingExpressionSyntax or NameColonSyntax);
+
+    // Uses of the options this reader follows: options.Member, options?.Member, and options as a call's argument,
+    // which Receives lists as unread.
+    private static bool Followed(IdentifierNameSyntax options) => options.Parent switch
+    {
+        MemberAccessExpressionSyntax access => access.Expression == options,
+        ConditionalAccessExpressionSyntax conditional => conditional.Expression == options,
+        ArgumentSyntax { Parent.Parent: InvocationExpressionSyntax } => true,
+        _ => false,
+    };
 
     private static int Anchor(SyntaxNode node) => node is InvocationExpressionSyntax invocation && MethodName(invocation) is { } name ? name.SpanStart : node.SpanStart;
 
@@ -323,6 +367,8 @@ internal static class MessageMap
     public static string Json(EmitPlan plan, ImmutableArray<PipelineOptions> calls, Compilation compilation)
     {
         Names names = new(compilation);
+        calls = [.. calls.Where(static call => !call.Foreign)];
+
         // The generated AddRelevox returns early when it has already run, so only the first call to run applies its
         // options, and the build cannot tell which that is. With more than one call, the ones passing options are
         // listed as unread instead.
