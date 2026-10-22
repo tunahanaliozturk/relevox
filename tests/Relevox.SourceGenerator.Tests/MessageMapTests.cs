@@ -39,6 +39,23 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void An_abstract_request_is_left_out_as_the_mediator_leaves_it_out()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers, """
+            using Relevox; using System.Threading; using System.Threading.Tasks;
+            namespace Shop;
+            public abstract record Query : IRequest<int>;
+            public sealed class QueryHandler : IRequestHandler<Query, int>
+            {
+                public Task<int> Handle(Query request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation).ShouldNotBeNull().ShouldNotContain("Shop.Query");
+    }
+
+    [Fact]
     public void With_the_switch_off_the_generated_code_is_what_it_was()
     {
         GeneratorRun off = GeneratorHarness.RunStrict(Handlers);

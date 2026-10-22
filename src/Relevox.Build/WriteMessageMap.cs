@@ -33,8 +33,13 @@ public sealed class WriteMessageMap : Task
         if (json is null)
         {
             // A project that only uses another project's mediator has no map of its own; the switch may be set
-            // for a whole solution in Directory.Build.props.
-            Log.LogMessage(MessageImportance.Low, "Relevox: {0} has no message map; nothing written.", Assembly);
+            // for a whole solution in Directory.Build.props. A map left from when it had one would be stale.
+            if (System.IO.File.Exists(File))
+            {
+                System.IO.File.Delete(File);
+                Log.LogMessage(MessageImportance.Normal, "Relevox: {0} has no message map; removed {1}.", Assembly, File);
+            }
+
             return true;
         }
 
@@ -54,6 +59,10 @@ public sealed class WriteMessageMap : Task
         return true;
     }
 
+    /// <remarks>
+    /// The type is recognised by its name and by <c>[GeneratedCode("Relevox", ...)]</c>, so a user type that happens to
+    /// be called <c>RelevoxMessageMap</c> is never taken for the map.
+    /// </remarks>
     private static string? Read(string assembly)
     {
         using FileStream stream = System.IO.File.OpenRead(assembly);
@@ -62,7 +71,7 @@ public sealed class WriteMessageMap : Task
         foreach (TypeDefinitionHandle typeHandle in metadata.TypeDefinitions)
         {
             TypeDefinition type = metadata.GetTypeDefinition(typeHandle);
-            if (!metadata.StringComparer.Equals(type.Name, "RelevoxMessageMap"))
+            if (!metadata.StringComparer.Equals(type.Name, "RelevoxMessageMap") || !GeneratedByRelevox(metadata, type))
             {
                 continue;
             }
@@ -70,14 +79,48 @@ public sealed class WriteMessageMap : Task
             foreach (FieldDefinitionHandle fieldHandle in type.GetFields())
             {
                 FieldDefinition field = metadata.GetFieldDefinition(fieldHandle);
-                if (metadata.StringComparer.Equals(field.Name, "Json") && !field.GetDefaultValue().IsNil)
+                if (!metadata.StringComparer.Equals(field.Name, "Json") || field.GetDefaultValue().IsNil)
                 {
-                    BlobReader value = metadata.GetBlobReader(metadata.GetConstant(field.GetDefaultValue()).Value);
+                    continue;
+                }
+
+                Constant constant = metadata.GetConstant(field.GetDefaultValue());
+                if (constant.TypeCode == ConstantTypeCode.String)
+                {
+                    BlobReader value = metadata.GetBlobReader(constant.Value);
                     return value.ReadUTF16(value.Length);
                 }
             }
         }
 
         return null;
+    }
+
+    private static bool GeneratedByRelevox(MetadataReader metadata, TypeDefinition type)
+    {
+        foreach (CustomAttributeHandle handle in type.GetCustomAttributes())
+        {
+            CustomAttribute attribute = metadata.GetCustomAttribute(handle);
+            if (attribute.Constructor.Kind != HandleKind.MemberReference)
+            {
+                continue;
+            }
+
+            EntityHandle parent = metadata.GetMemberReference((MemberReferenceHandle)attribute.Constructor).Parent;
+            if (parent.Kind != HandleKind.TypeReference
+                || !metadata.StringComparer.Equals(metadata.GetTypeReference((TypeReferenceHandle)parent).Name, "GeneratedCodeAttribute"))
+            {
+                continue;
+            }
+
+            // The value blob of GeneratedCode(string, string): a 0x0001 prolog, then the tool name.
+            BlobReader value = metadata.GetBlobReader(attribute.Value);
+            if (value.ReadUInt16() == 1 && value.ReadSerializedString() == "Relevox")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

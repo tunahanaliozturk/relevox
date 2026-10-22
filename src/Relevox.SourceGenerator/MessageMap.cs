@@ -23,7 +23,10 @@ internal static class MessageMap
         // C# type names hold no character JSON needs escaped.
         StringBuilder json = new();
         json.Append("{\n  \"schemaVersion\": 1,\n  \"requests\": [");
-        string[] requests = [.. plan.Requests.Select(static entry => entry.Request.FullName).OrderBy(static name => name, System.StringComparer.Ordinal)];
+        string[] requests = [.. plan.Requests
+            // An abstract request can never be the runtime type, so the mediator has no dispatch for it either.
+            .Where(static entry => !entry.Request.IsAbstract)
+            .Select(static entry => entry.Request.FullName).OrderBy(static name => name, System.StringComparer.Ordinal)];
         for (int index = 0; index < requests.Length; index++)
         {
             json.Append(index == 0 ? "\n" : ",\n").Append("    \"").Append(requests[index]).Append('"');

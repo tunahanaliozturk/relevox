@@ -34,8 +34,8 @@ The first. Setting `<RelevoxMessageMap>true</RelevoxMessageMap>` in a project do
   It writes only when the content differs, so a build that changed no message leaves the file and its
   timestamp alone.
 
-A project that uses another project's mediator, such as an API below the application layer, has no map, and
-the task writes nothing there. The switch can therefore be set once for a whole solution in
+A project that uses another project's mediator, such as an API below the application layer, has no map; the
+task writes nothing there and removes a map left from when the project had one. The switch can therefore be set once for a whole solution in
 `Directory.Build.props`.
 
 How it behaves where builds happen:
@@ -62,8 +62,9 @@ before and 142-158 ms after. The difference is inside the run-to-run noise.
 - With the switch on, the map is part of the compiled assembly: a few kilobytes of message and handler names
   that anyone with the dll could read anyway. Once the map records call sites (#46), file paths go in as well;
   they will be relative to the project, never absolute.
-- The constant's type and field names, `RelevoxMessageMap.Json`, are a contract between the generator and the
-  task. Both ship in the same package version, so they cannot drift apart.
+- The constant's type and field names, `RelevoxMessageMap.Json`, and the type's
+  `[GeneratedCode("Relevox", ...)]`, are a contract between the generator and the task; the attribute keeps a
+  user type that happens to share the name from being read as the map. Both ship in the same package version, so they cannot drift apart.
 - The package carries an MSBuild task and two build files. NuGet warns (NU5100) about a dll outside `lib/`;
   the warning is suppressed in `Relevox.csproj` with that reason.
 - The file is written with `\n` line endings. A repository that commits the map and checks it in CI should
