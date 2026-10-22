@@ -19,6 +19,9 @@ All notable changes to this project are written down here. The format follows
   read from the `AddRelevox` options lambda, open ones checked against each request's constraints; registrations
   the build cannot read are listed under `unread`. The JSON schema is
   [docs/message-map.schema.json](docs/message-map.schema.json). Within 1.x fields are only added.
+- A Markdown view of the message map next to the JSON, `relevox-message-map.md` (ADR 0016): a table per request
+  and stream with its pipeline in order, and a Mermaid diagram per notification with its handlers, both rendered
+  by GitHub.
 
 ## [1.2.0] - 2026-10-21
 

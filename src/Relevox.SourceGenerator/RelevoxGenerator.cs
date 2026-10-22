@@ -114,20 +114,20 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             .Select(static (options, _) => options.GlobalOptions.TryGetValue(MessageMap.Switch, out string? value)
                 && string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase));
 
-        IncrementalValueProvider<(string Namespace, string Json)?> map = plan
+        IncrementalValueProvider<(string Namespace, string Json, string Markdown)?> map = plan
             .Combine(mapRequested)
             .Combine(addRelevoxCalls)
             .Combine(context.CompilationProvider)
             .Select(static (pair, _) => pair.Left.Left.Right && pair.Left.Left.Left.Emits
-                ? (pair.Left.Left.Left.Namespace, MessageMap.Json(pair.Left.Left.Left, pair.Left.Right, pair.Right))
-                : ((string, string)?)null)
+                ? MessageMap.Render(pair.Left.Left.Left, pair.Left.Right, pair.Right) is var (json, markdown) ? (pair.Left.Left.Left.Namespace, json, markdown) : null
+                : ((string, string, string)?)null)
             .WithTrackingName(TrackingNames.MessageMap);
 
         context.RegisterSourceOutput(map, static (output, map) =>
         {
             if (map is { } value)
             {
-                output.AddSource("RelevoxMessageMap.g.cs", SourceText.From(MessageMap.Source(value.Namespace, value.Json), Encoding.UTF8));
+                output.AddSource("RelevoxMessageMap.g.cs", SourceText.From(MessageMap.Source(value.Namespace, value.Json, value.Markdown), Encoding.UTF8));
             }
         });
     }

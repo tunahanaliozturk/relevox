@@ -5,7 +5,8 @@ The generator already knows this at build time; the map writes it down, so it ca
 checked in CI instead of found with grep.
 
 How the map leaves the build is in [ADR 0014](adr/0014-message-map-output.md); what goes into it, and what the
-build cannot see, is in [ADR 0015](adr/0015-message-map-content.md).
+build cannot see, is in [ADR 0015](adr/0015-message-map-content.md); the Markdown view is
+[ADR 0016](adr/0016-message-map-markdown.md).
 
 ## Turning it on
 
@@ -20,15 +21,16 @@ In the project that calls `AddRelevox`, or for every project in `Directory.Build
 ```
 
 Every build that compiles the project then writes the map, by default to
-`obj/<configuration>/<framework>/relevox-message-map.json`. The file is only rewritten when its content
-changes, so an edit that changes no message, handler or registration leaves it alone. Projects that use another
-project's mediator have no map of their own and get no file.
+`obj/<configuration>/<framework>/relevox-message-map.json`, and a [Markdown view](#the-markdown-view) of it
+next to it, `relevox-message-map.md` (with `RelevoxMessageMapPath`, the same path with `.md`). The files are only
+rewritten when their content changes, so an edit that changes no message, handler or registration leaves them
+alone. Projects that use another project's mediator have no map of their own and get no files.
 
 The map is written by a real build: `dotnet build`, or a build in Visual Studio or Rider. The IDE's background
 design-time builds do not write it.
 
-With the switch on, the map is also compiled into the assembly as the constant `RelevoxMessageMap.Json`, which
-is where the build task reads it from. With it off, the generated code is the same as without this feature.
+With the switch on, the map is also compiled into the assembly as the constants `RelevoxMessageMap.Json` and
+`RelevoxMessageMap.Markdown`, which is where the build task reads it from. With it off, the generated code is the same as without this feature.
 
 ## An example
 
@@ -82,6 +84,64 @@ is where the build task reads it from. With it off, the generated code is the sa
   ],
   "unread": []
 }
+```
+
+## The Markdown view
+
+The `.md` file is the same map for people: a table per request and stream with its pipeline from top to bottom
+in the order it runs, and a Mermaid diagram per notification with its handlers in order. GitHub renders both, so
+a committed copy reads well in a pull request. It is written from the same values as the JSON, in the same order,
+so it changes exactly when the JSON does. Its layout is for reading and may change in any release; tools read
+the JSON.
+
+From the web sample, shortened:
+
+````markdown
+### `Shop.PlaceOrder`
+
+Returns `int`. Declared in Relevox.Samples.Web.
+
+| Step | Type | Project |
+|---|---|---|
+| Pre-processor | `Shop.Received<Shop.PlaceOrder>` | Relevox.Samples.Web |
+| Behaviour | `Shop.Validation<Shop.PlaceOrder, int>` | Relevox.Samples.Web |
+| Handler | `Shop.PlaceOrderHandler` | Relevox.Samples.Web |
+
+## Notifications
+
+### `Shop.OrderCancelled`
+
+Declared in Relevox.Samples.Web.
+
+```mermaid
+flowchart LR
+  notification["Shop.OrderCancelled"]
+  notification --> handler1["1. Shop.RefundOnCancel"]
+  notification --> handler2["2. Shop.EmailOnCancel"]
+```
+````
+
+Rendered:
+
+### `Shop.PlaceOrder`
+
+Returns `int`. Declared in Relevox.Samples.Web.
+
+| Step | Type | Project |
+|---|---|---|
+| Pre-processor | `Shop.Received<Shop.PlaceOrder>` | Relevox.Samples.Web |
+| Behaviour | `Shop.Validation<Shop.PlaceOrder, int>` | Relevox.Samples.Web |
+| Handler | `Shop.PlaceOrderHandler` | Relevox.Samples.Web |
+
+### `Shop.OrderCancelled`
+
+Declared in Relevox.Samples.Web.
+
+```mermaid
+flowchart LR
+  notification["Shop.OrderCancelled"]
+  notification --> handler1["1. Shop.RefundOnCancel"]
+  notification --> handler2["2. Shop.EmailOnCancel"]
 ```
 
 ## The fields

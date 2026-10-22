@@ -72,6 +72,48 @@ public sealed class MessageMapTests
         }
         """;
 
+    // A generic request closed at build time, notifications with a handler for an interface, and a stream with an
+    // open behaviour.
+    private const string Messages = """
+        using System.Collections.Generic; using System.Runtime.CompilerServices; using System.Threading; using System.Threading.Tasks;
+        using Microsoft.Extensions.DependencyInjection; using Relevox;
+        namespace Shop;
+        public interface IEntity;
+        public sealed record Order : IEntity;
+        public sealed record Load<T>(int Id) : IRequest<T?> where T : IEntity;
+        public sealed class LoadHandler<T> : IRequestHandler<Load<T>, T?> where T : IEntity
+        {
+            public Task<T?> Handle(Load<T> request, CancellationToken cancellationToken) => Task.FromResult(default(T));
+        }
+        public sealed record Placed(int Id) : INotification;
+        public sealed class Email : INotificationHandler<Placed>
+        {
+            public Task Handle(Placed notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+        public sealed class Ledger : INotificationHandler<INotification>
+        {
+            public Task Handle(INotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+        public sealed record Tail(int From) : IStreamRequest<string>;
+        public sealed class TailHandler : IStreamRequestHandler<Tail, string>
+        {
+            public async IAsyncEnumerable<string> Handle(Tail request, [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                await Task.Yield();
+                yield return "x";
+            }
+        }
+        public sealed class Throttle<TRequest, TResponse> : IStreamPipelineBehavior<TRequest, TResponse> where TRequest : IStreamRequest<TResponse>
+        {
+            public IAsyncEnumerable<TResponse> Handle(TRequest request, StreamHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next();
+        }
+        public static class Setup
+        {
+            public static IServiceCollection Add(IServiceCollection services) => services.AddRelevox(options => options.AddOpenStreamBehavior(typeof(Throttle<,>)));
+            public static Load<Order> Uses() => new(1);
+        }
+        """;
+
     [Fact]
     public void A_request_lists_its_handler_and_what_runs_around_it_in_order()
     {
@@ -152,45 +194,7 @@ public sealed class MessageMapTests
     [Fact]
     public void Notifications_streams_and_generic_handlers_closed_at_build_time()
     {
-        GeneratorRun run = GeneratorHarness.RunWithMessageMap("""
-            using System.Collections.Generic; using System.Runtime.CompilerServices; using System.Threading; using System.Threading.Tasks;
-            using Microsoft.Extensions.DependencyInjection; using Relevox;
-            namespace Shop;
-            public interface IEntity;
-            public sealed record Order : IEntity;
-            public sealed record Load<T>(int Id) : IRequest<T?> where T : IEntity;
-            public sealed class LoadHandler<T> : IRequestHandler<Load<T>, T?> where T : IEntity
-            {
-                public Task<T?> Handle(Load<T> request, CancellationToken cancellationToken) => Task.FromResult(default(T));
-            }
-            public sealed record Placed(int Id) : INotification;
-            public sealed class Email : INotificationHandler<Placed>
-            {
-                public Task Handle(Placed notification, CancellationToken cancellationToken) => Task.CompletedTask;
-            }
-            public sealed class Ledger : INotificationHandler<INotification>
-            {
-                public Task Handle(INotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
-            }
-            public sealed record Tail(int From) : IStreamRequest<string>;
-            public sealed class TailHandler : IStreamRequestHandler<Tail, string>
-            {
-                public async IAsyncEnumerable<string> Handle(Tail request, [EnumeratorCancellation] CancellationToken cancellationToken)
-                {
-                    await Task.Yield();
-                    yield return "x";
-                }
-            }
-            public sealed class Throttle<TRequest, TResponse> : IStreamPipelineBehavior<TRequest, TResponse> where TRequest : IStreamRequest<TResponse>
-            {
-                public IAsyncEnumerable<TResponse> Handle(TRequest request, StreamHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next();
-            }
-            public static class Setup
-            {
-                public static IServiceCollection Add(IServiceCollection services) => services.AddRelevox(options => options.AddOpenStreamBehavior(typeof(Throttle<,>)));
-                public static Load<Order> Uses() => new(1);
-            }
-            """);
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Messages);
 
         run.CompilationErrors.ShouldBeEmpty();
         Json(run.Compilation).ShouldBe(Lf("""
@@ -253,6 +257,92 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void The_markdown_view_has_a_table_per_request_with_its_pipeline_in_order()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Markdown(run.Compilation).ShouldBe(Lf("""
+            # Message map of Subject
+
+            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws.
+
+            ## Requests
+
+            ### `Shop.Look`
+
+            Returns `string`. Declared in Subject.
+
+            | Step | Type | Project |
+            |---|---|---|
+            | Behaviour | `Shop.Logging<Shop.Look, string>` | Subject |
+            | Behaviour | `Shop.LookCache` | Subject |
+            | Handler | `Shop.LookHandler` | Subject |
+
+            ### `Shop.Place`
+
+            Returns `int`. Declared in Subject.
+
+            | Step | Type | Project |
+            |---|---|---|
+            | Pre-processor | `Shop.Audit` | Subject |
+            | Behaviour | `Shop.Logging<Shop.Place, int>` | Subject |
+            | Behaviour | `Shop.Transaction<Shop.Place, int>` | Subject |
+            | Handler | `Shop.PlaceHandler` | Subject |
+            | Exception handler, `System.InvalidOperationException` | `Shop.Refused` | Subject |
+
+            """));
+    }
+
+    [Fact]
+    public void The_markdown_view_draws_each_notification_with_its_handlers_in_order()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Messages);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Markdown(run.Compilation).ShouldBe(Lf("""
+            # Message map of Subject
+
+            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws.
+
+            ## Requests
+
+            ### `Shop.Load<Shop.Order>`
+
+            Returns `Shop.Order`. Declared in Subject.
+
+            | Step | Type | Project |
+            |---|---|---|
+            | Handler | `Shop.LoadHandler<Shop.Order>` | Subject |
+
+            ## Streams
+
+            ### `Shop.Tail`
+
+            Yields `string`. Declared in Subject.
+
+            | Step | Type | Project |
+            |---|---|---|
+            | Behaviour | `Shop.Throttle<Shop.Tail, string>` | Subject |
+            | Handler | `Shop.TailHandler` | Subject |
+
+            ## Notifications
+
+            ### `Shop.Placed`
+
+            Declared in Subject.
+
+            ```mermaid
+            flowchart LR
+              notification["Shop.Placed"]
+              notification --> handler1["1. Shop.Email"]
+              notification --> handler2["2. Shop.Ledger"]
+            ```
+
+            """));
+    }
+
+    [Fact]
     public void A_registration_the_build_cannot_read_is_listed_rather_than_guessed()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers + """
@@ -286,6 +376,17 @@ public sealed class MessageMapTests
                 "options.AddOpenBehavior(typeof(Logging<,>)).Extend()",
                 "options.BehaviorsToRegister.Clear()"
               ]
+            """));
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldEndWith(Lf("""
+            ## Not read
+
+            The build could not read these registrations, so what they add is missing above:
+
+            - `options.AddOpenBehavior(extra)`
+            - `Configure(options)`
+            - `options.AddOpenBehavior(typeof(Logging<,>)).Extend()`
+            - `options.BehaviorsToRegister.Clear()`
+
             """));
     }
 
@@ -707,6 +808,9 @@ public sealed class MessageMapTests
     // What Relevox.Build reads: the constant's value, not the generated source text.
     private static string? Json(Compilation compilation) =>
         compilation.GetTypeByMetadataName("Subject.RelevoxMessageMap")?.GetMembers("Json").OfType<IFieldSymbol>().Single().ConstantValue as string;
+
+    private static string? Markdown(Compilation compilation) =>
+        compilation.GetTypeByMetadataName("Subject.RelevoxMessageMap")?.GetMembers("Markdown").OfType<IFieldSymbol>().Single().ConstantValue as string;
 
     private static string Lf(string text) => text.ReplaceLineEndings("\n");
 }
