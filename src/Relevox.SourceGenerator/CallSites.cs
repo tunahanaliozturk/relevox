@@ -32,16 +32,28 @@ internal static class CallSites
     public static CallSite? Read(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
         InvocationExpressionSyntax invocation = (InvocationExpressionSyntax)context.Node;
-        if (context.SemanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method
-            || method.Parameters.Length == 0
-            || !IsMediator(method.ContainingType))
+        ArgumentSyntax? argument;
+        if (context.SemanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method)
         {
-            return null;
+            if (method.Parameters.Length == 0 || !IsMediator(method.ContainingType))
+            {
+                return null;
+            }
+
+            // The message is the first parameter, wherever a named argument puts it.
+            argument = invocation.ArgumentList.Arguments.FirstOrDefault(argument => argument.NameColon?.Name.Identifier.ValueText == method.Parameters[0].Name)
+                ?? First(invocation);
+        }
+        else
+        {
+            // The generated RelevoxMediator is not written yet when this runs, so a call on it binds to nothing. Its
+            // methods take the message first.
+            argument = Owner(invocation) is { } owner
+                && context.SemanticModel.GetTypeInfo(owner, cancellationToken).Type is IErrorTypeSymbol { Name: "RelevoxMediator" }
+                ? First(invocation)
+                : null;
         }
 
-        // The message is the first parameter, wherever a named argument puts it.
-        ArgumentSyntax? argument = invocation.ArgumentList.Arguments.FirstOrDefault(argument => argument.NameColon?.Name.Identifier.ValueText == method.Parameters[0].Name)
-            ?? (invocation.ArgumentList.Arguments[0].NameColon is null ? invocation.ArgumentList.Arguments[0] : null);
         ITypeSymbol? message = argument is null ? null : context.SemanticModel.GetTypeInfo(argument.Expression, cancellationToken).Type;
         if (message is null or IErrorTypeSymbol or ITypeParameterSymbol || message.SpecialType == SpecialType.System_Object)
         {
@@ -73,6 +85,16 @@ internal static class CallSites
             : file.Substring(file.LastIndexOfAny(['\\', '/']) + 1);
         return relative.Replace('\\', '/');
     }
+
+    private static ArgumentSyntax? First(InvocationExpressionSyntax invocation) =>
+        invocation.ArgumentList.Arguments[0].NameColon is null ? invocation.ArgumentList.Arguments[0] : null;
+
+    private static ExpressionSyntax? Owner(InvocationExpressionSyntax invocation) => invocation.Expression switch
+    {
+        MemberAccessExpressionSyntax access => access.Expression,
+        MemberBindingExpressionSyntax binding => binding.FirstAncestorOrSelf<ConditionalAccessExpressionSyntax>()?.Expression,
+        _ => null,
+    };
 
     private static bool IsMediator(INamedTypeSymbol? type) =>
         type is not null && (IsContract(type) || type.AllInterfaces.Any(IsContract));
