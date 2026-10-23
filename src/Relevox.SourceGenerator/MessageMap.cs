@@ -189,9 +189,10 @@ internal static class MessageMap
             }
 
             // RelevoxOptions' own methods take only types and a lifetime. Any other argument picks an extension
-            // method of the same name, which need not register anything.
+            // method of the same name, which need not register anything. A Type in a variable is still the
+            // options' method: it is unread below, but still turns its processor stage on.
             if (invocation.ArgumentList.Arguments.Any(argument => !IsTypes(argument.Expression)
-                && model.GetTypeInfo(argument.Expression, cancellationToken).Type?.ToDisplayString() != "Microsoft.Extensions.DependencyInjection.ServiceLifetime"))
+                && model.GetTypeInfo(argument.Expression, cancellationToken).Type?.ToDisplayString() is not ("System.Type" or "Microsoft.Extensions.DependencyInjection.ServiceLifetime")))
             {
                 unread.Add(Text(invocation));
                 continue;
