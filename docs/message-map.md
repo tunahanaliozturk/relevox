@@ -166,7 +166,7 @@ The map is what the build can know. Three things are only known when the applica
   returns before calling its lambda. With more than one call in a project, the calls that pass options are
   listed in `unread` and their registrations are left out.
 - **Branches in the options lambda.** A registration inside an `if` is in the map whether or not the branch is
-  taken.
+  taken. A change to `AutoRegisterRequestProcessors` inside a branch or a loop is listed in `unread`.
 
 ## Compatibility
 
