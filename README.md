@@ -62,7 +62,8 @@ Measured with BenchmarkDotNet 0.15.8 on an Intel Core Ultra 7 255H, .NET 10.0.13
 and what each number does and does not show, are in
 [docs/benchmark-results/2026-10-21-1.2.0.md](docs/benchmark-results/2026-10-21-1.2.0.md), measured for 1.2.0 with
 telemetry off. The machine's own noise moves MediatR's send between 32 and 42 ns across runs, so compare the
-ratios rather than the times.
+ratios rather than the times. 1.3.0 did not change the dispatch code; its run, on a machine short of memory, is in
+[docs/benchmark-results/2026-10-23-1.3.0.md](docs/benchmark-results/2026-10-23-1.3.0.md).
 With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
