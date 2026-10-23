@@ -265,7 +265,7 @@ public sealed class MessageMapTests
         Markdown(run.Compilation).ShouldBe(Lf("""
             # Message map of Subject
 
-            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws.
+            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws. They are listed as they run with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first.
 
             ## Requests
 
@@ -303,7 +303,7 @@ public sealed class MessageMapTests
         Markdown(run.Compilation).ShouldBe(Lf("""
             # Message map of Subject
 
-            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws.
+            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws. They are listed as they run with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first.
 
             ## Requests
 
@@ -550,6 +550,23 @@ public sealed class MessageMapTests
         string map = Json(run.Compilation).ShouldNotBeNull();
         map.ShouldContain("\"Shop.Audit\"");
         map.ShouldContain("\"options.AddRequestPreProcessor(audit)\"");
+    }
+
+    [Fact]
+    public void Backticks_in_unread_source_stay_inside_their_code_span()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "Extra.Configure(options, \"``\");") + """
+
+            public static class Extra
+            {
+                public static void Configure(RelevoxOptions options, string tag) { }
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldContain("``` Extra.Configure(options, \"``\") ```");
     }
 
     [Fact]
