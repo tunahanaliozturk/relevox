@@ -17,7 +17,8 @@ internal static class MessageMapMarkdown
         markdown.Append("# Message map of ").Append(Get(map, "project")).Append("\n\n")
             .Append("Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. ")
             .Append("Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; ")
-            .Append("exception handlers and actions wrap the whole pipeline and run only when it throws.\n");
+            .Append("exception handlers and actions wrap the whole pipeline and run only when it throws. They are listed as they run ")
+            .Append("with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first.\n");
 
         Section(markdown, "Requests", Items(map, "requests"), static (markdown, request) =>
         {
@@ -120,8 +121,19 @@ internal static class MessageMapMarkdown
         [.. ((List<object?>)Get(entry, name)!).Cast<List<(string Name, object? Value)>>()];
 
     // Inline code keeps a generic's angle brackets from being read as HTML. Unread registrations are source text
-    // and may hold a backtick, which a longer fence and spaces keep literal.
-    private static string Code(string text) => text.IndexOf('`') < 0 ? $"`{text}`" : $"`` {text} ``";
+    // and may hold backticks, which a fence longer than their longest run, and spaces, keep literal.
+    private static string Code(string text)
+    {
+        int longest = 0;
+        for (int index = 0, run = 0; index < text.Length; index++)
+        {
+            run = text[index] == '`' ? run + 1 : 0;
+            longest = System.Math.Max(longest, run);
+        }
+
+        string fence = new('`', longest + 1);
+        return longest == 0 ? $"`{text}`" : $"{fence} {text} {fence}";
+    }
 
     // Mermaid reads quotes and angle brackets in a label as markup; its entity codes keep them literal.
     private static string Label(string type) => type.Replace("\"", "#quot;").Replace("<", "#lt;").Replace(">", "#gt;");
