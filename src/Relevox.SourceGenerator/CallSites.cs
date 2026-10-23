@@ -47,10 +47,11 @@ internal static class CallSites
         else
         {
             // The generated RelevoxMediator is not written yet when this runs, so a call on it binds to nothing. Its
-            // methods take the message first.
+            // methods take the message first, named request or notification.
             argument = Owner(invocation) is { } owner
                 && context.SemanticModel.GetTypeInfo(owner, cancellationToken).Type is IErrorTypeSymbol { Name: "RelevoxMediator" }
-                ? First(invocation)
+                ? invocation.ArgumentList.Arguments.FirstOrDefault(static argument => argument.NameColon?.Name.Identifier.ValueText is "request" or "notification")
+                    ?? First(invocation)
                 : null;
         }
 

@@ -838,11 +838,12 @@ public sealed class MessageMapTests
         // RelevoxMediator does not exist yet when the generator reads the call. File2.cs, after Handlers and Callers.
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers, Callers, """
             namespace Shop;
-            internal sealed class Typed(Subject.RelevoxMediator mediator) { public System.Threading.Tasks.Task<string> Go() => mediator.Send(new Ping("t")); }
+            internal sealed class Typed(Subject.RelevoxMediator mediator) { public System.Threading.Tasks.Task<string> Go() => mediator.Send(new Ping("t"));
+                public System.Threading.Tasks.Task<string> Named() => mediator.Send(cancellationToken: default, request: new Ping("n")); }
             """);
 
         run.CompilationErrors.ShouldBeEmpty();
-        Markdown(run.Compilation).ShouldNotBeNull().ShouldContain("Sent from `File1.cs:7`, `File1.cs:14`, `File2.cs:2`.");
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldContain("Sent from `File1.cs:7`, `File1.cs:14`, `File2.cs:2`, `File2.cs:3`.");
     }
 
     [Fact]
