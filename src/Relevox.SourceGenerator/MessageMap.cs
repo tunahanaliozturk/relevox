@@ -149,8 +149,9 @@ internal static class MessageMap
                 && Member(left) == "AutoRegisterRequestProcessors"
                 && IsOptions(Owner(left), parameters))
             {
-                // Only a plain = with a literal says what the value is; |=, &= and the like depend on what it was.
-                if (assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                // Only a plain = with a literal says what the value is; |=, &= and the like depend on what it was,
+                // and one in a branch or a loop may not run.
+                if (assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) && !Branched(assignment, lambda)
                     && (assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression) || assignment.Right.IsKind(SyntaxKind.FalseLiteralExpression)))
                 {
                     auto = assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression);
@@ -176,6 +177,12 @@ internal static class MessageMap
                 if (Receives(invocation, parameters))
                 {
                     unread.Add(Text(invocation));
+
+                    // A descriptor added to a processor list turns its stage on, whatever it is.
+                    string? list = Owner(invocation.Expression) is { } owner ? Member(owner) : null;
+                    bool adds = Member(invocation.Expression) is "Add" or "Insert";
+                    pre |= adds && list == "RequestPreProcessorsToRegister";
+                    post |= adds && list == "RequestPostProcessorsToRegister";
                 }
 
                 continue;
@@ -225,6 +232,13 @@ internal static class MessageMap
         model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.RelevoxOptions") is { } options
         && model.LookupSymbols(call.SpanStart, options, name, includeReducedExtensionMethods: true)
             .Any(symbol => !SymbolEqualityComparer.Default.Equals(symbol.ContainingType, options));
+
+    private static bool Branched(SyntaxNode node, SyntaxNode lambda) =>
+        node.Ancestors().TakeWhile(ancestor => ancestor != lambda).Any(static ancestor => ancestor is IfStatementSyntax or SwitchSectionSyntax
+            or SwitchExpressionArmSyntax or ConditionalExpressionSyntax or ForStatementSyntax or CommonForEachStatementSyntax
+            or WhileStatementSyntax or DoStatementSyntax or CatchClauseSyntax
+            || ancestor.IsKind(SyntaxKind.LogicalAndExpression) || ancestor.IsKind(SyntaxKind.LogicalOrExpression)
+            || ancestor.IsKind(SyntaxKind.CoalesceExpression));
 
     private static bool IsTypes(ExpressionSyntax expression) => expression is TypeOfExpressionSyntax or ArrayCreationExpressionSyntax
         or ImplicitArrayCreationExpressionSyntax or CollectionExpressionSyntax or BaseObjectCreationExpressionSyntax;

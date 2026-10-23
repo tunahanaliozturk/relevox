@@ -556,6 +556,31 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_processor_flag_set_in_a_branch_is_unread()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AutoRegisterRequestProcessors = true;",
+            "if (DateTime.Now.Year > 2000) options.AutoRegisterRequestProcessors = true;"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation).ShouldNotBeNull().ShouldContain("\"options.AutoRegisterRequestProcessors = true\"");
+    }
+
+    [Fact]
+    public void A_descriptor_added_to_a_processor_list_turns_its_stage_on()
+    {
+        // The scanned Audit runs because the list is no longer empty.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddRequestPreProcessor<Audit>();",
+            "options.RequestPreProcessorsToRegister.Add(ServiceDescriptor.Transient(typeof(IRequestPreProcessor<Place>), typeof(Audit)));"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain("\"Shop.Audit\"");
+        map.ShouldContain("\"options.RequestPreProcessorsToRegister.Add(");
+    }
+
+    [Fact]
     public void A_compound_assignment_to_the_processor_flag_is_unread()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
