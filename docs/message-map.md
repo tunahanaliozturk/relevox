@@ -180,13 +180,20 @@ from somewhere new shows it in the diff. Three steps.
 
    The build then writes `message-map.json` and `message-map.md` in the project folder. Commit both.
 
+   A project with several `<TargetFrameworks>` builds once per framework, and each build would write the same
+   two files, the last one winning. Give each framework its own, and commit them all:
+
+   ```xml
+   <RelevoxMessageMapPath>$(TargetFramework).message-map.json</RelevoxMessageMapPath>
+   ```
+
 2. The files are written with `\n` line endings on every machine. Tell Git to keep them that way, or a checkout
    on Windows with `core.autocrlf` turns them into `\r\n` and the check below reports a change that is not one.
    In `.gitattributes`:
 
    ```gitattributes
-   message-map.json text eol=lf
-   message-map.md text eol=lf
+   *message-map.json text eol=lf
+   *message-map.md text eol=lf
    ```
 
 3. After the build in CI, fail when the build changed the map, so a stale one cannot be merged:
