@@ -382,6 +382,46 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void The_options_a_registration_returns_kept_in_a_variable_are_unread()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "var pipeline = options.AddBehavior<LookCache>(); pipeline.AddRequestPreProcessor<Audit>();"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain(Lf("""
+              "unread": [
+                "var pipeline = options.AddBehavior<LookCache>();"
+              ]
+            """));
+    }
+
+    [Fact]
+    public void A_registration_with_an_argument_RelevoxOptions_does_not_take_is_unread()
+    {
+        // The string picks the extension method, which registers nothing.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "options.AddBehavior<LookCache>(); options.AddOpenBehavior(typeof(Logging<,>), \"custom\");") + """
+
+            public static class Tagged
+            {
+                public static RelevoxOptions AddOpenBehavior(this RelevoxOptions options, Type type, string tag) => options;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain(Lf("""
+              "unread": [
+                "options.AddOpenBehavior(typeof(Logging<,>), \"custom\")"
+              ]
+            """));
+        map.Split("\"Shop.Logging<Shop.Place, int>\"").Length.ShouldBe(2, "only the chained registration puts it in");
+    }
+
+    [Fact]
     public void Another_librarys_AddRelevox_is_not_read()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline + """

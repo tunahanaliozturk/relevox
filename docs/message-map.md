@@ -157,7 +157,9 @@ The map is what the build can know. Three things are only known when the applica
   Registering them through the `AddRelevox` options instead puts them in it.
 - **Options the build cannot read**: a `Type` held in a variable, a method passed to `AddRelevox` instead of a
   lambda, a call the options are handed to, such as `Configure(options)`, an extension method on them or
-  `options.BehaviorsToRegister.Clear()`, the options held in another variable, and a lambda or local function
+  `options.BehaviorsToRegister.Clear()`, a call with an argument other than types and a lifetime, which picks an
+  extension method of the same name, the options held in another variable, including the options a registration
+  call returns, and a lambda or local function
   inside the options lambda that uses them, since it may run later or never. These are listed in `unread`.
   Another library's method that happens to be called `AddRelevox` is ignored.
 - **Which of several `AddRelevox` calls runs first.** Only the first call to run applies its options; the next
