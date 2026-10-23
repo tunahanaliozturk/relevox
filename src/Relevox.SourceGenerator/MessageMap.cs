@@ -181,6 +181,22 @@ internal static class MessageMap
                 continue;
             }
 
+            // The options a call returns, kept as in var pipeline = options.AddBehavior(...), can be registered
+            // through where the build does not follow.
+            if (Kept(invocation))
+            {
+                unread.Add(Text((SyntaxNode?)invocation.FirstAncestorOrSelf<StatementSyntax>() ?? invocation));
+            }
+
+            // RelevoxOptions' own methods take only types and a lifetime. Any other argument picks an extension
+            // method of the same name, which need not register anything.
+            if (invocation.ArgumentList.Arguments.Any(argument => !IsTypes(argument.Expression)
+                && model.GetTypeInfo(argument.Expression, cancellationToken).Type?.ToDisplayString() != "Microsoft.Extensions.DependencyInjection.ServiceLifetime"))
+            {
+                unread.Add(Text(invocation));
+                continue;
+            }
+
             pre |= method.Kind == OptionKind.PreProcessor;
             post |= method.Kind == OptionKind.PostProcessor;
             List<ITypeSymbol?> types = name is GenericNameSyntax generic
@@ -190,8 +206,7 @@ internal static class MessageMap
                     .OrderBy(static argument => argument.NameColon?.Name.Identifier.ValueText == "implementationType" ? 1 : 0)
                     .Select(static argument => argument.Expression)
                     // The lifetime is the one argument that is not a type.
-                    .Where(static expression => expression is TypeOfExpressionSyntax or ArrayCreationExpressionSyntax
-                        or ImplicitArrayCreationExpressionSyntax or CollectionExpressionSyntax or BaseObjectCreationExpressionSyntax)
+                    .Where(IsTypes)
                     .SelectMany(expression => TypesIn(expression, model, cancellationToken))];
 
             int before = registrations.Count;
@@ -205,6 +220,27 @@ internal static class MessageMap
         }
 
         return new PipelineOptions(registrations.ToEquatableArray(), unread.ToEquatableArray(), auto, pre, post, written);
+    }
+
+    private static bool IsTypes(ExpressionSyntax expression) => expression is TypeOfExpressionSyntax or ArrayCreationExpressionSyntax
+        or ImplicitArrayCreationExpressionSyntax or CollectionExpressionSyntax or BaseObjectCreationExpressionSyntax;
+
+    // Whether what an options call returns, the options again, is used other than by the next call of a chain, as a
+    // statement or as the options lambda's body.
+    private static bool Kept(InvocationExpressionSyntax invocation)
+    {
+        SyntaxNode result = invocation;
+        while (result.Parent is ConditionalAccessExpressionSyntax conditional && conditional.WhenNotNull == result)
+        {
+            result = conditional;
+        }
+
+        return result.Parent switch
+        {
+            ExpressionStatementSyntax or AnonymousFunctionExpressionSyntax => false,
+            MemberAccessExpressionSyntax access => !(access.Expression == result && access.Parent is InvocationExpressionSyntax outer && outer.Expression == access),
+            _ => true,
+        };
     }
 
     // Whether the call is passed the options, or made on them (an extension method, or a change to one of the
