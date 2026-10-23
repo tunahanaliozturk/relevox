@@ -422,6 +422,20 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_processor_type_in_a_variable_still_turns_its_stage_on()
+    {
+        // The scanned Audit runs because the call adds a pre-processor, whichever it is.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddRequestPreProcessor<Audit>();",
+            "Type audit = typeof(Audit); options.AddRequestPreProcessor(audit);"));
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain("\"Shop.Audit\"");
+        map.ShouldContain("\"options.AddRequestPreProcessor(audit)\"");
+    }
+
+    [Fact]
     public void Another_librarys_AddRelevox_is_not_read()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline + """
