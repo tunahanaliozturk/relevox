@@ -833,6 +833,19 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_call_on_the_generated_mediator_is_a_call_site()
+    {
+        // RelevoxMediator does not exist yet when the generator reads the call. File2.cs, after Handlers and Callers.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers, Callers, """
+            namespace Shop;
+            internal sealed class Typed(Subject.RelevoxMediator mediator) { public System.Threading.Tasks.Task<string> Go() => mediator.Send(new Ping("t")); }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldContain("Sent from `File1.cs:7`, `File1.cs:14`, `File2.cs:2`.");
+    }
+
+    [Fact]
     public void A_call_site_is_written_relative_to_the_project()
     {
         CallSites.Relative(@"C:\src\Shop\Orders\Endpoints.cs", @"C:\src\Shop\").ShouldBe("Orders/Endpoints.cs");
