@@ -188,11 +188,9 @@ internal static class MessageMap
                 unread.Add(Text((SyntaxNode?)invocation.FirstAncestorOrSelf<StatementSyntax>() ?? invocation));
             }
 
-            // RelevoxOptions' own methods take only types and a lifetime. Any other argument picks an extension
-            // method of the same name, which need not register anything. A Type in a variable is still the
-            // options' method: it is unread below, but still turns its processor stage on.
-            if (invocation.ArgumentList.Arguments.Any(argument => !IsTypes(argument.Expression)
-                && model.GetTypeInfo(argument.Expression, cancellationToken).Type?.ToDisplayString() is not ("System.Type" or "Microsoft.Extensions.DependencyInjection.ServiceLifetime")))
+            // The lambda does not bind until AddRelevox exists, so which overload the call picks is not known. With
+            // an extension method of the same name in scope it may be that one, which need not register anything.
+            if (Extended(name.Identifier.ValueText, invocation, model))
             {
                 unread.Add(Text(invocation));
                 continue;
@@ -222,6 +220,11 @@ internal static class MessageMap
 
         return new PipelineOptions(registrations.ToEquatableArray(), unread.ToEquatableArray(), auto, pre, post, written);
     }
+
+    private static bool Extended(string name, SyntaxNode call, SemanticModel model) =>
+        model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.RelevoxOptions") is { } options
+        && model.LookupSymbols(call.SpanStart, options, name, includeReducedExtensionMethods: true)
+            .Any(symbol => !SymbolEqualityComparer.Default.Equals(symbol.ContainingType, options));
 
     private static bool IsTypes(ExpressionSyntax expression) => expression is TypeOfExpressionSyntax or ArrayCreationExpressionSyntax
         or ImplicitArrayCreationExpressionSyntax or CollectionExpressionSyntax or BaseObjectCreationExpressionSyntax;

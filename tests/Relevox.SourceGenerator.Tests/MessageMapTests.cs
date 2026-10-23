@@ -413,12 +413,28 @@ public sealed class MessageMapTests
 
         run.CompilationErrors.ShouldBeEmpty();
         string map = Json(run.Compilation).ShouldNotBeNull();
-        map.ShouldContain(Lf("""
-              "unread": [
-                "options.AddOpenBehavior(typeof(Logging<,>), \"custom\")"
-              ]
-            """));
-        map.Split("\"Shop.Logging<Shop.Place, int>\"").Length.ShouldBe(2, "only the chained registration puts it in");
+        map.ShouldContain("\"options.AddOpenBehavior(typeof(Logging<,>), \\\"custom\\\")\"");
+        map.ShouldNotContain("Shop.Logging", customMessage: "with the extension in scope, no AddOpenBehavior call is read");
+    }
+
+    [Fact]
+    public void A_registration_an_extension_of_the_same_name_may_take_is_unread()
+    {
+        // Only types go in, and the extension method still wins over the options' own one.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Pipeline.Replace(
+            "options.AddBehavior<LookCache>();",
+            "options.AddBehavior<LookCache>(typeof(string));") + """
+
+            public static class Typed
+            {
+                public static RelevoxOptions AddBehavior<T>(this RelevoxOptions options, Type type) => options;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldNotContain("Shop.LookCache");
+        map.ShouldContain("\"options.AddBehavior<LookCache>(typeof(string))\"");
     }
 
     [Fact]
