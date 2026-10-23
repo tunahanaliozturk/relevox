@@ -6,6 +6,12 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-23
+
+The message map, off by default: a project that turns it on gets a JSON and a Markdown file listing what its
+mediator dispatches, each pipeline in the order it runs, and where each message is sent from, to commit and
+check in CI. [docs/message-map.md](docs/message-map.md) shows how; ADRs 0014 to 0017 record the decisions.
+
 ### Added
 
 - The message map switch: `<RelevoxMessageMap>true</RelevoxMessageMap>` in a project writes a JSON map of what
@@ -27,6 +33,12 @@ All notable changes to this project are written down here. The format follows
 - [docs/message-map.md](docs/message-map.md) shows how to commit the map and fail a GitHub Actions build when it
   is stale; this repository's CI runs that step on the package smoke application. The map was checked by hand
   on eShop ([docs/migration-trial.md](docs/migration-trial.md)).
+
+### Performance
+
+- No change to dispatch: the runtime and the code the generator writes for it are the same as in 1.2.0. Every
+  benchmark was run again on this code, on a machine short of memory, so every library's times are higher than
+  in the 1.2.0 run and the ratios agree within noise ([results](docs/benchmark-results/2026-10-23-1.3.0.md)).
 
 ## [1.2.0] - 2026-10-21
 
