@@ -108,16 +108,19 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        // A send inside a Handle that implements a handler interface, plainly or explicitly, is from the request that
-        // Handle takes, sent or streamed as that interface says, or from none when it is a notification's. Anywhere
-        // else, including a helper method that is also called Handle, it is counted from every request the class
-        // handles.
+        // A send inside a Handle that implements handler interfaces, plainly or explicitly, is from the requests those
+        // interfaces take, sent or streamed as each says; a notification's Handle is from none. Anywhere else,
+        // including a helper method that is also called Handle, it is counted from every request the class handles.
         IEnumerable<Node> from = requests;
-        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle && Implemented(handler, handle) is { } contract)
+        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle && Implemented(handler, handle) is { Length: > 0 } contracts)
         {
-            // A notification's Handle is no request's, even for a message that is both a request and a notification.
-            Node own = new(handle.Parameters[0].Type, contract.Name == "IStreamRequestHandler");
-            from = contract.Name == "INotificationHandler" ? [] : requests.Where(request => request.Equals(own));
+            Node[] own =
+            [
+                .. contracts
+                    .Where(static contract => contract.Name != "INotificationHandler")
+                    .Select(contract => new Node(handle.Parameters[0].Type, contract.Name == "IStreamRequestHandler")),
+            ];
+            from = requests.Where(request => own.Contains(request));
         }
 
         Node to = new(message, method.Name == "CreateStream");
@@ -127,14 +130,16 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    /// <summary>The Relevox handler interface whose <c>Handle</c> the method implements for the type, or null.</summary>
-    private static INamedTypeSymbol? Implemented(INamedTypeSymbol handler, IMethodSymbol method) =>
+    /// <summary>The Relevox handler interfaces whose <c>Handle</c> the method implements for the type; one method can implement several.</summary>
+    private static INamedTypeSymbol[] Implemented(INamedTypeSymbol handler, IMethodSymbol method) =>
         method.Name != "Handle" && method.ExplicitInterfaceImplementations.Length == 0
-            ? null
-            : handler.AllInterfaces
-                .Where(IsRelevox)
-                .FirstOrDefault(contract => contract.GetMembers("Handle")
-                    .Any(member => SymbolEqualityComparer.Default.Equals(handler.FindImplementationForInterfaceMember(member), method)));
+            ? []
+            : [
+                .. handler.AllInterfaces
+                    .Where(IsRelevox)
+                    .Where(contract => contract.GetMembers("Handle")
+                        .Any(member => SymbolEqualityComparer.Default.Equals(handler.FindImplementationForInterfaceMember(member), method))),
+            ];
 
     /// <summary>
     /// What the type handles: requests and stream requests, empty for a notification handler, default for a type

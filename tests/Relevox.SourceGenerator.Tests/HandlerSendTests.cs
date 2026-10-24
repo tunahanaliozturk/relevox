@@ -326,6 +326,18 @@ public sealed class HandlerSendTests
             """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
     }
 
+    [Fact]
+    public void One_Handle_for_both_a_request_and_a_notification_keeps_its_request_edge()
+    {
+        Analyze("""
+            public sealed record Both : IRequest, INotification;
+            public sealed class BothHandler(ISender sender) : IRequestHandler<Both>, INotificationHandler<Both>
+            {
+                public Task Handle(Both message, CancellationToken cancellationToken) => sender.Send(new Both(), cancellationToken);
+            }
+            """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008", "RVX0009"]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)
