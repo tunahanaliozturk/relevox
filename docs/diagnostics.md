@@ -250,8 +250,8 @@ Everything the pipeline calls returns a task, so there is always somewhere to `a
 the pipeline is left to general analyzers, such as VSTHRD002 in Microsoft.VisualStudio.Threading.Analyzers.
 
 Not reported where the task is plainly finished, because reading those cannot block: `Task.FromResult(x)`,
-`Task.CompletedTask`, `ValueTask.FromResult(x)`, `new ValueTask<T>(value)`, and the task a `ContinueWith`
-continuation is handed, read anywhere inside it. `Wait(0)` and `Wait(TimeSpan.Zero)` are not reported either:
+`Task.CompletedTask`, `ValueTask.FromResult(x)`, `new ValueTask<T>(value)`, and the task a continuation passed
+to `Task.ContinueWith` is handed, read anywhere inside it; a `ContinueWith` method of your own gets no exemption. `Wait(0)` and `Wait(TimeSpan.Zero)` are not reported either:
 they ask whether the task has finished without waiting for it. A task checked with `IsCompleted` first is still reported; the rule does not follow
 the check, so suppress it there.
 

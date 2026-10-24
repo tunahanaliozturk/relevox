@@ -143,10 +143,19 @@ public sealed class BlockingCallTests
     }
 
     [Fact]
-    public void Blocking_outside_the_pipeline_and_a_Result_that_is_not_a_task_are_not_reported()
+    public void Blocking_outside_the_pipeline_and_a_Result_that_is_not_a_task_are_not_reported_but_a_ContinueWith_of_your_own_is()
     {
         Analyze(Work + """
             public sealed class Outcome { public int Result { get; } }
+
+            public sealed record Chain : IRequest<int>;
+            public sealed class ChainHandler(IStore store) : IRequestHandler<Chain, int>
+            {
+                public Task<int> Handle(Chain request, CancellationToken cancellationToken) => Task.FromResult(ContinueWith(task => task.Result));
+
+                // Not Task.ContinueWith: the task it hands over may still be running.
+                private int ContinueWith(Func<Task<int>, int> callback) => callback(store.Load());
+            }
 
             public sealed class Controller(IStore store)
             {
@@ -158,7 +167,7 @@ public sealed class BlockingCallTests
             {
                 public Task<int> Handle(Get request, CancellationToken cancellationToken) => Task.FromResult(new Outcome().Result);
             }
-            """).ShouldBeEmpty();
+            """).Select(static diagnostic => diagnostic.GetMessage(CultureInfo.InvariantCulture)).ShouldBe(["'ChainHandler' blocks on a task with '.Result'; await it instead"]);
     }
 
     private static Diagnostic[] Analyze(string source) =>

@@ -117,7 +117,9 @@ public sealed class BlockingCallAnalyzer : DiagnosticAnalyzer
         {
             if (parent is IAnonymousFunctionOperation lambda && SymbolEqualityComparer.Default.Equals(lambda.Symbol, parameter.Parameter.ContainingSymbol))
             {
-                return lambda.Parent is IDelegateCreationOperation { Parent: IArgumentOperation { Parent: IInvocationOperation { TargetMethod.Name: "ContinueWith" } } };
+                // Task's own ContinueWith only: a method of the same name elsewhere may call the lambda with any task.
+                return lambda.Parent is IDelegateCreationOperation { Parent: IArgumentOperation { Parent: IInvocationOperation { TargetMethod: { Name: "ContinueWith" } continuation } } }
+                    && IsTask(continuation.ContainingType);
             }
         }
 
