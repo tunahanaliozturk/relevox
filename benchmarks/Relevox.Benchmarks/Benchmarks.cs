@@ -238,7 +238,8 @@ public class PipelineBenchmarks
 /// <remarks>
 /// Both libraries then add their built-in processor behaviours for every request, so Piped carries two
 /// behaviours with nothing to do on top of its three. This is the shape of most real applications: a
-/// validation or logging processor for some requests, behaviours for others.
+/// validation or logging processor for some requests, behaviours for others. The last two rows send Ping
+/// instead, whose pre- and post-processor run.
 /// </remarks>
 [MemoryDiagnoser]
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
@@ -246,6 +247,8 @@ public class BuiltInBenchmarks
 {
     private readonly MediatRPeer.Piped _mediatrPiped = new(1);
     private readonly RelevoxPeer.Piped _relevoxPiped = new(1);
+    private readonly MediatRPeer.Ping _mediatrPing = new(1);
+    private readonly RelevoxPeer.Ping _relevoxPing = new(1);
     private ServiceProvider _mediatr = null!;
     private ServiceProvider _relevox = null!;
     private IServiceScope _mediatrScope = null!;
@@ -278,6 +281,12 @@ public class BuiltInBenchmarks
 
     [Benchmark(Description = "Relevox, typed")]
     public Task<int> RelevoxTyped() => _relevoxTyped.Send(_relevoxPiped);
+
+    [Benchmark(Description = "MediatR 12.5, processors that run")]
+    public Task<int> MediatRProcessors() => _mediatrSender.Send(_mediatrPing);
+
+    [Benchmark(Description = "Relevox, typed, processors that run")]
+    public Task<int> RelevoxProcessors() => _relevoxTyped.Send(_relevoxPing);
 }
 
 /// <summary>Notifications to one and to five handlers, with each library's default publisher.</summary>
