@@ -60,6 +60,47 @@ public sealed class FizzleHandler : IRequestHandler<Fizzle>
         throw new NotSupportedException("a request with no response");
 }
 
+// For Send(object): a cancellation thrown before any await, and a handler that does not finish synchronously.
+
+public sealed record GiveUp : IRequest<int>;
+
+public sealed class GiveUpHandler : IRequestHandler<GiveUp, int>
+{
+    public Task<int> Handle(GiveUp request, CancellationToken cancellationToken) =>
+        throw new OperationCanceledException("given up before any await");
+}
+
+public sealed record GiveUpQuietly : IRequest;
+
+public sealed class GiveUpQuietlyHandler : IRequestHandler<GiveUpQuietly>
+{
+    public Task Handle(GiveUpQuietly request, CancellationToken cancellationToken) =>
+        throw new OperationCanceledException("given up before any await");
+}
+
+public sealed record Later(int Value) : IRequest<int>;
+
+public sealed class LaterHandler(Trace trace) : IRequestHandler<Later, int>
+{
+    public async Task<int> Handle(Later request, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        trace.Add("LaterHandler");
+        return request.Value;
+    }
+}
+
+public sealed record LaterQuietly : IRequest;
+
+public sealed class LaterQuietlyHandler(Trace trace) : IRequestHandler<LaterQuietly>
+{
+    public async Task Handle(LaterQuietly request, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        trace.Add("LaterQuietlyHandler");
+    }
+}
+
 public sealed record Stamp : IRequest<int>;
 
 public sealed class StampHandler(Trace trace) : IRequestHandler<Stamp, int>

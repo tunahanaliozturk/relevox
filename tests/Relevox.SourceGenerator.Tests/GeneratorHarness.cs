@@ -113,6 +113,24 @@ public static class GeneratorHarness
     }
 
     /// <summary>
+    /// Builds the sources with the generator, loads the assembly and awaits <c>Program.Run()</c>, a static method
+    /// returning <c>Task&lt;string&gt;</c>, for code paths that only a project without any built-in behaviour
+    /// reaches, which the differential tests' scenario project cannot be.
+    /// </summary>
+    public static async Task<string> Execute(params string[] sources)
+    {
+        GeneratorRun run = Run(sources);
+        run.CompilationErrors.ShouldBeEmpty();
+        using MemoryStream image = new();
+        Microsoft.CodeAnalysis.Emit.EmitResult emitted = run.Compilation.Emit(image);
+        emitted.Success.ShouldBeTrue(string.Join(Environment.NewLine, emitted.Diagnostics));
+
+        System.Reflection.Assembly assembly = new System.Runtime.Loader.AssemblyLoadContext(name: null, isCollectible: true).LoadFromStream(new MemoryStream(image.ToArray()));
+        System.Reflection.MethodInfo entry = assembly.GetType("Program")?.GetMethod("Run") ?? throw new InvalidOperationException("The sources need a static Program.Run().");
+        return await (Task<string>)entry.Invoke(null, null)!;
+    }
+
+    /// <summary>
     /// Runs the generator twice with a change in between and reports how each tracked step's output was
     /// produced the second time.
     /// </summary>
