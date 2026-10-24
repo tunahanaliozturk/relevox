@@ -8,9 +8,7 @@ All notable changes to this project are written down here. The format follows
 
 ### Performance
 
-- `Send(object)` returns without an `async` state machine when the handler has already finished: 21.0 to 16.3 ns
-  for a request with a response in `SendBenchmarks`, same allocations. A request without a response sent this way
-  shares one completed task and allocates nothing of its own, from 176 bytes, with a singleton handler.
+- `Send(object)` for a request without a response boxes `Unit` once instead of on every send, 24 bytes less.
 
 ## [1.3.0] - 2026-10-23
 

@@ -3,7 +3,8 @@ namespace Relevox.SourceGenerator.Tests;
 /// <summary>
 /// <c>Send(object)</c> in a project with no built-in behaviour, where nothing else makes the send asynchronous:
 /// a throw before the handler's first await has to end up in the task, as MediatR's asynchronous wrapper puts it,
-/// faulted for an exception and canceled for <see cref="OperationCanceledException"/>.
+/// faulted for an exception and canceled for <see cref="OperationCanceledException"/>, and what the handler sets in
+/// the execution context must not reach the caller.
 /// </summary>
 public sealed class ObjectSendTests
 {
@@ -38,16 +39,29 @@ public sealed class ObjectSendTests
             public Task Handle(CancelsQuietly request, CancellationToken cancellationToken) => throw new OperationCanceledException();
         }
 
+        public static class Ambient
+        {
+            public static readonly AsyncLocal<string?> Local = new();
+        }
+
         public sealed record Answers : IRequest<int>;
         public sealed class AnswersHandler : IRequestHandler<Answers, int>
         {
-            public Task<int> Handle(Answers request, CancellationToken cancellationToken) => Task.FromResult(42);
+            public Task<int> Handle(Answers request, CancellationToken cancellationToken)
+            {
+                Ambient.Local.Value = "handler";
+                return Task.FromResult(42);
+            }
         }
 
         public sealed record Done : IRequest;
         public sealed class DoneHandler : IRequestHandler<Done>
         {
-            public Task Handle(Done request, CancellationToken cancellationToken) => Task.CompletedTask;
+            public Task Handle(Done request, CancellationToken cancellationToken)
+            {
+                Ambient.Local.Value = "handler";
+                return Task.CompletedTask;
+            }
         }
 
         public sealed record Yields : IRequest<int>;
@@ -91,6 +105,12 @@ public sealed class ObjectSendTests
                     return "threw " + exception.GetType().Name;
                 }
 
+                // A handler that finished synchronously ran on this thread; what it set must not be seen here.
+                if (Ambient.Local.Value is not null)
+                {
+                    return "saw " + Ambient.Local.Value;
+                }
+
                 try
                 {
                     return "returned " + (await task)?.GetType().Name;
@@ -104,7 +124,7 @@ public sealed class ObjectSendTests
         """;
 
     [Fact]
-    public async Task A_throw_before_the_first_await_ends_up_in_the_task_and_a_response_comes_back_boxed()
+    public async Task A_throw_before_the_first_await_ends_up_in_the_task_and_the_handler_context_stays_its_own()
     {
         string outcomes = await GeneratorHarness.Execute(Program);
 
