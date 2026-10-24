@@ -228,7 +228,8 @@ send of a type parameter, of `object`, or to a handler in a referenced project e
 handles more than one message, a send inside one `Handle` counts from that request, or from none when it is a
 notification's `Handle`; a send elsewhere in the class, a helper method called `Handle` included, counts from
 every request it handles. Sends in an abstract handler are not followed, since which of them a subclass keeps
-is not known.
+is not known. A message that is both a request and a stream request counts as two: `Send` reaches
+its request handler and `CreateStream` its stream handler, and the path marks the stream with `(stream)`.
 
 **Fix:** break the cycle, usually by moving the shared work into a service (RVX0008). If the recursion is
 bounded on purpose, suppress the rule at the send. Raise it to `error` in `.editorconfig` to make any new cycle
