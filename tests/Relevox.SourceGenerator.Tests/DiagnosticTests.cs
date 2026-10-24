@@ -155,7 +155,7 @@ public sealed class DiagnosticTests
 
         string page = File.ReadAllText(Path.Combine(root, "docs", "diagnostics.md"));
 
-        foreach (DiagnosticDescriptor rule in Diagnostics.All.Append(Relevox.Migration.MediatRUsageAnalyzer.Rule))
+        foreach (DiagnosticDescriptor rule in Diagnostics.All.Append(Relevox.Migration.MediatRUsageAnalyzer.Rule).Concat(new Relevox.Migration.HandlerSendAnalyzer().SupportedDiagnostics))
         {
             rule.HelpLinkUri.ShouldEndWith("/docs/diagnostics.md#" + rule.Id.ToLowerInvariant());
             // A heading of the id alone, so its anchor is the lower-case id the link ends with.
