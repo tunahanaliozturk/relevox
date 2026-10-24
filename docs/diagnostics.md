@@ -2,8 +2,10 @@
 
 Relevox decides dispatch while the project builds, so the mistakes a reflection-based mediator finds when a
 request is first sent, usually in production, are reported by the compiler instead. Each rule below is
-reported by the analyzer in the `Relevox` package, at the declaration it is about, so `#pragma warning
-disable` and `.editorconfig` severities work as they do for any other analyzer.
+reported by an analyzer, at the code it is about, so `#pragma warning disable` and `.editorconfig` severities
+work as they do for any other analyzer. RVX0001 to RVX0006 come with the generator in the `Relevox` package;
+RVX0007 and the architecture rules from RVX0008 on come in `Relevox.Contracts`, so they also run in the libraries
+that hold most handlers and reference only the contracts.
 
 | Rule | Default | In short |
 |---|---|---|
@@ -14,6 +16,26 @@ disable` and `.editorconfig` severities work as they do for any other analyzer.
 | [RVX0005](#rvx0005) | Warning | A referenced project has its own mediator |
 | [RVX0006](#rvx0006) | Warning | An `AddRelevox` call registers another project's mediator |
 | [RVX0007](#rvx0007) | Info | MediatR code to move to Relevox |
+| [RVX0008](#rvx0008) | Info | A handler sends another request |
+| [RVX0009](#rvx0009) | Info | Handlers send each other in a cycle |
+
+## Architecture rules
+
+From RVX0008 on, the rules are about how an application uses its mediator rather than about whether it can
+dispatch. Each points at code that works and is often a mistake, so each is Info by default: an IDE shows it
+as a suggestion, and a command-line build gets no new warning from a Relevox upgrade, so one with warnings as
+errors keeps building ([ADR 0018](adr/0018-architecture-rule-defaults.md)). To make one fail the build, raise it in `.editorconfig`;
+to silence one, lower it:
+
+```ini
+[*.cs]
+# A send cycle fails the build.
+dotnet_diagnostic.RVX0009.severity = error
+# Handlers that send other requests are a pattern this code base uses on purpose.
+dotnet_diagnostic.RVX0008.severity = none
+```
+
+`dotnet_analyzer_diagnostic.category-Relevox.severity` sets every Relevox rule at once, the dispatch rules too.
 
 ## RVX0001
 
@@ -165,3 +187,47 @@ alone, for a person to decide:
 - names in MediatR namespaces Relevox has no counterpart for, such as `MediatR.Registration`;
 - a namespace of your own called `MediatR`, which resolves and so is not reported: rename it first;
 - `MediatR` names in XML documentation `cref`s.
+
+## RVX0008
+
+**Handler sends another request.** Info.
+
+Reported at each `Send` or `CreateStream` call made on `ISender`, `IMediator` or the generated mediator from inside
+a handler: a request, stream or notification handler, including lambdas and other methods of the handler class.
+`Publish` is not reported; raising events from a handler is what notifications are for.
+
+A request sent from a handler goes through a pipeline of its own inside the pipeline of the request being
+handled. Every behaviour runs again, so a transaction behaviour opens a second transaction, a logging behaviour
+logs twice, and a validation failure deep inside comes out of the outer `Send`. A chain of these is hard to
+follow, and a loop between handlers is found only when the stack overflows (RVX0009).
+
+**Fix:** move the work both handlers need into a service they both call, and keep `Send` for the edges of the
+application: controllers, endpoints, message consumers and jobs. Where a handler sends on purpose, suppress the
+rule there. eShop's `IdentifiedCommandHandler` is an example: it wraps a command for idempotency and sends the
+command inside, so its pipeline runs for both on purpose ([docs/migration-trial.md](migration-trial.md)).
+
+```csharp
+#pragma warning disable RVX0008 // The wrapped command goes through its own pipeline on purpose.
+R result = await _mediator.Send(command, cancellationToken);
+#pragma warning restore RVX0008
+```
+
+## RVX0009
+
+**Handlers send each other in a cycle.** Info.
+
+Reported at a send from a handler when the request sent leads, through the handlers in this project, back to
+the request being handled: `A` sends `B`, `B` sends `A`; or `A` sends itself. The message shows the shortest way
+back, such as `A -> B -> C -> A`, and each send in the cycle is reported once.
+
+Unless something on the way stops it, such as a depth that runs out, the sends recurse until the stack
+overflows. Walking a tree by sending a request per node is the usual case where they do stop.
+
+Only sends whose message type is known at build time are followed, and only to handlers in the same project: a
+send of a type parameter, of `object`, or to a handler in a referenced project ends the search. In a class that
+handles more than one request, a send inside one `Handle` counts from that request; a send elsewhere in the
+class counts from every request it handles.
+
+**Fix:** break the cycle, usually by moving the shared work into a service (RVX0008). If the recursion is
+bounded on purpose, suppress the rule at the send. Raise it to `error` in `.editorconfig` to make any new cycle
+fail the build.

@@ -6,6 +6,16 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Architecture rules, Info by default so an upgrade adds no warning to any build, shipped in `Relevox.Contracts`
+  so they run where the handlers are (ADR 0018). Raise any of them in `.editorconfig` to enforce it
+  ([docs/diagnostics.md](docs/diagnostics.md#architecture-rules)).
+- RVX0008: a handler that sends another request or creates a stream, which runs a second pipeline inside the
+  first.
+- RVX0009: handlers in the project that send each other in a cycle, reported at each send with the way back,
+  such as `A -> B -> C -> A`.
+
 ### Performance
 
 - `Send(object)` for a request without a response boxes `Unit` once instead of on every send, 24 bytes less.
