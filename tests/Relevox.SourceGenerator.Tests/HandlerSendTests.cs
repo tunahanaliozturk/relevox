@@ -256,6 +256,23 @@ public sealed class HandlerSendTests
             """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008", "RVX0009"]);
     }
 
+    [Fact]
+    public void A_send_in_an_abstract_handler_is_reported_but_starts_no_cycle()
+    {
+        Analyze("""
+            public sealed record Walk(int Depth) : IRequest<int>;
+            public abstract class WalkBase(ISender sender) : IRequestHandler<Walk, int>
+            {
+                public virtual Task<int> Handle(Walk request, CancellationToken cancellationToken) => sender.Send(new Walk(request.Depth - 1), cancellationToken);
+            }
+
+            public sealed class WalkHandler(ISender sender) : WalkBase(sender)
+            {
+                public override Task<int> Handle(Walk request, CancellationToken cancellationToken) => Task.FromResult(0);
+            }
+            """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)
