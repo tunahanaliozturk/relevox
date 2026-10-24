@@ -212,6 +212,21 @@ public sealed class HandlerSendTests
             """).Where(static diagnostic => diagnostic.Id == "RVX0009").ShouldBeEmpty();
     }
 
+    [Fact]
+    public void Explicit_Handle_implementations_count_only_from_their_own_request()
+    {
+        Analyze("""
+            public sealed record Ping : IRequest<int>;
+            public sealed record Pong : IRequest<int>;
+            public sealed class Both(ISender sender) : IRequestHandler<Ping, int>, IRequestHandler<Pong, int>
+            {
+                Task<int> IRequestHandler<Ping, int>.Handle(Ping request, CancellationToken cancellationToken) => sender.Send(new Pong(), cancellationToken);
+
+                Task<int> IRequestHandler<Pong, int>.Handle(Pong request, CancellationToken cancellationToken) => Task.FromResult(2);
+            }
+            """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)

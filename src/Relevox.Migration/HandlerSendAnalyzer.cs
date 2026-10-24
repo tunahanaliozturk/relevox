@@ -106,9 +106,10 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        // A send inside Handle(TRequest, ...) is from that request; anywhere else in a class that handles several,
-        // it is counted from each of them.
-        ITypeSymbol? from = context.ContainingSymbol is IMethodSymbol { Name: "Handle", Parameters.Length: > 0 } handle
+        // A send inside Handle(TRequest, ...), written plainly or as an explicit interface implementation, is from
+        // that request; anywhere else in a class that handles several, it is counted from each of them.
+        ITypeSymbol? from = context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle
+            && (handle.Name == "Handle" || handle.ExplicitInterfaceImplementations.Any(static implemented => implemented.Name == "Handle"))
             ? requests.FirstOrDefault(request => SymbolEqualityComparer.Default.Equals(request, handle.Parameters[0].Type))
             : null;
         foreach (ITypeSymbol request in from is null ? requests : [from])
