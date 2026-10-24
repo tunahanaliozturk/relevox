@@ -312,6 +312,20 @@ public sealed class HandlerSendTests
         ]);
     }
 
+    [Fact]
+    public void A_message_that_is_both_a_request_and_a_notification_starts_no_cycle_from_its_notification_handler()
+    {
+        Analyze("""
+            public sealed record Both : IRequest<int>, INotification;
+            public sealed class BothHandler(ISender sender) : IRequestHandler<Both, int>, INotificationHandler<Both>
+            {
+                Task<int> IRequestHandler<Both, int>.Handle(Both request, CancellationToken cancellationToken) => Task.FromResult(1);
+
+                Task INotificationHandler<Both>.Handle(Both notification, CancellationToken cancellationToken) => sender.Send(new Both(), cancellationToken);
+            }
+            """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)

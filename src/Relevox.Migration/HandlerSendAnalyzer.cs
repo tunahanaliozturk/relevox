@@ -115,8 +115,9 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         IEnumerable<Node> from = requests;
         if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle && Implemented(handler, handle) is { } contract)
         {
+            // A notification's Handle is no request's, even for a message that is both a request and a notification.
             Node own = new(handle.Parameters[0].Type, contract.Name == "IStreamRequestHandler");
-            from = requests.Where(request => request.Equals(own));
+            from = contract.Name == "INotificationHandler" ? [] : requests.Where(request => request.Equals(own));
         }
 
         Node to = new(message, method.Name == "CreateStream");
