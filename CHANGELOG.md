@@ -15,6 +15,8 @@ All notable changes to this project are written down here. The format follows
   first.
 - RVX0009: handlers in the project that send each other in a cycle, reported at each send with the way back,
   such as `A -> B -> C -> A`.
+- RVX0010: `.Result`, `.Wait()` or `.GetAwaiter().GetResult()` on a task inside a handler, behaviour or
+  processor. A task that is plainly finished, such as `Task.FromResult(x)`, is not reported.
 
 ## [1.3.0] - 2026-10-23
 

@@ -150,6 +150,9 @@ rules raised to warnings in `.editorconfig` so that every report showed.
   where to suppress it. Clean Architecture has none.
 - **RVX0009, send cycles.** None in either. The send in `IdentifiedCommandHandler` is of the type parameter `T`,
   which the rule does not follow.
+- **RVX0010, blocking on a task.** None in either, and none missed: the one `GetAwaiter().GetResult()` in Clean
+  Architecture is in an EF Core interceptor, outside the pipeline, and the `.Result` in eShop's
+  `LinqSelectExtensions` is a property of its own result type, not of a task.
 
 ## Why bother
 

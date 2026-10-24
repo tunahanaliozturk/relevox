@@ -18,6 +18,7 @@ that hold most handlers and reference only the contracts.
 | [RVX0007](#rvx0007) | Info | MediatR code to move to Relevox |
 | [RVX0008](#rvx0008) | Info | A handler sends another request |
 | [RVX0009](#rvx0009) | Info | Handlers send each other in a cycle |
+| [RVX0010](#rvx0010) | Info | Pipeline code blocks on a task |
 
 ## Architecture rules
 
@@ -231,3 +232,31 @@ class counts from every request it handles.
 **Fix:** break the cycle, usually by moving the shared work into a service (RVX0008). If the recursion is
 bounded on purpose, suppress the rule at the send. Raise it to `error` in `.editorconfig` to make any new cycle
 fail the build.
+
+## RVX0010
+
+**Pipeline code blocks on a task.** Info.
+
+Reported at `.Result`, `.Wait()` and `.GetAwaiter().GetResult()`, with or without `ConfigureAwait`, on a `Task` or
+`ValueTask` inside a handler, behaviour, processor, exception handler or exception action.
+
+Each of those blocks the thread until the task finishes. Under a synchronisation context, as in classic ASP.NET,
+WPF or WinForms, it can deadlock: the task waits for the thread its caller is blocking. Without one it still
+holds a thread pool thread for as long as the work takes, which under load is how a service runs out of threads.
+Everything the pipeline calls returns a task, so there is always somewhere to `await` instead. Blocking outside
+the pipeline is left to general analyzers, such as VSTHRD002 in Microsoft.VisualStudio.Threading.Analyzers.
+
+Not reported where the task is plainly finished, because reading those cannot block: `Task.FromResult(x)`,
+`Task.CompletedTask`, `ValueTask.FromResult(x)`, `new ValueTask<T>(value)`, and the task a `ContinueWith`
+continuation is handed. A task checked with `IsCompleted` first is still reported; the rule does not follow
+the check, so suppress it there.
+
+**Fix:** make the method `async` and `await` the task:
+
+```csharp
+public async Task<Order> Handle(GetOrder request, CancellationToken cancellationToken)
+{
+    Customer customer = await _customers.FindAsync(request.CustomerId, cancellationToken);
+    ...
+}
+```
