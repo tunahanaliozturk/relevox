@@ -242,6 +242,20 @@ public sealed class HandlerSendTests
             """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
     }
 
+    [Fact]
+    public void A_helper_method_called_Handle_counts_from_every_request_so_its_cycle_is_found()
+    {
+        Analyze("""
+            public sealed record Walk(int Depth) : IRequest<int>;
+            public sealed class WalkHandler(ISender sender) : IRequestHandler<Walk, int>
+            {
+                public Task<int> Handle(Walk request, CancellationToken cancellationToken) => Handle(request.Depth);
+
+                private Task<int> Handle(int depth) => depth == 0 ? Task.FromResult(0) : sender.Send(new Walk(depth - 1));
+            }
+            """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008", "RVX0009"]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)
