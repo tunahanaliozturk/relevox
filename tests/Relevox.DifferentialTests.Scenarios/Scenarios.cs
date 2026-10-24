@@ -35,6 +35,24 @@ public static partial class Scenarios
     public static Task<string> SendObjectVoidRequest() =>
         Run.Scenario(async services => await services.GetRequiredService<ISender>().Send((object)new Ring(1)));
 
+    public static Task<string> SendObjectToHandlerThatThrows() =>
+        Run.Scenario(services => Run.Status(() => services.GetRequiredService<ISender>().Send((object)new Explode())));
+
+    public static Task<string> SendObjectVoidToHandlerThatThrows() =>
+        Run.Scenario(services => Run.Status(() => services.GetRequiredService<ISender>().Send((object)new Fizzle())));
+
+    public static Task<string> SendObjectToHandlerThatCancels() =>
+        Run.Scenario(services => Run.Status(() => services.GetRequiredService<ISender>().Send((object)new GiveUp())));
+
+    public static Task<string> SendObjectVoidToHandlerThatCancels() =>
+        Run.Scenario(services => Run.Status(() => services.GetRequiredService<ISender>().Send((object)new GiveUpQuietly())));
+
+    public static Task<string> SendObjectToHandlerThatYields() =>
+        Run.Scenario(async services => await services.GetRequiredService<ISender>().Send((object)new Later(7)));
+
+    public static Task<string> SendObjectVoidToHandlerThatYields() =>
+        Run.Scenario(async services => await services.GetRequiredService<ISender>().Send((object)new LaterQuietly()));
+
     public static Task<string> SendObjectThatIsNotARequest() =>
         Run.Scenario(services => Run.Timing(() => services.GetRequiredService<ISender>().Send((object)"not a request")));
 

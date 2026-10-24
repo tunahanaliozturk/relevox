@@ -157,6 +157,33 @@ public static class Run
         }
     }
 
+    /// <summary>
+    /// Like <see cref="Timing"/>, and also how the task ended: a task canceled by an exception and one faulted by
+    /// it rethrow the same exception when awaited, so only the status tells them apart.
+    /// </summary>
+    public static async Task<object?> Status(Func<Task> call)
+    {
+        Task task;
+        try
+        {
+            task = call();
+        }
+        catch (Exception exception)
+        {
+            return $"threw synchronously: {exception.GetType().FullName}";
+        }
+
+        try
+        {
+            await task;
+            return "completed";
+        }
+        catch (Exception exception)
+        {
+            return $"{task.Status} task: {exception.GetType().FullName}";
+        }
+    }
+
     /// <summary>Says whether a stream failed when it was created or when it was enumerated.</summary>
     public static async Task<object?> StreamTiming<T>(Func<IAsyncEnumerable<T>> create)
     {
