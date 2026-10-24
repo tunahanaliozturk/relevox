@@ -6,6 +6,13 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-25
+
+Architecture rules: the analyzers point out handlers that send other requests or each other in a cycle,
+pipeline code that blocks on a task, and notifications published from a layer that should not publish them.
+Every one is a suggestion until a project raises it in `.editorconfig`, so moving to 1.4.0 adds no warning to
+any build; ADR 0018 records why. The pre- and post-processor behaviours also got faster.
+
 ### Added
 
 - Architecture rules, Info by default so an upgrade adds no warning to any build, shipped in `Relevox.Contracts`
