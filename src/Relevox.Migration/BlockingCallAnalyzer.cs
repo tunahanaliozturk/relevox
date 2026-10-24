@@ -63,7 +63,7 @@ public sealed class BlockingCallAnalyzer : DiagnosticAnalyzer
                 {
                     IInvocationOperation invocation = (IInvocationOperation)operation.Operation;
                     IMethodSymbol method = invocation.TargetMethod;
-                    if (method.Name == "Wait" && !method.IsStatic && IsTask(method.ContainingType))
+                    if (method.Name == "Wait" && !method.IsStatic && IsTask(method.ContainingType) && !IsPoll(invocation))
                     {
                         Report(operation, pipeline, invocation.Instance, ".Wait()", invocation.Syntax);
                     }
@@ -110,17 +110,34 @@ public sealed class BlockingCallAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool IsContinuation(IOperation parameter)
+    /// <summary>Whether the parameter is the task a lambda passed to <c>ContinueWith</c> is given, read at any depth inside it.</summary>
+    private static bool IsContinuation(IParameterReferenceOperation parameter)
     {
         for (IOperation? parent = parameter.Parent; parent is not null; parent = parent.Parent)
         {
-            if (parent is IAnonymousFunctionOperation lambda)
+            if (parent is IAnonymousFunctionOperation lambda && SymbolEqualityComparer.Default.Equals(lambda.Symbol, parameter.Parameter.ContainingSymbol))
             {
                 return lambda.Parent is IDelegateCreationOperation { Parent: IArgumentOperation { Parent: IInvocationOperation { TargetMethod.Name: "ContinueWith" } } };
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// <c>Wait(0)</c> or <c>Wait(TimeSpan.Zero)</c>, which only asks whether the task has finished. Awaiting
+    /// instead would change what the code does.
+    /// </summary>
+    private static bool IsPoll(IInvocationOperation wait)
+    {
+        IOperation? timeout = wait.Arguments.FirstOrDefault(static argument => argument.Parameter?.Ordinal == 0)?.Value;
+        return timeout switch
+        {
+            null => false,
+            { Type.SpecialType: SpecialType.System_Int32, ConstantValue: { HasValue: true, Value: 0 } } => true,
+            IFieldReferenceOperation { Field: { Name: "Zero", ContainingType.Name: "TimeSpan" } } => true,
+            _ => false,
+        };
     }
 
     /// <summary>The task an awaiter came from, for <c>task.GetAwaiter()</c> and <c>task.ConfigureAwait(x).GetAwaiter()</c>.</summary>
