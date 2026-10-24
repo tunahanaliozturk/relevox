@@ -49,6 +49,10 @@ anything:
   which processors run. [compatibility.md](docs/compatibility.md) lists what they pinned down.
 - **Mistakes found by the compiler.** No assembly scanning. A request with no handler, or two, or a handler
   the application cannot call, is reported while building, with a [page per rule](docs/diagnostics.md).
+- **Architecture rules.** Handlers that send other requests or each other in a cycle, pipeline code that blocks
+  on a task, and notifications published from the wrong layer are pointed out at build time. They are
+  suggestions until a project raises them in `.editorconfig`, so an upgrade adds no warning to any build
+  ([architecture rules](docs/diagnostics.md#architecture-rules)).
 - **Trimming and NativeAOT** without annotations. A sample is published with NativeAOT and run in CI.
 
 ## How fast
