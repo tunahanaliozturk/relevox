@@ -227,6 +227,21 @@ public sealed class HandlerSendTests
             """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
     }
 
+    [Fact]
+    public void A_send_from_the_Handle_of_a_notification_is_from_no_request()
+    {
+        Analyze("""
+            public sealed record Ping : IRequest<int>;
+            public sealed record Happened : INotification;
+            public sealed class Both(ISender sender) : IRequestHandler<Ping, int>, INotificationHandler<Happened>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+
+                public Task Handle(Happened notification, CancellationToken cancellationToken) => sender.Send(new Ping(), cancellationToken);
+            }
+            """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)
