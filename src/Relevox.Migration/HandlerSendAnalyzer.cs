@@ -107,12 +107,16 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         }
 
         // A send inside Handle(TRequest, ...), written plainly or as an explicit interface implementation, is from
-        // that request; anywhere else in a class that handles several, it is counted from each of them.
-        ITypeSymbol? from = context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle
-            && (handle.Name == "Handle" || handle.ExplicitInterfaceImplementations.Any(static implemented => implemented.Name == "Handle"))
-            ? requests.FirstOrDefault(request => SymbolEqualityComparer.Default.Equals(request, handle.Parameters[0].Type))
-            : null;
-        foreach (ITypeSymbol request in from is null ? requests : [from])
+        // that request, and one inside the Handle of a notification is from no request. Anywhere else in a class
+        // that handles several requests, it is counted from each of them.
+        IEnumerable<ITypeSymbol> from = requests;
+        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle
+            && (handle.Name == "Handle" || handle.ExplicitInterfaceImplementations.Any(static implemented => implemented.Name == "Handle")))
+        {
+            from = requests.Where(request => SymbolEqualityComparer.Default.Equals(request, handle.Parameters[0].Type));
+        }
+
+        foreach (ITypeSymbol request in from)
         {
             edges.Add(new Edge(request, message, location));
         }
