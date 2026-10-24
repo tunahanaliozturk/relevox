@@ -45,37 +45,28 @@ public sealed class AnalyzerCostMeasurement
         CSharpGeneratorDriver.Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: parse)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _, TestContext.Current.CancellationToken);
 
-        ImmutableArray<DiagnosticAnalyzer> analyzers = [new RelevoxAnalyzer(), new MediatRUsageAnalyzer(), new HandlerSendAnalyzer()];
+        ImmutableArray<DiagnosticAnalyzer> analyzers = [new RelevoxAnalyzer(), new MediatRUsageAnalyzer(), new HandlerSendAnalyzer(), new BlockingCallAnalyzer()];
 
-        // Three full analyses: the first warms up the JIT, and the faster of the other two is reported.
-        Dictionary<string, List<double>> times = [];
-        for (int run = 0; run < 3; run++)
+        // Each analyzer alone, so that work Roslyn shares between analyzers, such as building operation trees, is
+        // charged to every one that needs it rather than to whichever asked first. Three analyses each: the first
+        // warms up the JIT, and the faster of the other two is reported.
+        foreach (DiagnosticAnalyzer analyzer in analyzers)
         {
-            CompilationWithAnalyzers analysis = output.WithAnalyzers(
-                analyzers,
-                new CompilationWithAnalyzersOptions(new AnalyzerOptions([]), onAnalyzerException: null, concurrentAnalysis: false, logAnalyzerExecutionTime: true));
-            await analysis.GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
-            if (run == 0)
+            List<double> times = [];
+            for (int run = 0; run < 3; run++)
             {
-                continue;
-            }
-
-            foreach (DiagnosticAnalyzer analyzer in analyzers)
-            {
+                CompilationWithAnalyzers analysis = output.WithAnalyzers(
+                    [analyzer],
+                    new CompilationWithAnalyzersOptions(new AnalyzerOptions([]), onAnalyzerException: null, concurrentAnalysis: false, logAnalyzerExecutionTime: true));
+                await analysis.GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
                 AnalyzerTelemetryInfo info = await analysis.GetAnalyzerTelemetryInfoAsync(analyzer, TestContext.Current.CancellationToken);
-                string name = analyzer.GetType().Name;
-                if (!times.TryGetValue(name, out List<double>? list))
+                if (run > 0)
                 {
-                    times[name] = list = [];
+                    times.Add(info.ExecutionTime.TotalMilliseconds);
                 }
-
-                list.Add(info.ExecutionTime.TotalMilliseconds);
             }
-        }
 
-        foreach ((string name, List<double> list) in times)
-        {
-            string line = string.Create(CultureInfo.InvariantCulture, $"{name}: {list.Min():F0} ms");
+            string line = string.Create(CultureInfo.InvariantCulture, $"{analyzer.GetType().Name}: {times.Min():F0} ms");
             TestContext.Current.TestOutputHelper?.WriteLine(line);
             Console.WriteLine(line);
         }
