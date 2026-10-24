@@ -93,13 +93,17 @@ public static class GeneratorHarness
     /// <summary>
     /// What one of the contracts' analyzers reports, Info included, over the compilation the generator produced.
     /// </summary>
-    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, params string[] sources)
+    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, params string[] sources) =>
+        Analyze(analyzer, new Dictionary<string, string>(), sources);
+
+    /// <summary>Like <see cref="Analyze(DiagnosticAnalyzer, string[])"/>, with <c>.editorconfig</c> settings that apply to every file.</summary>
+    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, IReadOnlyDictionary<string, string> settings, params string[] sources)
     {
         CSharpGeneratorDriver
             .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: ParseOptions)
             .RunGeneratorsAndUpdateCompilation(Compile("Subject", [], sources), out Compilation output, out _);
         return output
-            .WithAnalyzers([analyzer])
+            .WithAnalyzers([analyzer], new AnalyzerOptions([], new FileOptionsProvider(settings)))
             .GetAnalyzerDiagnosticsAsync()
             .GetAwaiter()
             .GetResult();
@@ -242,6 +246,26 @@ public static class GeneratorHarness
         private sealed class Options(Dictionary<string, string> values) : AnalyzerConfigOptions
         {
             public static readonly Options Empty = new([]);
+
+            public override bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value) =>
+                values.TryGetValue(key, out value);
+        }
+    }
+
+    /// <summary>The same <c>.editorconfig</c> settings for every file, one options object for all, as Roslyn shares them.</summary>
+    private sealed class FileOptionsProvider(IReadOnlyDictionary<string, string> values) : AnalyzerConfigOptionsProvider
+    {
+        private readonly FileOptions _options = new(values);
+
+        public override AnalyzerConfigOptions GlobalOptions => _options;
+
+        public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => _options;
+
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => _options;
+
+        private sealed class FileOptions(IReadOnlyDictionary<string, string> values) : AnalyzerConfigOptions
+        {
+            public override IEnumerable<string> Keys => values.Keys;
 
             public override bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value) =>
                 values.TryGetValue(key, out value);

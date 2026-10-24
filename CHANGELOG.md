@@ -18,6 +18,11 @@ All notable changes to this project are written down here. The format follows
 - RVX0010: `.Result`, `.Wait()` or `.GetAwaiter().GetResult()` on a task inside a handler, behaviour or
   processor. A task that is plainly finished, such as `Task.FromResult(x)`, is not reported.
 
+- RVX0011: a notification published from a layer its kind may not be published from, with layers and rules in
+  `.editorconfig` (`relevox.layer.domain = MyApp.Domain`, `relevox.publish_from.infrastructure =
+  MyApp.Domain.Common.BaseEvent`). Nothing is checked until a project defines them.
+- RVX0012, a warning: a layer setting RVX0011 cannot use, such as a `publish_from` for a layer no setting defines.
+
 ### Performance
 
 - `Send(object)` for a request without a response boxes `Unit` once instead of on every send, 24 bytes less.
