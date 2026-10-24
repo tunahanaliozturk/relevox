@@ -7,7 +7,7 @@ namespace Relevox.SourceGenerator.Tests;
 /// <summary>RVX0010, blocking on a task inside a handler, behaviour or processor (#49).</summary>
 public sealed class BlockingCallTests
 {
-    private const string Usings = "using Relevox; using Relevox.Pipeline; using System; using System.Threading; using System.Threading.Tasks;\n";
+    private const string Usings = "using Relevox; using Relevox.Pipeline; using System; using System.Linq; using System.Threading; using System.Threading.Tasks;\n";
 
     private const string Work = """
         public sealed record Ping : IRequest<int>;
@@ -56,6 +56,7 @@ public sealed class BlockingCallTests
                 public Task<int> Handle(Get request, CancellationToken cancellationToken)
                 {
                     store.Save().Wait();
+                    store.Save().Wait(100);
                     store.Save().GetAwaiter().GetResult();
                     store.Save().ConfigureAwait(false).GetAwaiter().GetResult();
                     store.Flush().GetAwaiter().GetResult();
@@ -70,7 +71,7 @@ public sealed class BlockingCallTests
 
         messages.ShouldBe(
         [
-            "'GetHandler' blocks on a task with '.Wait()'; await it instead",
+            .. Enumerable.Repeat("'GetHandler' blocks on a task with '.Wait()'; await it instead", 2),
             .. Enumerable.Repeat("'GetHandler' blocks on a task with '.GetAwaiter().GetResult()'; await it instead", 5),
             "'GetHandler' blocks on a task with '.Result'; await it instead",
             "'GetHandler' blocks on a task with '.GetAwaiter().GetResult()'; await it instead",
@@ -134,7 +135,8 @@ public sealed class BlockingCallTests
                     Task.CompletedTask.GetAwaiter().GetResult();
                     int b = new ValueTask<int>(2).Result;
                     int c = ValueTask.FromResult(3).GetAwaiter().GetResult();
-                    return store.Load().ContinueWith(task => task.Result + a + b + c, cancellationToken);
+                    bool done = store.Save().Wait(0) && store.Save().Wait(TimeSpan.Zero) && store.Save().Wait(0, cancellationToken);
+                    return store.Load().ContinueWith(task => task.Result + new[] { a, b, c }.Select(x => x + task.Result).Sum() + (done ? 1 : 0), cancellationToken);
                 }
             }
             """).ShouldBeEmpty();
