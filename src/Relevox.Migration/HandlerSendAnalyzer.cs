@@ -100,8 +100,10 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         Location location = NameLocation(invocation);
         context.ReportDiagnostic(Diagnostic.Create(NestedSend, location, handler.Name, message?.ToDisplayString() ?? "a request"));
 
-        // Only a known, closed request type can be followed to its handler.
-        if (message is null or ITypeParameterSymbol || requests.IsEmpty)
+        // Only a known, closed request type can be followed to its handler. An abstract handler is never the one
+        // dispatched to, and which of its sends a concrete subclass keeps is not known here, so it adds no edges:
+        // a cycle through one is missed rather than one reported that cannot happen.
+        if (message is null or ITypeParameterSymbol || requests.IsEmpty || handler.IsAbstract)
         {
             return;
         }
