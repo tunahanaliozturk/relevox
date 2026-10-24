@@ -58,7 +58,10 @@ public sealed class RequestPreProcessorBehavior<TRequest, TResponse> : IPipeline
                 }
             }
 
-            return next(cancellationToken);
+            // Only a task that succeeded can be handed back as it is. Awaiting one that failed turns an
+            // OperationCanceledException fault into a canceled task, as MediatR's await does.
+            Task<TResponse> rest = next(cancellationToken);
+            return rest.IsCompletedSuccessfully ? rest : Await(rest);
         }
         catch (Exception exception)
         {
@@ -69,6 +72,8 @@ public sealed class RequestPreProcessorBehavior<TRequest, TResponse> : IPipeline
             scope.Exit();
         }
     }
+
+    private static async Task<TResponse> Await(Task<TResponse> rest) => await rest.ConfigureAwait(false);
 
     private async Task<TResponse> Rest(Task processed, int index, TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
