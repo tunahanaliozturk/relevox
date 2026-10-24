@@ -227,7 +227,8 @@ Only sends whose message type is known at build time are followed, and only to h
 send of a type parameter, of `object`, or to a handler in a referenced project ends the search. In a class that
 handles more than one message, a send inside one `Handle` counts from that request, or from none when it is a
 notification's `Handle`; a send elsewhere in the class, a helper method called `Handle` included, counts from
-every request it handles.
+every request it handles. Sends in an abstract handler are not followed, since which of them a subclass keeps
+is not known.
 
 **Fix:** break the cycle, usually by moving the shared work into a service (RVX0008). If the recursion is
 bounded on purpose, suppress the rule at the send. Raise it to `error` in `.editorconfig` to make any new cycle
