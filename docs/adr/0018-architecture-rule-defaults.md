@@ -27,8 +27,9 @@ build gets no new warning from an upgrade. A team that wants a rule enforced rai
 `dotnet_analyzer_diagnostic.category-Relevox.severity` covers every Relevox rule at once.
 [docs/diagnostics.md](../diagnostics.md) shows both.
 
-A rule that needs configuration to mean anything, such as the layer rule planned for RVX0011 (#52), is on by
-default and reports nothing until it is configured. A configuration it cannot read is reported, not ignored.
+A rule that needs configuration to mean anything, such as the layer rule RVX0011 (#52), is on by default and
+reports nothing until it is configured. A configuration it cannot read is reported, not ignored, as a warning
+(RVX0012): only a project that wrote the setting can get it.
 
 A rule may be made louder in a major version, never in a minor one.
 

@@ -19,6 +19,8 @@ that hold most handlers and reference only the contracts.
 | [RVX0008](#rvx0008) | Info | A handler sends another request |
 | [RVX0009](#rvx0009) | Info | Handlers send each other in a cycle |
 | [RVX0010](#rvx0010) | Info | Pipeline code blocks on a task |
+| [RVX0011](#rvx0011) | Info | Notification published from the wrong layer |
+| [RVX0012](#rvx0012) | Warning | Layer setting cannot be used |
 
 ## Architecture rules
 
@@ -264,3 +266,52 @@ public async Task<Order> Handle(GetOrder request, CancellationToken cancellation
     ...
 }
 ```
+
+## RVX0011
+
+**Notification published from the wrong layer.** Info.
+
+Clean Architecture projects have rules like "domain events are published by the infrastructure once the entities
+that raised them are saved, never straight from an endpoint". RVX0011 checks rules of that kind, which say which
+layers may publish notifications of a given kind. Nothing is reported until a project defines them, in
+`.editorconfig` or a global config:
+
+```ini
+[*.cs]
+# A layer is one or more namespaces, each with everything below it.
+relevox.layer.domain = CleanArchitecture.Domain
+relevox.layer.application = CleanArchitecture.Application
+relevox.layer.infrastructure = CleanArchitecture.Infrastructure
+relevox.layer.web = CleanArchitecture.Web
+
+# Notifications that are, derive from or implement this type may only be published from this layer.
+relevox.publish_from.infrastructure = CleanArchitecture.Domain.Common.BaseEvent
+```
+
+- **`relevox.layer.<name>`** lists namespaces, separated by commas. Code belongs to the layer with the longest
+  namespace that contains it, so `MyApp` and `MyApp.Domain` can both be layers; code in no layer counts as
+  being outside every one.
+- **`relevox.publish_from.<layer>`** lists notification types by full name, separated by commas, with
+  `` `1 `` for one generic parameter (``MyApp.Envelope`1``). Listing a type under two layers allows both. A
+  notification of several listed kinds must satisfy each of them.
+- Layer names are case-insensitive, because `.editorconfig` lower-cases keys. Types are written in the
+  values, which keep their case.
+
+Reported at each `Publish` on `IPublisher`, `IMediator` or the generated mediator whose notification type is
+known where it is written. A notification passed as `object` or as a type parameter is not checked.
+
+**Fix:** publish from the allowed layer. For domain events that usually means adding the event to the entity
+and letting the code that saves it publish, as Clean Architecture's `DispatchDomainEventsInterceptor` does.
+
+## RVX0012
+
+**Layer setting cannot be used.** Warning.
+
+A `relevox.layer.*` or `relevox.publish_from.*` setting that RVX0011 cannot use: a layer with no namespaces, a
+`publish_from` for a layer no `relevox.layer.*` setting defines, often a typo, or a type the project cannot
+find. A warning rather than Info like the rules: it is only reported to a project that wrote such a setting, and
+a rule that silently checks nothing is worse than no rule. Since a settings file at the root of a repository
+reaches every project, a type that cannot be found is only reported in a project that has code in one of the
+layers.
+
+**Fix:** correct the setting the message names.

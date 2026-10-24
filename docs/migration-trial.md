@@ -153,6 +153,10 @@ rules raised to warnings in `.editorconfig` so that every report showed.
 - **RVX0010, blocking on a task.** None in either, and none missed: the one `GetAwaiter().GetResult()` in Clean
   Architecture is in an EF Core interceptor, outside the pipeline, and the `.Result` in eShop's
   `LinqSelectExtensions` is a property of its own result type, not of a task.
+- **RVX0011, publishing from the wrong layer.** Clean Architecture with its four layers in `.editorconfig` and
+  `BaseEvent` allowed from Infrastructure: no reports, since its one `Publish` is in
+  `DispatchDomainEventsInterceptor`. With `BaseEvent` allowed only from Web instead, that call was reported, and
+  a `publish_from` with a misspelt layer name was reported as RVX0012.
 
 ## Why bother
 
