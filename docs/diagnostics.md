@@ -40,6 +40,20 @@ dotnet_diagnostic.RVX0008.severity = none
 
 `dotnet_analyzer_diagnostic.category-Relevox.severity` sets every Relevox rule at once, the dispatch rules too.
 
+### A handler that does not pass its token on
+
+There is no Relevox rule for a handler that takes a `CancellationToken` and does not pass it to the calls it
+awaits, because .NET's own CA2016 already reports exactly that, inside handlers as everywhere else, with a code
+fix and *Fix all*. It reports each call that could take the token and does not, whether the token is never used
+or used for only some of the calls. It is on by default as a suggestion; to make it count, raise it:
+
+```ini
+[*.cs]
+dotnet_diagnostic.CA2016.severity = warning
+```
+
+CA2016 does not look inside lambdas, so a token captured by a lambda and not passed on is not reported.
+
 ## RVX0001
 
 **Request has no handler.** Warning.
