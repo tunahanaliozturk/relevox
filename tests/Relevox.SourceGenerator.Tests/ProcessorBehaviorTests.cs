@@ -3,7 +3,8 @@ namespace Relevox.SourceGenerator.Tests;
 /// <summary>
 /// The pre- and post-processor behaviours avoid a state machine when everything finishes synchronously, and must
 /// still behave as the <c>async</c> methods MediatR has: a behaviour outside them sees a faulted task, or a canceled
-/// one, never a synchronous throw, and none of the handler's changes to the execution context. Seen from a synchronous behaviour registered before <c>AddRelevox</c>, in a
+/// one, never a synchronous throw, a task faulted with <see cref="OperationCanceledException"/> turned into a canceled
+/// one as an <c>await</c> turns it, and none of the handler's changes to the execution context. Seen from a synchronous behaviour registered before <c>AddRelevox</c>, in a
 /// project without exception handlers, whose asynchronous behaviours would otherwise hide the difference.
 /// </summary>
 public sealed class ProcessorBehaviorTests
@@ -17,7 +18,7 @@ public sealed class ProcessorBehaviorTests
         using System.Threading;
         using System.Threading.Tasks;
 
-        public enum Act { Answer, Throw, Cancel, Yield }
+        public enum Act { Answer, Throw, Cancel, Yield, FaultCanceled }
 
         public sealed record Ask(Act Before, Act Handler, Act After) : IRequest<int>;
 
@@ -62,6 +63,7 @@ public sealed class ProcessorBehaviorTests
                 Act.Throw => throw new NotSupportedException(),
                 Act.Cancel => throw new OperationCanceledException(),
                 Act.Yield => Later(value),
+                Act.FaultCanceled => Task.FromException<int>(new OperationCanceledException()),
                 _ => Task.FromResult(value),
             };
 
@@ -96,22 +98,30 @@ public sealed class ProcessorBehaviorTests
             public static async Task<string> Run()
             {
                 List<string> outcomes = [];
-                foreach ((bool pre, Ask ask) in new (bool, Ask)[]
+                foreach ((string processors, Ask ask) in new (string, Ask)[]
                 {
-                    (true, new(Act.Answer, Act.Answer, Act.Answer)),
-                    (true, new(Act.Throw, Act.Answer, Act.Answer)),
-                    (true, new(Act.Cancel, Act.Answer, Act.Answer)),
-                    (true, new(Act.Answer, Act.Throw, Act.Answer)),
-                    (true, new(Act.Answer, Act.Cancel, Act.Answer)),
-                    (true, new(Act.Yield, Act.Yield, Act.Yield)),
+                    ("pre+post", new(Act.Answer, Act.Answer, Act.Answer)),
+                    ("pre+post", new(Act.Throw, Act.Answer, Act.Answer)),
+                    ("pre+post", new(Act.Cancel, Act.Answer, Act.Answer)),
+                    ("pre+post", new(Act.Answer, Act.Throw, Act.Answer)),
+                    ("pre+post", new(Act.Answer, Act.Cancel, Act.Answer)),
+                    ("pre+post", new(Act.Yield, Act.Yield, Act.Yield)),
+                    ("pre+post", new(Act.Answer, Act.FaultCanceled, Act.Answer)),
+                    ("pre+post", new(Act.Answer, Act.Answer, Act.FaultCanceled)),
 
                     // Without a pre-processor, the post-processor behaviour is the one the outside behaviour calls.
-                    (false, new(Act.Answer, Act.Answer, Act.Answer)),
-                    (false, new(Act.Answer, Act.Throw, Act.Answer)),
-                    (false, new(Act.Answer, Act.Cancel, Act.Answer)),
-                    (false, new(Act.Answer, Act.Answer, Act.Throw)),
-                    (false, new(Act.Answer, Act.Answer, Act.Cancel)),
-                    (false, new(Act.Answer, Act.Yield, Act.Throw)),
+                    ("post", new(Act.Answer, Act.Answer, Act.Answer)),
+                    ("post", new(Act.Answer, Act.Throw, Act.Answer)),
+                    ("post", new(Act.Answer, Act.Cancel, Act.Answer)),
+                    ("post", new(Act.Answer, Act.Answer, Act.Throw)),
+                    ("post", new(Act.Answer, Act.Answer, Act.Cancel)),
+                    ("post", new(Act.Answer, Act.Yield, Act.Throw)),
+                    ("post", new(Act.Answer, Act.FaultCanceled, Act.Answer)),
+
+                    // Without a post-processor, the pre-processor behaviour gets the handler's task itself.
+                    ("pre", new(Act.Answer, Act.Throw, Act.Answer)),
+                    ("pre", new(Act.Answer, Act.FaultCanceled, Act.Answer)),
+                    ("pre", new(Act.Answer, Act.Yield, Act.Answer)),
                 })
                 {
                     List<string> trace = [];
@@ -120,12 +130,15 @@ public sealed class ProcessorBehaviorTests
                     services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Outside<,>));
                     services.AddRelevox(options =>
                     {
-                        if (pre)
+                        if (processors.StartsWith("pre", StringComparison.Ordinal))
                         {
                             options.AddRequestPreProcessor<Before>();
                         }
 
-                        options.AddRequestPostProcessor<After>();
+                        if (processors.EndsWith("post", StringComparison.Ordinal))
+                        {
+                            options.AddRequestPostProcessor<After>();
+                        }
                     });
                     await using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -142,7 +155,7 @@ public sealed class ProcessorBehaviorTests
                         outcome = task.Status + " " + exception.GetType().Name;
                     }
 
-                    outcomes.Add($"{(pre ? "pre+post" : "post")} {ask.Before}/{ask.Handler}/{ask.After}: {string.Join(", ", trace)}: {outcome}");
+                    outcomes.Add($"{processors} {ask.Before}/{ask.Handler}/{ask.After}: {string.Join(", ", trace)}: {outcome}");
                 }
 
                 return string.Join("\n", outcomes);
@@ -163,12 +176,18 @@ public sealed class ProcessorBehaviorTests
             "pre+post Answer/Throw/Answer: before, handler, task returned: Faulted NotSupportedException",
             "pre+post Answer/Cancel/Answer: before, handler, task returned: Canceled OperationCanceledException",
             "pre+post Yield/Yield/Yield: before, task returned, handler, after 42: answered 42",
+            "pre+post Answer/FaultCanceled/Answer: before, handler, task returned: Canceled OperationCanceledException",
+            "pre+post Answer/Answer/FaultCanceled: before, handler, after 42, task returned: Canceled OperationCanceledException",
             "post Answer/Answer/Answer: handler, after 42, task returned: answered 42",
             "post Answer/Throw/Answer: handler, task returned: Faulted NotSupportedException",
             "post Answer/Cancel/Answer: handler, task returned: Canceled OperationCanceledException",
             "post Answer/Answer/Throw: handler, after 42, task returned: Faulted NotSupportedException",
             "post Answer/Answer/Cancel: handler, after 42, task returned: Canceled OperationCanceledException",
             "post Answer/Yield/Throw: handler, task returned, after 42: Faulted NotSupportedException",
+            "post Answer/FaultCanceled/Answer: handler, task returned: Canceled OperationCanceledException",
+            "pre Answer/Throw/Answer: before, handler, task returned: Faulted NotSupportedException",
+            "pre Answer/FaultCanceled/Answer: before, handler, task returned: Canceled OperationCanceledException",
+            "pre Answer/Yield/Answer: before, handler, task returned: answered 42",
         ]);
     }
 }
