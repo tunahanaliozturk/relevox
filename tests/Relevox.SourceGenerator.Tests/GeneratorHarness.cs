@@ -90,6 +90,21 @@ public static class GeneratorHarness
             output);
     }
 
+    /// <summary>
+    /// What one of the contracts' analyzers reports, Info included, over the compilation the generator produced.
+    /// </summary>
+    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, params string[] sources)
+    {
+        CSharpGeneratorDriver
+            .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: ParseOptions)
+            .RunGeneratorsAndUpdateCompilation(Compile("Subject", [], sources), out Compilation output, out _);
+        return output
+            .WithAnalyzers([analyzer])
+            .GetAnalyzerDiagnosticsAsync()
+            .GetAwaiter()
+            .GetResult();
+    }
+
     /// <summary>Compiles sources into an in-memory assembly another compilation can reference.</summary>
     /// <remarks>Used to put handlers in "another project" without a second project on disk.</remarks>
     public static MetadataReference Library(string assemblyName, params string[] sources) =>

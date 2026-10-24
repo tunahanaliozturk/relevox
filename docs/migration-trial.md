@@ -140,6 +140,17 @@ Later, for 1.3, the migrated eShop was built again with `-p:RelevoxMessageMap=tr
 
 Nothing in the map was wrong, and nothing the build could have known was missing.
 
+### The architecture rules
+
+For 1.4, both migrated projects were built again against packages from the 1.4 branch, with the architecture
+rules raised to warnings in `.editorconfig` so that every report showed.
+
+- **RVX0008, a handler that sends.** One report, in eShop: `IdentifiedCommandHandler` sends the command it
+  wraps. That is the pattern the rule describes, used on purpose, and the rule page uses it as its example of
+  where to suppress it. Clean Architecture has none.
+- **RVX0009, send cycles.** None in either. The send in `IdentifiedCommandHandler` is of the type parameter `T`,
+  which the rule does not follow.
+
 ## Why bother
 
 None of what the first trial found showed up in the repository's own tests, which reference Relevox's projects
