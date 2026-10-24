@@ -106,12 +106,11 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        // A send inside Handle(TRequest, ...), written plainly or as an explicit interface implementation, is from
-        // that request, and one inside the Handle of a notification is from no request. Anywhere else in a class
-        // that handles several requests, it is counted from each of them.
+        // A send inside a Handle that implements a handler interface, plainly or explicitly, is from the request that
+        // Handle takes, or from none when it is a notification's. Anywhere else, including a helper method that is
+        // also called Handle, it is counted from every request the class handles.
         IEnumerable<ITypeSymbol> from = requests;
-        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle
-            && (handle.Name == "Handle" || handle.ExplicitInterfaceImplementations.Any(static implemented => implemented.Name == "Handle")))
+        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle && ImplementsHandle(handler, handle))
         {
             from = requests.Where(request => SymbolEqualityComparer.Default.Equals(request, handle.Parameters[0].Type));
         }
@@ -121,6 +120,14 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
             edges.Add(new Edge(request, message, location));
         }
     }
+
+    /// <summary>Whether the method is the type's implementation of a Relevox handler interface's <c>Handle</c>.</summary>
+    private static bool ImplementsHandle(INamedTypeSymbol handler, IMethodSymbol method) =>
+        (method.Name == "Handle" || method.ExplicitInterfaceImplementations.Length > 0)
+        && handler.AllInterfaces
+            .Where(IsRelevox)
+            .SelectMany(static contract => contract.GetMembers("Handle"))
+            .Any(member => SymbolEqualityComparer.Default.Equals(handler.FindImplementationForInterfaceMember(member), method));
 
     /// <summary>
     /// What the type handles: request and stream request types, empty for a notification handler, default for a

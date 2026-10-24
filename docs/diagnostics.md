@@ -226,7 +226,8 @@ overflows. Walking a tree by sending a request per node is the usual case where 
 Only sends whose message type is known at build time are followed, and only to handlers in the same project: a
 send of a type parameter, of `object`, or to a handler in a referenced project ends the search. In a class that
 handles more than one message, a send inside one `Handle` counts from that request, or from none when it is a
-notification's `Handle`; a send elsewhere in the class counts from every request it handles.
+notification's `Handle`; a send elsewhere in the class, a helper method called `Handle` included, counts from
+every request it handles.
 
 **Fix:** break the cycle, usually by moving the shared work into a service (RVX0008). If the recursion is
 bounded on purpose, suppress the rule at the send. Raise it to `error` in `.editorconfig` to make any new cycle
