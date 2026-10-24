@@ -68,6 +68,7 @@ and what each number does and does not show, are in
 telemetry off. The machine's own noise moves MediatR's send between 32 and 42 ns across runs, so compare the
 ratios rather than the times. 1.3.0 did not change the dispatch code; its run, on a machine short of memory, is in
 [docs/benchmark-results/2026-10-23-1.3.0.md](docs/benchmark-results/2026-10-23-1.3.0.md).
+1.4.0 changed none of the paths below either; what it made faster is in the [changelog](CHANGELOG.md#140---2026-10-25).
 With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
