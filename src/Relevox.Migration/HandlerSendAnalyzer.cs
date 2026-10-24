@@ -64,7 +64,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<ITypeSymbol>> handled = new(SymbolEqualityComparer.Default);
+            ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<Node>> handled = new(SymbolEqualityComparer.Default);
             ConcurrentBag<Edge> edges = [];
             start.RegisterOperationAction(operation => AnalyzeInvocation(operation, handled, edges), OperationKind.Invocation);
             start.RegisterCompilationEndAction(end => ReportCycles(end, edges));
@@ -73,7 +73,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeInvocation(
         OperationAnalysisContext context,
-        ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<ITypeSymbol>> handled,
+        ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<Node>> handled,
         ConcurrentBag<Edge> edges)
     {
         IInvocationOperation invocation = (IInvocationOperation)context.Operation;
@@ -90,7 +90,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        ImmutableArray<ITypeSymbol> requests = handled.GetOrAdd(handler, HandledRequests);
+        ImmutableArray<Node> requests = handled.GetOrAdd(handler, HandledRequests);
         if (requests.IsDefault)
         {
             return;
@@ -109,35 +109,39 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         }
 
         // A send inside a Handle that implements a handler interface, plainly or explicitly, is from the request that
-        // Handle takes, or from none when it is a notification's. Anywhere else, including a helper method that is
-        // also called Handle, it is counted from every request the class handles.
-        IEnumerable<ITypeSymbol> from = requests;
-        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle && ImplementsHandle(handler, handle))
+        // Handle takes, sent or streamed as that interface says, or from none when it is a notification's. Anywhere
+        // else, including a helper method that is also called Handle, it is counted from every request the class
+        // handles.
+        IEnumerable<Node> from = requests;
+        if (context.ContainingSymbol is IMethodSymbol { Parameters.Length: > 0 } handle && Implemented(handler, handle) is { } contract)
         {
-            from = requests.Where(request => SymbolEqualityComparer.Default.Equals(request, handle.Parameters[0].Type));
+            Node own = new(handle.Parameters[0].Type, contract.Name == "IStreamRequestHandler");
+            from = requests.Where(request => request.Equals(own));
         }
 
-        foreach (ITypeSymbol request in from)
+        Node to = new(message, method.Name == "CreateStream");
+        foreach (Node request in from)
         {
-            edges.Add(new Edge(request, message, location));
+            edges.Add(new Edge(request, to, location));
         }
     }
 
-    /// <summary>Whether the method is the type's implementation of a Relevox handler interface's <c>Handle</c>.</summary>
-    private static bool ImplementsHandle(INamedTypeSymbol handler, IMethodSymbol method) =>
-        (method.Name == "Handle" || method.ExplicitInterfaceImplementations.Length > 0)
-        && handler.AllInterfaces
-            .Where(IsRelevox)
-            .SelectMany(static contract => contract.GetMembers("Handle"))
-            .Any(member => SymbolEqualityComparer.Default.Equals(handler.FindImplementationForInterfaceMember(member), method));
+    /// <summary>The Relevox handler interface whose <c>Handle</c> the method implements for the type, or null.</summary>
+    private static INamedTypeSymbol? Implemented(INamedTypeSymbol handler, IMethodSymbol method) =>
+        method.Name != "Handle" && method.ExplicitInterfaceImplementations.Length == 0
+            ? null
+            : handler.AllInterfaces
+                .Where(IsRelevox)
+                .FirstOrDefault(contract => contract.GetMembers("Handle")
+                    .Any(member => SymbolEqualityComparer.Default.Equals(handler.FindImplementationForInterfaceMember(member), method)));
 
     /// <summary>
-    /// What the type handles: request and stream request types, empty for a notification handler, default for a
-    /// type that is not a handler at all.
+    /// What the type handles: requests and stream requests, empty for a notification handler, default for a type
+    /// that is not a handler at all.
     /// </summary>
-    private static ImmutableArray<ITypeSymbol> HandledRequests(INamedTypeSymbol type)
+    private static ImmutableArray<Node> HandledRequests(INamedTypeSymbol type)
     {
-        ImmutableArray<ITypeSymbol>.Builder? requests = null;
+        ImmutableArray<Node>.Builder? requests = null;
         bool handler = false;
         foreach (INamedTypeSymbol contract in type.AllInterfaces)
         {
@@ -152,7 +156,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
                     handler = true;
                     if (contract.TypeArguments[0] is not ITypeParameterSymbol)
                     {
-                        (requests ??= ImmutableArray.CreateBuilder<ITypeSymbol>()).Add(contract.TypeArguments[0]);
+                        (requests ??= ImmutableArray.CreateBuilder<Node>()).Add(new Node(contract.TypeArguments[0], contract.Name == "IStreamRequestHandler"));
                     }
 
                     break;
@@ -174,7 +178,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        Dictionary<ITypeSymbol, List<Edge>> graph = new(SymbolEqualityComparer.Default);
+        Dictionary<Node, List<Edge>> graph = [];
         foreach (Edge edge in edges)
         {
             if (!graph.TryGetValue(edge.From, out List<Edge>? outgoing))
@@ -188,27 +192,27 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         foreach (Edge edge in edges.OrderBy(static edge => edge.Location.SourceTree?.FilePath, System.StringComparer.Ordinal).ThenBy(static edge => edge.Location.SourceSpan.Start))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
-            List<ITypeSymbol>? back = PathBack(graph, edge.To, edge.From);
+            List<Node>? back = PathBack(graph, edge.To, edge.From);
             if (back is not null)
             {
-                string path = string.Join(" -> ", new[] { edge.From }.Concat(back).Select(static type => type.Name));
-                context.ReportDiagnostic(Diagnostic.Create(SendCycle, edge.Location, edge.From.ToDisplayString(), edge.To.ToDisplayString(), path));
+                string path = string.Join(" -> ", new[] { edge.From }.Concat(back));
+                context.ReportDiagnostic(Diagnostic.Create(SendCycle, edge.Location, edge.From.Type.ToDisplayString(), edge.To.Type.ToDisplayString(), path));
             }
         }
     }
 
     /// <summary>The shortest chain of sends from <paramref name="start"/> to <paramref name="target"/>, both included, or null.</summary>
-    private static List<ITypeSymbol>? PathBack(Dictionary<ITypeSymbol, List<Edge>> graph, ITypeSymbol start, ITypeSymbol target)
+    private static List<Node>? PathBack(Dictionary<Node, List<Edge>> graph, Node start, Node target)
     {
-        Dictionary<ITypeSymbol, ITypeSymbol?> previous = new(SymbolEqualityComparer.Default) { [start] = null };
-        Queue<ITypeSymbol> queue = new([start]);
+        Dictionary<Node, Node?> previous = new() { [start] = null };
+        Queue<Node> queue = new([start]);
         while (queue.Count > 0)
         {
-            ITypeSymbol current = queue.Dequeue();
-            if (SymbolEqualityComparer.Default.Equals(current, target))
+            Node current = queue.Dequeue();
+            if (current.Equals(target))
             {
-                List<ITypeSymbol> path = [];
-                for (ITypeSymbol? step = current; step is not null; step = previous[step])
+                List<Node> path = [];
+                for (Node? step = current; step is not null; step = previous[step])
                 {
                     path.Add(step);
                 }
@@ -261,11 +265,31 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
     private static bool IsRelevox(INamedTypeSymbol type) =>
         type.ContainingNamespace is { Name: "Relevox", ContainingNamespace.IsGlobalNamespace: true };
 
-    private sealed class Edge(ITypeSymbol from, ITypeSymbol to, Location location)
+    /// <summary>
+    /// A request type and the way it is dispatched: a message can be both a request and a stream request, with a
+    /// handler for each, and Send reaches only the one, CreateStream only the other.
+    /// </summary>
+    private sealed class Node(ITypeSymbol type, bool stream) : System.IEquatable<Node>
     {
-        public ITypeSymbol From { get; } = from;
+        public ITypeSymbol Type { get; } = type;
 
-        public ITypeSymbol To { get; } = to;
+        public bool Stream { get; } = stream;
+
+        public bool Equals(Node? other) =>
+            other is not null && other.Stream == Stream && SymbolEqualityComparer.Default.Equals(other.Type, Type);
+
+        public override bool Equals(object? obj) => Equals(obj as Node);
+
+        public override int GetHashCode() => (SymbolEqualityComparer.Default.GetHashCode(Type) * 2) + (Stream ? 1 : 0);
+
+        public override string ToString() => Stream ? Type.Name + " (stream)" : Type.Name;
+    }
+
+    private sealed class Edge(Node from, Node to, Location location)
+    {
+        public Node From { get; } = from;
+
+        public Node To { get; } = to;
 
         public Location Location { get; } = location;
     }

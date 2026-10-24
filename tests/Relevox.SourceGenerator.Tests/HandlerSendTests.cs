@@ -273,6 +273,45 @@ public sealed class HandlerSendTests
             """).Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0008"]);
     }
 
+    [Fact]
+    public void A_message_that_is_both_a_request_and_a_stream_is_two_nodes()
+    {
+        Analyze("""
+            public sealed record Dual : IRequest<int>, IStreamRequest<int>;
+            public sealed class DualHandler(ISender sender) : IRequestHandler<Dual, int>
+            {
+                public async Task<int> Handle(Dual request, CancellationToken cancellationToken)
+                {
+                    int total = 0;
+                    await foreach (int item in sender.CreateStream(new Dual(), cancellationToken))
+                    {
+                        total += item;
+                    }
+
+                    return total;
+                }
+            }
+
+            public sealed class DualStream : IStreamRequestHandler<Dual, int>
+            {
+                public async IAsyncEnumerable<int> Handle(Dual request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+                {
+                    yield return 1;
+                    await Task.CompletedTask;
+                }
+            }
+
+            public sealed record Loop : IStreamRequest<int>;
+            public sealed class LoopStream(ISender sender) : IStreamRequestHandler<Loop, int>
+            {
+                public IAsyncEnumerable<int> Handle(Loop request, CancellationToken cancellationToken) => sender.CreateStream(new Loop(), cancellationToken);
+            }
+            """).Where(static diagnostic => diagnostic.Id == "RVX0009").Select(static diagnostic => diagnostic.GetMessage(CultureInfo.InvariantCulture)).ShouldBe(
+        [
+            "The handler of 'Loop' sends 'Loop', which leads back to 'Loop': Loop (stream) -> Loop (stream)",
+        ]);
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new HandlerSendAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)
