@@ -9,6 +9,11 @@ All notable changes to this project are written down here. The format follows
 ### Performance
 
 - `Send(object)` for a request without a response boxes `Unit` once instead of on every send, 24 bytes less.
+- The pre- and post-processor behaviours build no state machine while their processors and the rest of the
+  pipeline finish synchronously, and return the pipeline's own task instead of a new one: a request whose pre- and
+  post-processor run went from 121.9 ns and 552 bytes to 94.1 ns and 408 bytes, in a new `BuiltInBenchmarks` row.
+  They still behave as MediatR's `async` behaviours: anything thrown ends up in the returned task, faulted or
+  canceled, and changes the handler makes to the execution context, such as an `AsyncLocal<T>`, are put back.
 
 ## [1.3.0] - 2026-10-23
 
