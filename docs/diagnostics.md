@@ -251,7 +251,8 @@ the pipeline is left to general analyzers, such as VSTHRD002 in Microsoft.Visual
 
 Not reported where the task is plainly finished, because reading those cannot block: `Task.FromResult(x)`,
 `Task.CompletedTask`, `ValueTask.FromResult(x)`, `new ValueTask<T>(value)`, and the task a `ContinueWith`
-continuation is handed. A task checked with `IsCompleted` first is still reported; the rule does not follow
+continuation is handed, read anywhere inside it. `Wait(0)` and `Wait(TimeSpan.Zero)` are not reported either:
+they ask whether the task has finished without waiting for it. A task checked with `IsCompleted` first is still reported; the rule does not follow
 the check, so suppress it there.
 
 **Fix:** make the method `async` and `await` the task:
