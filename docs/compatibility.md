@@ -101,6 +101,35 @@ send. Behaviours registered through `AddRelevox`'s options and ones registered d
 before or after, all run. `next` can be called more than once, and a token passed to `next` replaces the
 original from there inward; `next()` with no token keeps the token `Send` was given.
 
+**An open behaviour runs only for the requests its constraints allow**, on the request type, the response type
+or both. The container closes it over each request and leaves it out where a constraint does not hold, in both
+libraries, so one behaviour can cover a group of requests without a closed registration per request:
+
+```csharp
+public interface ICommand;
+public sealed record PlaceOrder(int Id) : IRequest<int>, ICommand;
+
+// Runs for PlaceOrder and every other ICommand, and for nothing else.
+public sealed class Transaction<TRequest, TResponse>(ShopDb db) : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : ICommand
+{
+    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        await using IDbContextTransaction transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        TResponse response = await next(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return response;
+    }
+}
+
+services.AddRelevox(options => options.AddOpenBehavior(typeof(Transaction<,>)));
+```
+
+A constraint on the response, such as `where TResponse : IResult`, selects by what a request returns in the same
+way. The [message map](message-map.md) checks each open behaviour against each request's constraints, as the
+container does, and lists it only under the requests it runs for. A differential scenario
+(`PipelineSkipsBehavioursWhoseConstraintsDoNotHold`) pins both kinds of constraint against MediatR.
+
 **A request without a response runs through behaviours typed over `Unit`**: `IPipelineBehavior<Ring, Unit>`.
 
 **Processors only run when one was added through the options.** This is the most surprising rule the

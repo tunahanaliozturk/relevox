@@ -6,6 +6,12 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- [docs/compatibility.md](docs/compatibility.md#the-pipeline) shows how an open behaviour with generic
+  constraints, on the request or on the response, runs only for the requests they allow, and a differential
+  scenario pins both against MediatR (#99).
+
 ## [1.4.0] - 2026-10-25
 
 Architecture rules: the analyzers point out handlers that send other requests or each other in a cycle,

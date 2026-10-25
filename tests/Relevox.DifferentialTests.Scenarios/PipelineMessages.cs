@@ -141,6 +141,34 @@ public sealed class AuditedBehavior<TRequest, TResponse>(Trace trace) : IPipelin
     }
 }
 
+/// <summary>Marks responses the behaviour constrained on its response applies to.</summary>
+public interface IOutcome;
+
+public sealed record Verdict(bool Upheld) : IOutcome;
+
+public sealed record Judge : IRequest<Verdict>;
+
+public sealed class JudgeHandler(Trace trace) : IRequestHandler<Judge, Verdict>
+{
+    public Task<Verdict> Handle(Judge request, CancellationToken cancellationToken)
+    {
+        trace.Add("JudgeHandler");
+        return Task.FromResult(new Verdict(true));
+    }
+}
+
+/// <summary>Open, constrained on the response: closed only over requests whose response is an IOutcome.</summary>
+public sealed class OutcomeBehavior<TRequest, TResponse>(Trace trace) : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+    where TResponse : IOutcome
+{
+    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        trace.Add("Outcome>");
+        return await next();
+    }
+}
+
 public sealed class PingAudit(Trace trace) : IPipelineBehavior<Ping, string>
 {
     public async Task<string> Handle(Ping request, RequestHandlerDelegate<string> next, CancellationToken cancellationToken)
