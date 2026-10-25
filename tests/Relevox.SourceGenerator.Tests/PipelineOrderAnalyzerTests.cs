@@ -96,6 +96,44 @@ public sealed class PipelineOrderAnalyzerTests
     }
 
     [Fact]
+    public void Every_behaviour_interface_of_a_class_counts_and_a_generic_request_is_open()
+    {
+        Analyze(Requests + """
+            public sealed record Query<T> : IRequest<T>;
+
+            [PipelineOrder(3)]
+            public sealed class Both : IPipelineBehavior<Ping, int>, IPipelineBehavior<Pong, int>
+            {
+                public Task<int> Handle(Ping request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken) => next(cancellationToken);
+
+                public Task<int> Handle(Pong request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+
+            [PipelineOrder(3)]
+            public sealed class PongCache : IPipelineBehavior<Pong, int>
+            {
+                public Task<int> Handle(Pong request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+
+            [PipelineOrder(4)]
+            public sealed class QueryCache<T> : IPipelineBehavior<Query<T>, T>
+            {
+                public Task<T> Handle(Query<T> request, RequestHandlerDelegate<T> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+
+            [PipelineOrder(4)]
+            public sealed class IntQueryLog : IPipelineBehavior<Query<int>, int>
+            {
+                public Task<int> Handle(Query<int> request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+            """).Select(static diagnostic => diagnostic.GetMessage(CultureInfo.InvariantCulture)).ShouldBe(
+        [
+            "'PongCache' has the same PipelineOrder, 3, as 'Both', so the two run in the order they are registered",
+            "'IntQueryLog' has the same PipelineOrder, 4, as 'QueryCache<T>', so the two run in the order they are registered",
+        ]);
+    }
+
+    [Fact]
     public void A_behaviour_that_meets_one_in_a_referenced_project_is_reported_here()
     {
         MetadataReference shared = GeneratorHarness.Library("Shop.Shared", Usings + """

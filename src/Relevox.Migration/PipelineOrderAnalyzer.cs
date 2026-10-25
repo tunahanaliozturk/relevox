@@ -127,7 +127,7 @@ public sealed class PipelineOrderAnalyzer : DiagnosticAnalyzer
         return [.. behaviors];
     }
 
-    /// <summary>A class with a behaviour interface and the attribute, or null. The interface is the cheaper check.</summary>
+    /// <summary>A class with behaviour interfaces and the attribute, or null. The interfaces are the cheaper check.</summary>
     private static Behavior? Read(INamedTypeSymbol type)
     {
         if (type.TypeKind != TypeKind.Class || type.IsAbstract)
@@ -135,19 +135,18 @@ public sealed class PipelineOrderAnalyzer : DiagnosticAnalyzer
             return null;
         }
 
-        INamedTypeSymbol? contract = null;
-        foreach (INamedTypeSymbol candidate in type.AllInterfaces)
-        {
-            if (candidate.Name is "IPipelineBehavior" or "IStreamPipelineBehavior"
-                && candidate.TypeArguments.Length == 2
-                && candidate.ContainingNamespace is { Name: "Relevox", ContainingNamespace.IsGlobalNamespace: true })
-            {
-                contract = candidate;
-                break;
-            }
-        }
-
-        if (contract is null)
+        // Every closing counts: a class can be a behaviour for two requests, or for a request and a stream, and
+        // is registered under each. A request type that still has a type parameter in it, such as Query<T>, can be
+        // closed over many requests, so it is treated as open.
+        (bool Stream, ITypeSymbol? Request)[] contracts =
+        [
+            .. type.AllInterfaces
+                .Where(static candidate => candidate.Name is "IPipelineBehavior" or "IStreamPipelineBehavior"
+                    && candidate.TypeArguments.Length == 2
+                    && candidate.ContainingNamespace is { Name: "Relevox", ContainingNamespace.IsGlobalNamespace: true })
+                .Select(static candidate => (candidate.Name == "IStreamPipelineBehavior", HasTypeParameters(candidate.TypeArguments[0]) ? null : candidate.TypeArguments[0])),
+        ];
+        if (contracts.Length == 0)
         {
             return null;
         }
@@ -163,29 +162,38 @@ public sealed class PipelineOrderAnalyzer : DiagnosticAnalyzer
             return null;
         }
 
-        ITypeSymbol request = contract.TypeArguments[0];
         Location location = data.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? type.Locations.FirstOrDefault() ?? Location.None;
-        return new Behavior(type, order, contract.Name == "IStreamPipelineBehavior", request is ITypeParameterSymbol ? null : request, location);
+        return new Behavior(type, order, contracts, location);
     }
 
-    private sealed class Behavior(INamedTypeSymbol type, int order, bool stream, ITypeSymbol? request, Location location)
+    private static bool HasTypeParameters(ITypeSymbol type) => type switch
+    {
+        ITypeParameterSymbol => true,
+        IArrayTypeSymbol array => HasTypeParameters(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.Any(HasTypeParameters) || (named.ContainingType is { } outer && HasTypeParameters(outer)),
+        _ => false,
+    };
+
+    private sealed class Behavior(INamedTypeSymbol type, int order, (bool Stream, ITypeSymbol? Request)[] contracts, Location location)
     {
         public INamedTypeSymbol Type { get; } = type;
 
         public int Order { get; } = order;
 
-        public bool Stream { get; } = stream;
-
-        /// <summary>The request type of a closed behaviour; null for an open one, which may meet any request.</summary>
-        public ITypeSymbol? Request { get; } = request;
+        /// <summary>
+        /// Each behaviour interface it implements: pipeline or stream, and the request type when closed; null for an
+        /// open one, which may meet any request.
+        /// </summary>
+        public (bool Stream, ITypeSymbol? Request)[] Contracts { get; } = contracts;
 
         public Location Location { get; } = location;
 
-        /// <summary>Whether the two could run for one request with one order: same kind, same number, a request in common.</summary>
+        /// <summary>Whether the two could run for one request with one order: same number, and a contract of the same kind and request.</summary>
         public bool Meets(Behavior other) =>
             other.Order == Order
-            && other.Stream == Stream
             && !SymbolEqualityComparer.Default.Equals(other.Type, Type)
-            && (Request is null || other.Request is null || SymbolEqualityComparer.Default.Equals(Request, other.Request));
+            && Contracts.Any(mine => other.Contracts.Any(theirs =>
+                theirs.Stream == mine.Stream
+                && (mine.Request is null || theirs.Request is null || SymbolEqualityComparer.Default.Equals(mine.Request, theirs.Request))));
     }
 }
