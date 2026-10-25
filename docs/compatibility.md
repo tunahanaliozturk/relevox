@@ -101,6 +101,14 @@ send. Behaviours registered through `AddRelevox`'s options and ones registered d
 before or after, all run. `next` can be called more than once, and a token passed to `next` replaces the
 original from there inward; `next()` with no token keeps the token `Send` was given.
 
+**`[PipelineOrder(n)]` changes that order only where it is used.** MediatR has no such attribute. A behaviour
+class that carries it runs by its number, lower further out; one without it counts as 0, the built-in
+behaviours included, and behaviours with the same number keep registration order. So a pipeline with no
+attribute runs exactly as above, and a behaviour at a negative number runs outside the exception and processor
+behaviours. The order is worked out on the first send of each request type; a request type whose behaviours it
+moves gets one new array per send ([ADR 0019](adr/0019-pipeline-order.md)). Stream behaviours are ordered the
+same way.
+
 **An open behaviour runs only for the requests its constraints allow**, on the request type, the response type
 or both. The container closes it over each request and leaves it out where a constraint does not hold, in both
 libraries, so one behaviour can cover a group of requests without a closed registration per request:
