@@ -30,8 +30,8 @@
       so these only need to be old enough for every host that builds .NET 10. System.Reflection.Metadata is
       also pinned for Roslyn, which needs 9.0.0.
     -->
-    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="17.14.28" />
-    <PackageVersion Include="System.Reflection.Metadata" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.11.0" />
+    <PackageVersion Include="System.Reflection.Metadata" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup Label="Samples">
