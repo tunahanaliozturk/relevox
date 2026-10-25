@@ -158,6 +158,16 @@ rules raised to warnings in `.editorconfig` so that every report showed.
   `DispatchDomainEventsInterceptor`. With `BaseEvent` allowed only from Web instead, that call was reported, and
   a `publish_from` with a misspelt layer name was reported as RVX0012.
 
+### Relevox.FluentValidation
+
+For 1.5, Clean Architecture's own `ValidationBehaviour<,>` was replaced by the package, built from the 1.5 branch
+([validation.md](validation.md)). Its body became a class derived from the package's behaviour that overrides
+`CreateException` to throw the template's own `ValidationException`, so its API's problem details stay as they
+were, and `cfg.AddOpenBehavior(typeof(ValidationBehaviour<,>))` became `cfg.AddValidation(typeof(ValidationBehaviour<,>))`
+in the same place. The 19 functional tests passed before and after, the validation ones included. The message
+map shows the behaviour on the four commands that have a validator and on none of the other five requests,
+where it used to run, find no validator, and call the next behaviour.
+
 ## Why bother
 
 None of what the first trial found showed up in the repository's own tests, which reference Relevox's projects
