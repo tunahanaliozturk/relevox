@@ -138,22 +138,65 @@ public sealed class PipelineOrderTests
         trace.Events.Where(static entry => entry.EndsWith("Stream", StringComparison.Ordinal)).ShouldBe(["OuterStream", "InnerStream", "OuterStream", "InnerStream"]);
     }
 
-    [Fact]
-    public void A_scope_that_returns_other_behaviours_is_not_run_in_the_learned_order()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_scope_that_returns_other_behaviours_is_ordered_too(bool firstInPlace)
     {
+        // Containers such as Autofac let a child scope register behaviours of its own, so one request type can come
+        // back with another list than the one its first send learned from, already in order or not.
         global::Relevox.Internal.PipelineState<PipelineOrderTests> state = new(1, 0, builtInsForEveryRequest: false);
         S.Trace trace = new();
         IPipelineBehavior<S.Ping, string> inner = new Inner<S.Ping, string>(trace);
         IPipelineBehavior<S.Ping, string> outer = new Outer<S.Ping, string>(trace);
         IPipelineBehavior<S.Ping, string> early = new S.EarlyBehavior<S.Ping, string>(trace);
 
-        IPipelineBehavior<S.Ping, string>[]? first = state.Behaviors<S.Ping, string>(0, new Fixed([inner, outer]), out _);
-        IPipelineBehavior<S.Ping, string>[]? second = state.Behaviors<S.Ping, string>(0, new Fixed([outer, inner]), out _);
-        IPipelineBehavior<S.Ping, string>[]? third = state.Behaviors<S.Ping, string>(0, new Fixed([inner, early]), out _);
+        IPipelineBehavior<S.Ping, string>[]? first = state.Behaviors<S.Ping, string>(0, new Fixed(firstInPlace ? [outer, inner] : [inner, outer]), out _);
+        IPipelineBehavior<S.Ping, string>[]? swapped = state.Behaviors<S.Ping, string>(0, new Fixed(firstInPlace ? [inner, outer] : [outer, inner]), out _);
+        IPipelineBehavior<S.Ping, string>[]? other = state.Behaviors<S.Ping, string>(0, new Fixed([inner, early]), out _);
 
         first.ShouldBe([outer, inner]);
-        second.ShouldBe([outer, inner]);
-        third.ShouldBe([early, inner]);
+        swapped.ShouldBe([outer, inner]);
+        other.ShouldBe([early, inner]);
+    }
+
+    [Fact]
+    public void A_scope_that_adds_an_ordered_behaviour_to_a_list_learned_without_one_is_ordered()
+    {
+        global::Relevox.Internal.PipelineState<PipelineOrderTests> state = new(1, 0, builtInsForEveryRequest: false);
+        S.Trace trace = new();
+        IPipelineBehavior<S.Ping, string> outer = new Outer<S.Ping, string>(trace);
+        IPipelineBehavior<S.Ping, string> early = new S.EarlyBehavior<S.Ping, string>(trace);
+        IPipelineBehavior<S.Ping, string>[] plain = [early];
+
+        state.Behaviors<S.Ping, string>(0, new Fixed(plain), out _).ShouldBeSameAs(plain);
+        state.Behaviors<S.Ping, string>(0, new Fixed([early, outer]), out _).ShouldBe([outer, early]);
+        state.Behaviors<S.Ping, string>(0, new Fixed(plain), out _).ShouldBeSameAs(plain);
+    }
+
+    [Fact]
+    public void Ordered_behaviours_already_in_place_run_from_the_containers_array()
+    {
+        global::Relevox.Internal.PipelineState<PipelineOrderTests> state = new(1, 0, builtInsForEveryRequest: false);
+        S.Trace trace = new();
+        IPipelineBehavior<S.Ping, string>[] inPlace = [new Outer<S.Ping, string>(trace), new Inner<S.Ping, string>(trace)];
+
+        state.Behaviors<S.Ping, string>(0, new Fixed(inPlace), out _).ShouldBeSameAs(inPlace);
+        state.Behaviors<S.Ping, string>(0, new Fixed(inPlace), out _).ShouldBeSameAs(inPlace);
+    }
+
+    [Fact]
+    public void A_stream_scope_that_returns_other_behaviours_is_ordered_too()
+    {
+        global::Relevox.Internal.PipelineState<PipelineOrderTests> state = new(0, 1, builtInsForEveryRequest: false);
+        S.Trace trace = new();
+        IStreamPipelineBehavior<S.Countdown, int> inner = new InnerStream<S.Countdown, int>(trace);
+        IStreamPipelineBehavior<S.Countdown, int> outer = new OuterStream<S.Countdown, int>(trace);
+
+        state.StreamBehaviors<S.Countdown, int>(0, new FixedStream([outer, inner])).ShouldBe([outer, inner]);
+        state.StreamBehaviors<S.Countdown, int>(0, new FixedStream([inner, outer])).ShouldBe([outer, inner]);
+        state.StreamBehaviors<S.Countdown, int>(0, new FixedStream([inner])).ShouldBe([inner]);
+        state.StreamBehaviors<S.Countdown, int>(0, new FixedStream([inner, outer])).ShouldBe([outer, inner]);
     }
 
     private static async Task<IReadOnlyList<string>> Send(ServiceProvider provider)
@@ -182,6 +225,13 @@ public sealed class PipelineOrderTests
     {
         public object? GetService(Type serviceType) =>
             serviceType == typeof(IEnumerable<IPipelineBehavior<S.Ping, string>>) ? behaviors : null;
+    }
+
+    /// <summary>A container that hands out one fixed list of stream behaviours.</summary>
+    private sealed class FixedStream(IStreamPipelineBehavior<S.Countdown, int>[] behaviors) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IEnumerable<IStreamPipelineBehavior<S.Countdown, int>>) ? behaviors : null;
     }
 
     private abstract class Step<TRequest, TResponse>(S.Trace trace, string name) : IPipelineBehavior<TRequest, TResponse>
