@@ -34,14 +34,20 @@ convention of ASP.NET Core's filter `Order`, which most .NET developers have met
 **The order is applied on the first send of a request type**, together with the built-in slots: the
 behaviours are put in order first, and the slots are judged in that order, since whether an idle one can be
 left out depends on what runs outside it. What is learned is where each running position comes from, plus the
-behaviour types it was learned from. Each later send checks the container returned the same types in the same
-order, and learns again, without remembering, when it did not, as a child scope in Autofac can do.
+behaviour types it was learned from.
+
+**A scope may return another list.** A child scope in Autofac can register behaviours of its own, so one
+request type can come back with other behaviours than its first send saw, in another order or with an ordered
+one added. A list learned with an ordered behaviour in it, in place or not, keeps its types, and each later send
+compares them and works the order out again, without remembering, when they differ. A list learned with no
+ordered behaviour keeps only its length, which each later send compares: one more comparison per send for
+every application, against a type check per behaviour that only applications using the attribute pay. A scope
+that swaps a behaviour for an ordered one, keeping the length, is the case left out.
 
 **The container's array is never changed.** For behaviours that are all singletons the container hands out the
 same array on every call, so sorting it in place would scramble the next send. A request type whose behaviours
-the attribute moves gets a new array per send; one whose behaviours are already in order, which is every
-request type in an application that does not use the attribute, is remembered exactly as before and costs
-nothing more. `PipelineOrderBenchmarks` measures the three cases.
+the attribute moves gets a new array per send. One whose behaviours are already in order runs from the
+container's array, as before. `PipelineOrderBenchmarks` measures the three cases.
 
 **Built-ins count as 0, so a negative number runs outside them.** Registered by `AddRelevox`, the exception
 and processor behaviours usually sit before the options' behaviours, so a behaviour at -1 runs outside
@@ -56,8 +62,8 @@ in MediatR.
 
 - The differential tests, which register no attribute, pin that MediatR's order is unchanged; the order
   itself is pinned by `PipelineOrderTests`.
-- A behaviour moved by the attribute costs one small array per send. An application that wants none of that
-  cost registers its ordered behaviours in their order.
+- A behaviour moved by the attribute costs one small array per send, plus a type check per behaviour. An
+  application that wants no array registers its ordered behaviours in their order.
 - Two behaviours with one number fall back to registration order, the thing the attribute is meant to remove.
   #98 adds a diagnostic for it.
 - Reading the attribute is reflection on the behaviour's runtime type, once per request type. It needs no
