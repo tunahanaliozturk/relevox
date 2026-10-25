@@ -49,8 +49,10 @@ public sealed class PipelineState<TMediator>
 
     private readonly byte[] _requests;
     private readonly SlotPlan?[] _plans;
+    private readonly int[] _lengths;
     private readonly byte[] _streams;
     private readonly BehaviorOrder?[] _streamOrders;
+    private readonly int[] _streamLengths;
     private readonly bool _builtInsForEveryRequest;
     private byte _everyRequest;
     private byte _sequentialPublish;
@@ -66,8 +68,10 @@ public sealed class PipelineState<TMediator>
     {
         _requests = new byte[requests];
         _plans = new SlotPlan?[requests];
+        _lengths = new int[requests];
         _streams = new byte[streams];
         _streamOrders = new BehaviorOrder?[streams];
+        _streamLengths = new int[streams];
         _builtInsForEveryRequest = builtInsForEveryRequest;
     }
 
@@ -106,15 +110,17 @@ public sealed class PipelineState<TMediator>
         IEnumerable<IPipelineBehavior<TRequest, TResponse>> resolved = services.GetServices<IPipelineBehavior<TRequest, TResponse>>();
         IPipelineBehavior<TRequest, TResponse>[] behaviors = resolved as IPipelineBehavior<TRequest, TResponse>[] ?? [.. resolved];
 
-        if (state == Pipeline)
+        // Learned with no slot and no PipelineOrder in sight. A list of another length, from a scope that adds
+        // behaviours of its own, may bring one, so it is looked at again.
+        if (state == Pipeline && behaviors.Length == _lengths[index])
         {
             asynchronous = false;
             return behaviors;
         }
 
-        if (state == Unknown)
+        if (state is Unknown or Pipeline)
         {
-            return Learn(index, behaviors, services, out asynchronous, remember: true);
+            return Learn(index, behaviors, services, out asynchronous, remember: state == Unknown);
         }
 
         // The plan is read on its own, not through the state byte, so a thread that sees the state before the
@@ -146,7 +152,7 @@ public sealed class PipelineState<TMediator>
 
         IEnumerable<IStreamPipelineBehavior<TRequest, TResponse>> resolved = services.GetServices<IStreamPipelineBehavior<TRequest, TResponse>>();
         IStreamPipelineBehavior<TRequest, TResponse>[] behaviors = resolved as IStreamPipelineBehavior<TRequest, TResponse>[] ?? [.. resolved];
-        if (state == Pipeline)
+        if (state == Pipeline && behaviors.Length == _streamLengths[index])
         {
             return behaviors;
         }
@@ -161,6 +167,7 @@ public sealed class PipelineState<TMediator>
         {
             if (order is null)
             {
+                _streamLengths[index] = behaviors.Length;
                 _streams[index] = behaviors.Length == 0 ? Direct : Pipeline;
             }
             else
@@ -243,6 +250,7 @@ public sealed class PipelineState<TMediator>
         {
             if (remember)
             {
+                _lengths[index] = behaviors.Length;
                 _requests[index] = behaviors.Length == 0 ? Direct : Pipeline;
             }
 
@@ -378,8 +386,8 @@ public sealed class PipelineState<TMediator>
         }
 
         /// <summary>
-        /// The behaviours to run: idle slots left out, active ones replaced. A new array, because the container
-        /// may hand out the same one again.
+        /// The behaviours to run: idle slots left out, active ones replaced, all in running order. A new array
+        /// whenever that changes anything, because the container may hand out the same one again.
         /// </summary>
         /// <param name="behaviors">What the container returned, slots included, in the container's order.</param>
         /// <param name="services">The container or scope of the send, for the behaviours that are created.</param>
@@ -391,6 +399,12 @@ public sealed class PipelineState<TMediator>
             IPipelineBehavior<TRequest, TResponse>?[]? created = null)
             where TRequest : notnull
         {
+            // With no slot and the behaviours in place, the running list is the container's, which is only read.
+            if (_slots.Length == 0 && _order is not { InPlace: false })
+            {
+                return behaviors;
+            }
+
             IPipelineBehavior<TRequest, TResponse>[] running = new IPipelineBehavior<TRequest, TResponse>[Kept];
             for (int position = 0, next = 0; position < behaviors.Length; position++)
             {
