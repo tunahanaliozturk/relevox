@@ -26,8 +26,8 @@ internal static class CallSites
 
     /// <summary>
     /// The call, when it is made on <c>ISender</c>, <c>IPublisher</c>, <c>IMediator</c> or a class implementing one of
-    /// them, and the message's static type is known. A message passed as <c>object</c> is left out: the map cannot
-    /// tell what it is.
+    /// them, and the message's static type is known. A message passed as <c>object</c>, an interface or an abstract
+    /// class is left out: the map cannot tell what it is.
     /// </summary>
     public static CallSite? Read(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
@@ -56,7 +56,7 @@ internal static class CallSites
         }
 
         ITypeSymbol? message = argument is null ? null : context.SemanticModel.GetTypeInfo(argument.Expression, cancellationToken).Type;
-        if (message is null or IErrorTypeSymbol or ITypeParameterSymbol || message.SpecialType == SpecialType.System_Object)
+        if (message is null or IErrorTypeSymbol or ITypeParameterSymbol or { IsAbstract: true } || message.SpecialType == SpecialType.System_Object)
         {
             return null;
         }

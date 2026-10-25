@@ -134,9 +134,16 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             .Select(static (pair, _) =>
             {
                 (((EmitPlan plan, bool requested), ImmutableArray<PipelineOptions> calls), (ImmutableArray<CallSite> sites, string? directory)) = pair.Left;
-                return requested && plan.Emits
-                    ? MessageMap.Render(plan, calls, sites, directory, pair.Right) is var (json, markdown) ? (plan.Namespace, json, markdown) : null
-                    : ((string, string, string)?)null;
+                if (!requested)
+                {
+                    return ((string, string, string)?)null;
+                }
+
+                // A project using another project's mediator writes only the calls it makes (ADR 0021).
+                (string Json, string Markdown)? rendered = plan.Emits
+                    ? MessageMap.Render(plan, calls, sites, directory, pair.Right)
+                    : MessageMap.RenderCalls(pair.Right.AssemblyName, sites, directory);
+                return rendered is var (json, markdown) ? (plan.Namespace, json, markdown) : ((string, string, string)?)null;
             })
             .WithTrackingName(TrackingNames.MessageMap);
 

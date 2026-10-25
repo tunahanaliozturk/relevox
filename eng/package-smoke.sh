@@ -79,13 +79,21 @@ grep -q "answer 42" <<<"$output" \
   || { echo "$output" >&2; echo "The layered host did not dispatch through the application's mediator." >&2; exit 1; }
 echo "A host below the application layer built clean and dispatched through the application's mediator."
 
-# A project that only uses another project's mediator has no map of its own, even with the switch on, and a map
-# left from when it had one is removed rather than left stale.
-stale="$layered/Host/obj/Release/net10.0/relevox-message-map.json"
-echo '{ "stale": true }' >"$stale"
-echo '# stale' >"${stale%.json}.md"
+# A project that only uses another project's mediator writes a map of the calls it makes (ADR 0021), and the
+# recipe in docs/message-map.md gives the application's requests the host's calls.
+calls="$layered/Host/obj/Release/net10.0/relevox-message-map.json"
+application="$layered/App/obj/Release/net10.0/relevox-message-map.json"
 dotnet build "$layered/Host" --configuration Release -p:RelevoxMessageMap=true -p:RelevoxVersion="$version"
-[[ ! -e "$stale" && ! -e "${stale%.json}.md" ]] || { echo "The layered host kept a message map for a mediator it does not own." >&2; exit 1; }
+grep -q '"calls"' "$calls" && grep -q '^### `Contracts.Ping`$' "${calls%.json}.md"   || { cat "$calls" "${calls%.json}.md" >&2 2>/dev/null; echo "The layered host did not write the calls it makes." >&2; exit 1; }
+combined="$(jq --slurp --from-file "$root/docs/message-map-combine.jq" "$application" "$calls")"
+jq -e '.[].requests[] | select(.type == "Contracts.Ping") | .callSites[] | select(.project == "Host" and .file == "Program.cs")' <<<"$combined" >/dev/null   || { echo "$combined" >&2; echo "The combined view does not list the host's call to Contracts.Ping." >&2; exit 1; }
+[[ -z "$(jq -r '.[].requests[] | select(.callSites == []) | .type' <<<"$combined")" ]]   || { echo "$combined" >&2; echo "The check reports a request the host sends." >&2; exit 1; }
+echo "The layered host wrote its calls, and the combined view gives them to the application's requests."
+
+# Built without its call, the host has nothing to write, and the map left from the build above is removed rather
+# than left stale.
+dotnet build "$layered/Host" --configuration Release -p:RelevoxMessageMap=true -p:SmokeNoCalls=true -p:RelevoxVersion="$version"
+[[ ! -e "$calls" && ! -e "${calls%.json}.md" ]] || { echo "The layered host kept a message map with calls it no longer makes." >&2; exit 1; }
 
 # MediatR code left in a contracts-only library: the code fix Relevox.Contracts carries has to run from the command
 # line and leave a library that builds. The compiler skips analyzers once there are errors, so the build alone

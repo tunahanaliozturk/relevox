@@ -26,6 +26,12 @@ All notable changes to this project are written down here. The format follows
   validator was found for in the project and its references, so a request without one gets no behaviour. A
   class derived from the behaviour, passed to `AddValidation`, throws an exception of the application's own
   ([docs/validation.md](docs/validation.md)). The message map lists it under those requests.
+- With `RelevoxMessageMap` on, a project that uses another project's mediator, such as a web project above the
+  application layer, writes a map of the calls it makes, in a new `calls` field, where it wrote nothing before;
+  one that makes no calls still gets no files (#89, ADR 0021). [docs/message-map-combine.jq](docs/message-map-combine.jq)
+  combines a solution's maps into one view with every project's calls, and
+  [docs/message-map.md](docs/message-map.md#requests-nothing-sends) shows a CI step on top of it that fails on a
+  request no project sends. Both are compatible schema changes.
 - RVX0013, Info: two pipeline or stream behaviours that could run for the same request with the same
   `PipelineOrder`, which then run in registration order (#98).
 - [docs/compatibility.md](docs/compatibility.md#the-pipeline) shows how an open behaviour with generic

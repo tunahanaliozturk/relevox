@@ -168,6 +168,15 @@ in the same place. The 19 functional tests passed before and after, the validati
 map shows the behaviour on the four commands that have a validator and on none of the other five requests,
 where it used to run, find no validator, and call the next behaviour.
 
+### The whole solution's calls
+
+Also for 1.5, Clean Architecture's Web project was built with `-p:RelevoxMessageMap=true`, which reaches
+Application through the project reference, against packages from the 1.5 branch. Before, only Application
+wrote a map, and it had no call sites: every `Send` is in Web. Now Web writes one too, listing nine calls, each
+on the line of a real `Send` in `Endpoints/`. The two maps put through
+[message-map-combine.jq](message-map-combine.jq) give each of Application's nine requests its call from Web,
+and the [check for requests nothing sends](message-map.md#requests-nothing-sends) reports none.
+
 ## Why bother
 
 None of what the first trial found showed up in the repository's own tests, which reference Relevox's projects

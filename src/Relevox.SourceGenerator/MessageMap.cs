@@ -457,15 +457,7 @@ internal static class MessageMap
     public static (string Json, string Markdown) Render(EmitPlan plan, ImmutableArray<PipelineOptions> calls, ImmutableArray<CallSite> callSites, string? projectDirectory, Compilation compilation)
     {
         Names names = new(compilation);
-
-        // Where each message is sent from, by file and then line.
-        Dictionary<string, List<object?>> sentFrom = callSites
-            .Select(site => (site.Message, File: CallSites.Relative(site.File, projectDirectory), site.Line))
-            .Distinct()
-            .OrderBy(static site => site.File, System.StringComparer.Ordinal)
-            .ThenBy(static site => site.Line)
-            .GroupBy(static site => site.Message, System.StringComparer.Ordinal)
-            .ToDictionary(static group => group.Key, static group => group.Select(static site => (object?)Object(("file", site.File), ("line", site.Line))).ToList(), System.StringComparer.Ordinal);
+        Dictionary<string, List<object?>> sentFrom = SentFromBy(callSites, projectDirectory);
 
         calls = [.. calls.Where(static call => !call.Foreign)];
 
@@ -590,16 +582,13 @@ internal static class MessageMap
                 ("callSites", SentFrom(entry.Notification.Type))));
         }
 
-        List<(string Name, object? Value)> map = Object(
+        return Finish(Object(
             ("schemaVersion", 1),
             ("project", compilation.AssemblyName),
             ("requests", Sorted(requests)),
             ("streams", Sorted(streams)),
             ("notifications", Sorted(notifications)),
-            ("unread", unread));
-        StringBuilder json = new();
-        Write(json, map, 0);
-        return (json.Append('\n').ToString(), MessageMapMarkdown.Write(map));
+            ("unread", unread)));
 
         List<object?> SentFrom(string type) => sentFrom.TryGetValue(Display(type), out List<object?>? sites) ? sites : [];
 
@@ -655,6 +644,47 @@ internal static class MessageMap
             }
         }
     }
+
+    /// <summary>
+    /// The map of a project that uses another project's mediator (ADR 0021): it dispatches nothing, and lists in
+    /// <c>calls</c> the messages it sends. Null when it sends none, so such a project gets no files, as before.
+    /// </summary>
+    public static (string Json, string Markdown)? RenderCalls(string? project, ImmutableArray<CallSite> callSites, string? projectDirectory)
+    {
+        if (callSites.IsEmpty)
+        {
+            return null;
+        }
+
+        return Finish(Object(
+            ("schemaVersion", 1),
+            ("project", project),
+            ("requests", new List<object?>()),
+            ("streams", new List<object?>()),
+            ("notifications", new List<object?>()),
+            ("unread", new List<object?>()),
+            ("calls", SentFromBy(callSites, projectDirectory)
+                .OrderBy(static message => message.Key, System.StringComparer.Ordinal)
+                .Select(static message => (object?)Object(("type", message.Key), ("callSites", message.Value)))
+                .ToList())));
+    }
+
+    private static (string Json, string Markdown) Finish(List<(string Name, object? Value)> map)
+    {
+        StringBuilder json = new();
+        Write(json, map, 0);
+        return (json.Append('\n').ToString(), MessageMapMarkdown.Write(map));
+    }
+
+    // Where each message is sent from, by file and then line.
+    private static Dictionary<string, List<object?>> SentFromBy(ImmutableArray<CallSite> callSites, string? projectDirectory) =>
+        callSites
+            .Select(site => (site.Message, File: CallSites.Relative(site.File, projectDirectory), site.Line))
+            .Distinct()
+            .OrderBy(static site => site.File, System.StringComparer.Ordinal)
+            .ThenBy(static site => site.Line)
+            .GroupBy(static site => site.Message, System.StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Select(static site => (object?)Object(("file", site.File), ("line", site.Line))).ToList(), System.StringComparer.Ordinal);
 
     // The plan's names are fully qualified, so dropping global:: gives the name the map uses without binding it.
     private static string Display(string name) => name.Replace("global::", "");

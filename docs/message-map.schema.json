@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/tunahanaliozturk/relevox/blob/main/docs/message-map.schema.json",
   "title": "Relevox message map",
-  "description": "What one project's mediator dispatches and what runs around each message. Described in docs/message-map.md. Within schema version 1, fields are only ever added.",
+  "description": "What one project's mediator dispatches and what runs around each message, or, for a project using another project's mediator, the calls it makes. Described in docs/message-map.md. Within schema version 1, fields are only ever added.",
   "type": "object",
   "required": ["schemaVersion", "project", "requests", "streams", "notifications", "unread"],
   "properties": {
@@ -58,6 +58,17 @@
     "unread": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "callSites"],
+        "properties": {
+          "type": { "type": "string" },
+          "callSites": { "$ref": "#/definitions/callSites" }
+        }
+      }
     }
   },
   "definitions": {
@@ -68,6 +79,7 @@
         "type": "object",
         "required": ["file", "line"],
         "properties": {
+          "project": { "type": "string" },
           "file": { "type": "string" },
           "line": { "type": "integer", "minimum": 1 }
         }
