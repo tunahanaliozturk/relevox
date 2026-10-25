@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
     <PackageReference Include="MediatR" />
     <PackageReference Include="Mediator.Abstractions" />
     <PackageReference Include="Mediator.SourceGenerator">
@@ -20,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Relevox/Relevox.csproj" />
+    <ProjectReference Include="../../src/Relevox.FluentValidation/Relevox.FluentValidation.csproj" />
     <ProjectReference Include="../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

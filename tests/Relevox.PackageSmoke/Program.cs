@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using FluentValidation;
 using Relevox;
 using Relevox.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +10,8 @@ using Smoke;
 // the generator writes into, so a generated AddRelevox that strayed back there would fail this build.
 ServiceCollection services = new();
 services.AddSingleton<Log>();
-services.AddRelevox(options => options.AddOpenBehavior(typeof(Counting<,>)));
+services.AddValidatorsFromAssemblyContaining<Log>();
+services.AddRelevox(options => options.AddOpenBehavior(typeof(Counting<,>)).AddValidation());
 services.AddRelevoxNotificationRecorder();
 
 await using ServiceProvider provider = services.BuildServiceProvider();
@@ -22,6 +24,9 @@ Check("send through the typed mediator", await scope.ServiceProvider.GetRequired
 await sender.Send(new Touch());
 Check("send without a response", log.Entries.Contains("touched"), true);
 Check("behaviour around every send", log.Entries.Count(entry => entry == "behaviour"), 3);
+Check("valid request", await sender.Send(new Signup("ada")), 3);
+Check("invalid request", await Rejected(() => sender.Send(new Signup(""))), "Name");
+Check("no validation behaviour without a validator", scope.ServiceProvider.GetServices<IPipelineBehavior<Ping, string>>().Count(), 1);
 
 await scope.ServiceProvider.GetRequiredService<IPublisher>().Publish(new Shipped(7));
 Check("publish to both handlers", string.Join(",", log.Entries.Where(entry => entry.StartsWith("shipped", StringComparison.Ordinal))), "shipped-mail 7,shipped-stock 7");
@@ -39,6 +44,19 @@ FakeMediator fake = new FakeMediator().Setup((Ping ping) => ping.Text + " faked"
 Check("fake mediator", await fake.Send(new Ping("hi")), "hi faked");
 Console.WriteLine("Every check passed against the packed packages.");
 return 0;
+
+static async Task<string> Rejected(Func<Task<int>> send)
+{
+    try
+    {
+        await send();
+        return "accepted";
+    }
+    catch (ValidationException exception)
+    {
+        return string.Join(",", exception.Errors.Select(failure => failure.PropertyName));
+    }
+}
 
 static void Check<T>(string what, T actual, T expected)
 {
@@ -61,6 +79,18 @@ namespace Smoke
     public sealed class PingHandler : IRequestHandler<Ping, string>
     {
         public Task<string> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(request.Text + " pong");
+    }
+
+    public sealed record Signup(string Name) : IRequest<int>;
+
+    public sealed class SignupHandler : IRequestHandler<Signup, int>
+    {
+        public Task<int> Handle(Signup request, CancellationToken cancellationToken) => Task.FromResult(request.Name.Length);
+    }
+
+    public sealed class SignupValidator : AbstractValidator<Signup>
+    {
+        public SignupValidator() => RuleFor(signup => signup.Name).NotEmpty();
     }
 
     public sealed record Touch : IRequest;

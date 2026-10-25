@@ -65,6 +65,13 @@ internal static class Sanity
         Expect(await order.Reversed(), 42, "Relevox ordered pipeline send, registered in reverse");
         order.Cleanup();
 
+        ValidationBenchmarks validation = new();
+        validation.Setup();
+        Expect(await validation.Without(), 42, "Relevox send without validation");
+        Expect(await validation.WithoutValidator(), 42, "Relevox send with AddValidation, no validator");
+        Expect(await validation.WithValidator(), 42, "Relevox send with AddValidation and a validator");
+        validation.Cleanup();
+
         PublishBenchmarks publish = new();
         publish.Setup();
         await publish.MediatROne();
@@ -87,7 +94,7 @@ internal static class Sanity
         Expect(await startup.Mediator(), 42, "Mediator startup");
         Expect(await startup.Relevox(), 42, "Relevox startup");
 
-        foreach (string expected in new[] { "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Relevox fifth listener" })
+        foreach (string expected in new[] { "Mediator behaviour", "MediatR fifth listener", "Mediator fifth listener", "Relevox fifth listener", "Relevox validated handler" })
         {
             Expect(Counts.GetValueOrDefault(expected), 1, expected);
         }

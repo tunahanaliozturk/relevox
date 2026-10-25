@@ -64,7 +64,9 @@ internal static partial class Discovery
         }
 
         Closer closer = new(compilation, cancellationToken);
-        return closer.Definitions.Count == 0 ? Empty : closer.Run();
+        DiscoveryModel closed = closer.Definitions.Count == 0 ? Empty : closer.Run();
+        (EquatableArray<string> definitions, EquatableArray<ValidationRegistration> validations) = closer.Validations();
+        return definitions.Length == 0 ? closed : closed with { ValidationDefinitions = definitions, Validations = validations };
     }
 
     /// <summary>
@@ -211,6 +213,107 @@ internal static partial class Discovery
                 for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
                 {
                     if (SymbolEqualityComparer.Default.Equals(current, bound))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Relevox.FluentValidation's behaviour, and the open classes derived from it, each closed over every request
+        /// the solution declares a validator for (ADR 0020). Nothing without the package.
+        /// </summary>
+        /// <remarks>
+        /// A validator counts for the exact type it validates: the container resolves <c>IValidator&lt;TRequest&gt;</c>
+        /// without variance, so a validator for a base type never runs for a derived request, here or in the
+        /// behaviour MediatR applications write.
+        /// </remarks>
+        public (EquatableArray<string> Definitions, EquatableArray<ValidationRegistration> Validations) Validations()
+        {
+            if (_compilation.GetTypeByMetadataName("Relevox.FluentValidation.ValidationBehavior`2") is not { } behavior
+                || _compilation.GetTypeByMetadataName("FluentValidation.IValidator`1") is not { } validator)
+            {
+                return (EquatableArray<string>.Empty, EquatableArray<ValidationRegistration>.Empty);
+            }
+
+            INamedTypeSymbol[] types = [.. AllTypes(_compilation.Assembly.GlobalNamespace), .. _solution.SelectMany(static assembly => AllTypes(assembly.GlobalNamespace))];
+
+            INamedTypeSymbol[] definitions =
+            [
+                behavior,
+                .. types.Where(type => type is { TypeKind: TypeKind.Class, IsAbstract: false, TypeParameters.Length: 2 }
+                    && IsOpen(type)
+                    && !SymbolEqualityComparer.Default.Equals(type, behavior)
+                    && IsAccessible(type, _compilation)
+                    && Derives(type, behavior)),
+            ];
+
+            HashSet<INamedTypeSymbol> validated = new(SymbolEqualityComparer.Default);
+            foreach (INamedTypeSymbol type in types)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                if (type is { TypeKind: TypeKind.Class, IsAbstract: false } && !IsOpen(type))
+                {
+                    foreach (INamedTypeSymbol contract in type.AllInterfaces)
+                    {
+                        if (SymbolEqualityComparer.Default.Equals(contract.OriginalDefinition, validator) && contract.TypeArguments[0] is INamedTypeSymbol { IsAbstract: false } request)
+                        {
+                            validated.Add(request);
+                        }
+                    }
+                }
+            }
+
+            List<ValidationRegistration> registrations = [];
+            foreach (INamedTypeSymbol request in validated.Where(type => IsAccessible(type, _compilation)))
+            {
+                if (ResponseOf(request) is not { } response)
+                {
+                    continue;
+                }
+
+                foreach (INamedTypeSymbol definition in definitions)
+                {
+                    if (Discovery.Close(definition, [request, response], _compilation) is { } closed)
+                    {
+                        registrations.Add(new ValidationRegistration(
+                            Unbound(definition),
+                            $"global::Relevox.IPipelineBehavior<{Plain(request)}, {Plain(response)}>",
+                            Plain(closed),
+                            Plain(request)));
+                    }
+                }
+            }
+
+            return (
+                definitions.Select(Unbound).ToEquatableArray(),
+                registrations.OrderBy(static registration => registration.ImplementationType, StringComparer.Ordinal).ToEquatableArray());
+
+            ITypeSymbol? ResponseOf(INamedTypeSymbol request)
+            {
+                foreach (INamedTypeSymbol contract in request.AllInterfaces)
+                {
+                    if (contract.ContainingAssembly?.Name == ContractsAssembly && contract.MetadataName == "IRequest`1")
+                    {
+                        return contract.TypeArguments[0];
+                    }
+                }
+
+                return request.AllInterfaces.Any(static contract => contract.ContainingAssembly?.Name == ContractsAssembly && contract.MetadataName == "IRequest")
+                    ? _compilation.GetTypeByMetadataName("Relevox.Unit")
+                    : null;
+            }
+
+            static string Unbound(INamedTypeSymbol definition) => definition.ConstructUnboundGenericType().ToDisplayString(PlainFormat);
+
+            static bool Derives(INamedTypeSymbol type, INamedTypeSymbol definition)
+            {
+                for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
+                {
+                    if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, definition))
                     {
                         return true;
                     }

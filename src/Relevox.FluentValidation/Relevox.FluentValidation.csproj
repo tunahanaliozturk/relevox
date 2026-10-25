@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>Relevox.FluentValidation</PackageId>
+    <Description>A FluentValidation pipeline behaviour for Relevox, registered at build time only for the requests that have a validator.</Description>
+    <PackageTags>mediator;cqrs;mediatr;validation;fluentvalidation</PackageTags>
+    <RelevoxPackageReadme>$(MSBuildThisFileDirectory)../../docs/fluent-validation-package-readme.md</RelevoxPackageReadme>
+    <!-- New in 1.5.0: nothing to compare against until it has shipped once. -->
+    <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The lowest versions it needs, so the package does not push applications onto newer ones than they chose. -->
+    <PackageReference Include="FluentValidation" VersionOverride="12.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      For RelevoxOptions and the pipeline contracts. The analyzers stay behind: the application gets the generator
+      from its own reference to Relevox, and a second path to it would change nothing.
+    -->
+    <ProjectReference Include="../Relevox/Relevox.csproj" PrivateAssets="analyzers" />
+  </ItemGroup>
+
+</Project>
