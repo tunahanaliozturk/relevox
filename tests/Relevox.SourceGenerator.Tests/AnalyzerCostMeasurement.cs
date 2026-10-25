@@ -45,7 +45,7 @@ public sealed class AnalyzerCostMeasurement
         CSharpGeneratorDriver.Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: parse)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _, TestContext.Current.CancellationToken);
 
-        ImmutableArray<DiagnosticAnalyzer> analyzers = [new RelevoxAnalyzer(), new MediatRUsageAnalyzer(), new HandlerSendAnalyzer(), new BlockingCallAnalyzer(), new PublishLayerAnalyzer()];
+        ImmutableArray<DiagnosticAnalyzer> analyzers = [new RelevoxAnalyzer(), new MediatRUsageAnalyzer(), new HandlerSendAnalyzer(), new BlockingCallAnalyzer(), new PublishLayerAnalyzer(), new PipelineOrderAnalyzer()];
 
         // Each analyzer alone, so that work Roslyn shares between analyzers, such as building operation trees, is
         // charged to every one that needs it rather than to whichever asked first. Three analyses each: the first

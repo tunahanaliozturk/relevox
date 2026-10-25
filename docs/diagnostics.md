@@ -21,6 +21,7 @@ that hold most handlers and reference only the contracts.
 | [RVX0010](#rvx0010) | Info | Pipeline code blocks on a task |
 | [RVX0011](#rvx0011) | Info | Notification published from the wrong layer |
 | [RVX0012](#rvx0012) | Warning | Layer setting cannot be used |
+| [RVX0013](#rvx0013) | Info | Two behaviours have the same `PipelineOrder` |
 
 ## Architecture rules
 
@@ -329,3 +330,22 @@ reaches every project, a type that cannot be found is only reported in a project
 layers.
 
 **Fix:** correct the setting the message names.
+
+## RVX0013
+
+**Two behaviours have the same PipelineOrder.** Info.
+
+Two pipeline behaviours, or two stream behaviours, that could run for the same request carry the same
+`[PipelineOrder]` number, so they run in the order they are registered, which the attribute is there to replace
+([ADR 0019](adr/0019-pipeline-order.md)). Two closed behaviours meet only when they are for the same request
+type; an open one meets every other behaviour of its kind. Constraints are not compared, so two open behaviours
+whose constraints never hold for the same request are still reported. A behaviour in the project that meets
+one in a referenced project is reported in the project; two in the reference are reported there.
+
+```csharp
+[PipelineOrder(1)] public sealed class Logging<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> ...
+[PipelineOrder(1)] public sealed class Validation<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> ... // RVX0013
+```
+
+**Fix:** give each behaviour its own number, or remove the attribute from both if registration order is what
+you want.
