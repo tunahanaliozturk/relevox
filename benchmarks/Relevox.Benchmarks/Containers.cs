@@ -59,6 +59,28 @@ internal static class Containers
         return services.BuildServiceProvider();
     }
 
+    /// <summary>Relevox with the three PipelineOrder behaviours, registered in their order or in reverse.</summary>
+    public static ServiceProvider RelevoxOrdered(bool reversed)
+    {
+        ServiceCollection services = new();
+        services.AddRelevox(options =>
+        {
+            if (reversed)
+            {
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.OrderedThird>();
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.OrderedSecond>();
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.OrderedFirst>();
+            }
+            else
+            {
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.OrderedFirst>();
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.OrderedSecond>();
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.OrderedThird>();
+            }
+        });
+        return services.BuildServiceProvider();
+    }
+
     public static ServiceProvider Mediator(bool withPipeline)
     {
         ServiceCollection services = new();

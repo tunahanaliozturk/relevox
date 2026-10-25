@@ -46,6 +46,32 @@ public sealed class Third : IPipelineBehavior<Piped, int>
     }
 }
 
+// The same three behaviours with PipelineOrder, for registering in that order and in reverse.
+
+[PipelineOrder(1)]
+public sealed class OrderedFirst : IPipelineBehavior<Piped, int>
+{
+    public Task<int> Handle(Piped request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken) =>
+        next(cancellationToken);
+}
+
+[PipelineOrder(2)]
+public sealed class OrderedSecond : IPipelineBehavior<Piped, int>
+{
+    public Task<int> Handle(Piped request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken) =>
+        next(cancellationToken);
+}
+
+[PipelineOrder(3)]
+public sealed class OrderedThird : IPipelineBehavior<Piped, int>
+{
+    public Task<int> Handle(Piped request, RequestHandlerDelegate<int> next, CancellationToken cancellationToken)
+    {
+        Sanity.Count("Relevox ordered behaviour");
+        return next(cancellationToken);
+    }
+}
+
 public sealed record OneListener : INotification;
 
 public sealed class OneListenerHandler : INotificationHandler<OneListener>

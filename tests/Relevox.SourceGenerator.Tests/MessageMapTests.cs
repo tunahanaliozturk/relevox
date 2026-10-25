@@ -321,6 +321,63 @@ public sealed class MessageMapTests
             """));
     }
 
+    // The pipeline above with PipelineOrder on two behaviours (#97): Logging moves inside LookCache, and Transaction
+    // outside the pre-processor.
+    private static readonly string Ordered = Pipeline
+        .Replace("public sealed class Logging<", "[PipelineOrder(1)] public sealed class Logging<", StringComparison.Ordinal)
+        .Replace("public sealed class Transaction<", "[PipelineOrder(-5)] public sealed class Transaction<", StringComparison.Ordinal);
+
+    [Fact]
+    public void Behaviours_are_listed_in_the_order_PipelineOrder_gives_with_their_order()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap(Ordered);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation)!.ShouldContain(Lf("""
+                  "behaviors": [
+                    {
+                      "type": "Shop.LookCache",
+                      "project": "Subject"
+                    },
+                    {
+                      "type": "Shop.Logging<Shop.Look, string>",
+                      "project": "Subject",
+                      "order": 1
+                    }
+                  ],
+            """));
+        Markdown(run.Compilation).ShouldBe(Lf("""
+            # Message map of Subject
+
+            Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; exception handlers and actions wrap the whole pipeline and run only when it throws. They are listed as they run with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first. A behaviour ordered below zero runs outside all of them, the processors included.
+
+            ## Requests
+
+            ### `Shop.Look`
+
+            Returns `string`. Declared in Subject.
+
+            | Step | Type | Project |
+            |---|---|---|
+            | Behaviour | `Shop.LookCache` | Subject |
+            | Behaviour, order 1 | `Shop.Logging<Shop.Look, string>` | Subject |
+            | Handler | `Shop.LookHandler` | Subject |
+
+            ### `Shop.Place`
+
+            Returns `int`. Declared in Subject.
+
+            | Step | Type | Project |
+            |---|---|---|
+            | Behaviour, order -5 | `Shop.Transaction<Shop.Place, int>` | Subject |
+            | Pre-processor | `Shop.Audit` | Subject |
+            | Behaviour, order 1 | `Shop.Logging<Shop.Place, int>` | Subject |
+            | Handler | `Shop.PlaceHandler` | Subject |
+            | Exception handler, `System.InvalidOperationException` | `Shop.Refused` | Subject |
+
+            """));
+    }
+
     [Fact]
     public void The_markdown_view_draws_each_notification_with_its_handlers_in_order()
     {
@@ -889,6 +946,7 @@ public sealed class MessageMapTests
         string[] maps =
         [
             Json(GeneratorHarness.RunWithMessageMap(Pipeline).Compilation)!,
+            Json(GeneratorHarness.RunWithMessageMap(Ordered).Compilation)!,
             Json(GeneratorHarness.RunWithMessageMap(Handlers).Compilation)!,
             Json(GeneratorHarness.RunWithMessageMap(Handlers, Callers).Compilation)!,
             Json(GeneratorHarness.RunWithMessageMap(

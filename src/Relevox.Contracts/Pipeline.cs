@@ -38,3 +38,21 @@ public interface IStreamPipelineBehavior<in TRequest, TResponse>
     /// <returns>The stream.</returns>
     IAsyncEnumerable<TResponse> Handle(TRequest request, StreamHandlerDelegate<TResponse> next, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Places a pipeline or stream behaviour by number instead of by registration order: a lower number runs further
+/// out, seeing the request before the others do.
+/// </summary>
+/// <remarks>
+/// A behaviour without the attribute counts as 0, and behaviours with the same number keep the order they were
+/// registered in, so a pipeline with no attribute anywhere runs exactly as registered, as in MediatR. Built-in
+/// processor and exception behaviours count as 0 too. The order is worked out once per request type, on its first
+/// send (ADR 0019).
+/// </remarks>
+/// <param name="order">Where the behaviour runs: lower runs further out.</param>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+public sealed class PipelineOrderAttribute(int order) : Attribute
+{
+    /// <summary>Where the behaviour runs: lower runs further out.</summary>
+    public int Order { get; } = order;
+}

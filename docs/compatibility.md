@@ -101,6 +101,14 @@ send. Behaviours registered through `AddRelevox`'s options and ones registered d
 before or after, all run. `next` can be called more than once, and a token passed to `next` replaces the
 original from there inward; `next()` with no token keeps the token `Send` was given.
 
+**`[PipelineOrder(n)]` changes that order only where it is used.** MediatR has no such attribute. A behaviour
+class that carries it runs by its number, lower further out; one without it counts as 0, the built-in
+behaviours included, and behaviours with the same number keep registration order. So a pipeline with no
+attribute runs exactly as above, and a behaviour at a negative number runs outside the exception and processor
+behaviours. The order is worked out on the first send of each request type; a request type whose behaviours it
+moves gets one new array per send ([ADR 0019](adr/0019-pipeline-order.md)). Stream behaviours are ordered the
+same way.
+
 **A request without a response runs through behaviours typed over `Unit`**: `IPipelineBehavior<Ring, Unit>`.
 
 **Processors only run when one was added through the options.** This is the most surprising rule the
