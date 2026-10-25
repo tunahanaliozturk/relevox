@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <DefineConstants Condition="'$(SmokeNoCalls)' == 'true'">$(DefineConstants);SMOKE_NO_CALLS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

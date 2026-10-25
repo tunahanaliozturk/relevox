@@ -6,7 +6,8 @@ checked in CI instead of found with grep.
 
 How the map leaves the build is in [ADR 0014](adr/0014-message-map-output.md); what goes into it, and what the
 build cannot see, is in [ADR 0015](adr/0015-message-map-content.md); the Markdown view is
-[ADR 0016](adr/0016-message-map-markdown.md); call sites are [ADR 0017](adr/0017-message-map-call-sites.md).
+[ADR 0016](adr/0016-message-map-markdown.md); call sites are [ADR 0017](adr/0017-message-map-call-sites.md), and
+the calls of projects that use another project's mediator are [ADR 0021](adr/0021-solution-call-sites.md).
 
 ## Turning it on
 
@@ -24,7 +25,8 @@ Every build that compiles the project then writes the map, by default to
 `obj/<configuration>/<framework>/relevox-message-map.json`, and a [Markdown view](#the-markdown-view) of it
 next to it, `relevox-message-map.md` (with `RelevoxMessageMapPath`, the same path with `.md`). The files are only
 rewritten when their content changes, so an edit that changes no message, handler or registration leaves them
-alone. Projects that use another project's mediator have no map of their own and get no files.
+alone. A project that uses another project's mediator, such as a web project above the application layer,
+gets a map of the calls it makes ([below](#the-whole-solution)); one that makes none gets no files.
 
 The map is written by a real build: `dotnet build`, or a build in Visual Studio or Rider. The IDE's background
 design-time builds do not write it.
@@ -220,6 +222,77 @@ Call sites carry line numbers, so an edit that moves a call changes the map. Tha
 where the call went. If that is more churn than a team wants, commit the map without checking it, or check only
 the JSON with a tool that ignores `callSites`.
 
+## The whole solution
+
+Each map is written by one project's build, so on its own it lists the calls in that project. In a layered
+solution the requests are declared and handled in one project and sent from another: the application layer
+calls `AddRelevox`, the web project sends. With the switch on in both, the web project writes a map of its own
+with nothing in `requests`, `streams` or `notifications` and its calls in `calls`:
+
+```json
+{
+  "schemaVersion": 1,
+  "project": "Shop.Web",
+  "requests": [],
+  "streams": [],
+  "notifications": [],
+  "unread": [],
+  "calls": [
+    {
+      "type": "Shop.Orders.PlaceOrder",
+      "callSites": [
+        {
+          "file": "Endpoints/Orders.cs",
+          "line": 18
+        }
+      ]
+    }
+  ]
+}
+```
+
+Its Markdown view lists the same calls under "Calls".
+
+[message-map-combine.jq](message-map-combine.jq) puts the maps together. Copy it into the repository and run it
+over every map:
+
+```sh
+jq --slurp --from-file message-map-combine.jq $(git ls-files '*message-map.json') > combined-message-map.json
+```
+
+The output is an array with one entry per mediator: its map, where each message's `callSites` holds the calls
+from every project, each with a `project` field naming the project the call is in, sorted by project, file and
+line. The maps under `obj` work as well, with `find . -name relevox-message-map.json -path '*/obj/*'` in place
+of `git ls-files`.
+
+### Requests nothing sends
+
+A request with a handler and no call site in any project is either dead or sent in a way the build cannot see.
+After the step above:
+
+```yaml
+- name: Every request is sent from somewhere
+  run: |
+    jq --slurp --from-file message-map-combine.jq $(git ls-files '*message-map.json') > combined-message-map.json
+    unsent="$(jq -r '.[].requests[] | select(.callSites == []) | .type' combined-message-map.json)"
+    if [ -n "$unsent" ]; then
+      echo "::error::No project sends these requests:"
+      echo "$unsent"
+      exit 1
+    fi
+```
+
+The check only knows the calls in the maps it is given. Leave out a project, and its calls are missing; add the
+test projects, and a request sent only from a test counts as sent. A request the build cannot see being sent,
+listed [below](#what-the-map-cannot-see), is reported; one sent as `object` on purpose, such as from a message
+queue, can be filtered out by name:
+
+```sh
+jq -r '.[].requests[] | select(.callSites == []) | .type | select(. != "Shop.Orders.Replay")' combined-message-map.json
+```
+
+Notifications nobody publishes are not checked yet; `.[].notifications[] | select(.callSites == [])` lists them.
+
 ## The fields
 
 The JSON schema is [message-map.schema.json](message-map.schema.json); a test checks generated maps against it.
@@ -238,6 +311,7 @@ type name; everything inside a message is in the order it runs.
 | `streams` | array | Every stream request, sorted by `type`. |
 | `notifications` | array | Every notification type the build saw, sorted by `type`. |
 | `unread` | array of strings | Registrations in an `AddRelevox` options lambda that the build could not read, as written, such as `options.AddOpenBehavior(behaviorType)`. Behaviours and processors registered there are missing from the map. Empty when everything was read. |
+| `calls` | array | Only in the map of a project that uses another project's mediator: each message type it sends, sorted by `type`, with its `callSites`. The four lists above are then empty. |
 
 ### A request
 
@@ -299,6 +373,7 @@ line.
 |---|---|---|
 | `file` | string | The file, relative to the project, with `/` between folders. A file outside the project folder, such as a linked one, is written by its name alone. The map never holds an absolute path. |
 | `line` | number | The line of the method name, from 1. |
+| `project` | string | Only in the [combined view](#the-whole-solution): the project the call is in. |
 
 Moving a call to another line changes the map, so a committed map changes with edits above a call too.
 
@@ -322,12 +397,13 @@ project:
   listed in `unread` and their registrations are left out.
 - **Branches in the options lambda.** A registration inside an `if` is in the map whether or not the branch is
   taken. A change to `AutoRegisterRequestProcessors` inside a branch or a loop is listed in `unread`.
-- **Calls from other projects.** A project's map lists the calls in that project. A request sent from an API
-  project to the application project's mediator is in the API project's map, if it has one, not the
-  application's; there is no map of the whole solution.
+- **Calls from other projects, in one map.** A project's map lists the calls in that project. A request sent
+  from a web project to the application project's mediator is in the web project's map, under `calls`, not the
+  application's; [combining the maps](#the-whole-solution) puts them together.
 - **Calls whose message type is not known where they are written**: `Send(object)`, a message held as
-  `IRequest<int>` or as a base class, and calls made through a wrapper or an extension method of your own. These
-  are left out, not guessed at.
+  `IRequest<int>`, as another interface or as an abstract class, a message whose type is a generic method's type
+  parameter, and calls made through a wrapper or an extension method of your own. These are left out, not
+  guessed at.
 
 ## Compatibility
 

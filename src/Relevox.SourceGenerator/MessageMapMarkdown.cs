@@ -15,8 +15,21 @@ internal static class MessageMapMarkdown
     {
         StringBuilder markdown = new();
         markdown.Append("# Message map of ").Append(Get(map, "project")).Append("\n\n")
-            .Append("Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. ")
-            .Append("Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; ")
+            .Append("Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. ");
+        if (map.Any(static field => field.Name == "calls"))
+        {
+            // A project using another project's mediator: its calls are all there is (ADR 0021).
+            markdown.Append("This project has no mediator of its own. It sends these messages through another project's, ")
+                .Append("whose map lists what runs for each.\n\n## Calls\n");
+            foreach (List<(string Name, object? Value)> message in Items(map, "calls"))
+            {
+                markdown.Append("\n### ").Append(Code((string)Get(message, "type")!)).Append("\n\nCalled from ").Append(Sites(message)).Append(".\n");
+            }
+
+            return markdown.ToString();
+        }
+
+        markdown.Append("Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; ")
             .Append("exception handlers and actions wrap the whole pipeline and run only when it throws. They are listed as they run ")
             .Append("with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first.");
         if (Items(map, "requests").Any(static request => Behaviours(request, outside: true).Any()))
@@ -113,14 +126,14 @@ internal static class MessageMapMarkdown
 
     private static void From(StringBuilder markdown, List<(string Name, object? Value)> entry, string verb)
     {
-        List<List<(string Name, object? Value)>> sites = Items(entry, "callSites");
-        if (sites.Count > 0)
+        if (Items(entry, "callSites").Count > 0)
         {
-            markdown.Append(verb).Append(' ')
-                .Append(string.Join(", ", sites.Select(static site => Code($"{Get(site, "file")}:{((int)Get(site, "line")!).ToString(System.Globalization.CultureInfo.InvariantCulture)}"))))
-                .Append(".\n\n");
+            markdown.Append(verb).Append(' ').Append(Sites(entry)).Append(".\n\n");
         }
     }
+
+    private static string Sites(List<(string Name, object? Value)> entry) =>
+        string.Join(", ", Items(entry, "callSites").Select(static site => Code($"{Get(site, "file")}:{((int)Get(site, "line")!).ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
 
     private static void Table(StringBuilder markdown, List<string> rows)
     {

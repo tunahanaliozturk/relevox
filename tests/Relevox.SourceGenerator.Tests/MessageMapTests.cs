@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.CodeAnalysis;
 
 namespace Relevox.SourceGenerator.Tests;
@@ -871,6 +873,137 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void A_project_using_another_projects_mediator_lists_the_calls_it_makes()
+    {
+        MetadataReference application = GeneratorHarness.Library("Shop.Application", [], withGenerator: true, Handlers, Setup);
+
+        // A message held as its interface is left out, as in a mediator's own map.
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap("Shop.Web", [application], """
+            using Relevox; using System.Threading.Tasks;
+            public sealed class Endpoints(ISender sender)
+            {
+                public Task<string> Ping() => sender.Send(new Shop.Ping("a"));
+                public Task Touch() => sender.Send(new Shop.Touch());
+                public Task<string> Again() => sender.Send(new Shop.Ping("b"));
+                public Task<string> Held(IRequest<string> request) => sender.Send(request);
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        run.Sources.Keys.ShouldHaveSingleItem().ShouldBe("RelevoxMessageMap.g.cs");
+        Json(run.Compilation, "Shop.Web").ShouldBe(Lf("""
+            {
+              "schemaVersion": 1,
+              "project": "Shop.Web",
+              "requests": [],
+              "streams": [],
+              "notifications": [],
+              "unread": [],
+              "calls": [
+                {
+                  "type": "Shop.Ping",
+                  "callSites": [
+                    {
+                      "file": "File0.cs",
+                      "line": 4
+                    },
+                    {
+                      "file": "File0.cs",
+                      "line": 6
+                    }
+                  ]
+                },
+                {
+                  "type": "Shop.Touch",
+                  "callSites": [
+                    {
+                      "file": "File0.cs",
+                      "line": 5
+                    }
+                  ]
+                }
+              ]
+            }
+
+            """));
+        Markdown(run.Compilation, "Shop.Web").ShouldNotBeNull().ShouldEndWith(Lf("""
+            ## Calls
+
+            ### `Shop.Ping`
+
+            Called from `File0.cs:4`, `File0.cs:6`.
+
+            ### `Shop.Touch`
+
+            Called from `File0.cs:5`.
+
+            """));
+    }
+
+    [Fact]
+    public void The_combined_view_gathers_every_projects_calls_and_finds_the_requests_nothing_sends()
+    {
+        // One request sent by the mediator's own project, one by a consumer, one by two consumers, one by nobody.
+        const string requests = """
+            using Relevox; using System.Threading; using System.Threading.Tasks;
+            namespace Shop;
+            public sealed record Own : IRequest;
+            public sealed record Sent : IRequest;
+            public sealed record Shared : IRequest;
+            public sealed record Unsent : IRequest;
+            public sealed class Handlers : IRequestHandler<Own>, IRequestHandler<Sent>, IRequestHandler<Shared>, IRequestHandler<Unsent>
+            {
+                public Task Handle(Own request, CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task Handle(Sent request, CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task Handle(Shared request, CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task Handle(Unsent request, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class Inside(ISender sender) { public Task Go() => sender.Send(new Own()); }
+            """;
+        MetadataReference application = GeneratorHarness.Library("Shop.Application", [], withGenerator: true, requests, Setup);
+        string directory = Directory.CreateTempSubdirectory("relevox-maps-").FullName;
+        try
+        {
+            string[] files =
+            [
+                Save("application", Json(GeneratorHarness.RunWithMessageMap("Shop.Application", [], requests, Setup).Compilation, "Shop.Application")),
+                Save("web", Consumer("Shop.Web", "sender.Send(new Shop.Sent()); sender.Send(new Shop.Shared());")),
+                Save("jobs", Consumer("Shop.Jobs", "sender.Send(new Shop.Shared());")),
+            ];
+
+            using JsonDocument combined = JsonDocument.Parse(Jq(["--slurp", "--from-file", Path.Combine(RepositoryRoot(), "docs", "message-map-combine.jq"), .. files]));
+            JsonElement mediator = combined.RootElement.EnumerateArray().ShouldHaveSingleItem();
+            mediator.GetProperty("project").GetString().ShouldBe("Shop.Application");
+            Dictionary<string, string[]> sentFrom = mediator.GetProperty("requests").EnumerateArray().ToDictionary(
+                static request => request.GetProperty("type").GetString()!,
+                static request => request.GetProperty("callSites").EnumerateArray().Select(static site => $"{site.GetProperty("project")} {site.GetProperty("file")}:{site.GetProperty("line")}").ToArray());
+            sentFrom["Shop.Own"].ShouldBe(["Shop.Application File0.cs:14"]);
+            sentFrom["Shop.Sent"].ShouldBe(["Shop.Web File0.cs:1"]);
+            sentFrom["Shop.Shared"].ShouldBe(["Shop.Jobs File0.cs:1", "Shop.Web File0.cs:1"]);
+            sentFrom["Shop.Unsent"].ShouldBeEmpty();
+
+            // The check docs/message-map.md gives, as written there.
+            string combinedFile = Save("combined", combined.RootElement.GetRawText());
+            Jq(["-r", ".[].requests[] | select(.callSites == []) | .type", combinedFile]).ShouldBe(Lf("Shop.Unsent\n"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+
+        string Consumer(string name, string calls) => Json(GeneratorHarness.RunWithMessageMap(name, [application], $$"""
+            public sealed class Calls(Relevox.ISender sender) { public void Go() { {{calls}} } }
+            """).Compilation, name)!;
+
+        string Save(string name, string? content)
+        {
+            string file = Path.Combine(directory, $"{name}.json");
+            File.WriteAllText(file, content.ShouldNotBeNull());
+            return file;
+        }
+    }
+
+    [Fact]
     public void Each_message_lists_where_it_is_sent_from()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap(Handlers, Callers);
@@ -936,13 +1069,8 @@ public sealed class MessageMapTests
     [Fact]
     public async Task Every_map_here_matches_the_published_schema()
     {
-        string root = AppContext.BaseDirectory;
-        while (!File.Exists(Path.Combine(root, "Relevox.slnx")))
-        {
-            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("Relevox.slnx not found above the test output.");
-        }
-
-        NJsonSchema.JsonSchema schema = await NJsonSchema.JsonSchema.FromFileAsync(Path.Combine(root, "docs", "message-map.schema.json"), TestContext.Current.CancellationToken);
+        NJsonSchema.JsonSchema schema = await NJsonSchema.JsonSchema.FromFileAsync(Path.Combine(RepositoryRoot(), "docs", "message-map.schema.json"), TestContext.Current.CancellationToken);
+        MetadataReference application = GeneratorHarness.Library("Shop.Application", [], withGenerator: true, Handlers, Setup);
         string[] maps =
         [
             Json(GeneratorHarness.RunWithMessageMap(Pipeline).Compilation)!,
@@ -952,6 +1080,7 @@ public sealed class MessageMapTests
             Json(GeneratorHarness.RunWithMessageMap(
                 Handlers,
                 "using Microsoft.Extensions.DependencyInjection; public static class Setup { public static IServiceCollection Add(IServiceCollection s, System.Type t) => s.AddRelevox(o => o.AddOpenBehavior(t)); }").Compilation)!,
+            Json(GeneratorHarness.RunWithMessageMap("Shop.Web", [application], "public sealed class Calls(Relevox.ISender sender) { public void Go() => sender.Send(new Shop.Touch()); }").Compilation, "Shop.Web")!,
         ];
 
         foreach (string map in maps)
@@ -960,12 +1089,59 @@ public sealed class MessageMapTests
         }
     }
 
-    // What Relevox.Build reads: the constant's value, not the generated source text.
-    private static string? Json(Compilation compilation) =>
-        compilation.GetTypeByMetadataName("Subject.RelevoxMessageMap")?.GetMembers("Json").OfType<IFieldSymbol>().Single().ConstantValue as string;
+    private const string Setup = """
+        using Microsoft.Extensions.DependencyInjection;
+        namespace Shop;
+        public static class Setup { public static IServiceCollection AddApplication(IServiceCollection services) => services.AddRelevox(); }
+        """;
 
-    private static string? Markdown(Compilation compilation) =>
-        compilation.GetTypeByMetadataName("Subject.RelevoxMessageMap")?.GetMembers("Markdown").OfType<IFieldSymbol>().Single().ConstantValue as string;
+    // What Relevox.Build reads: the constant's value, not the generated source text.
+    private static string? Json(Compilation compilation, string ns = "Subject") =>
+        compilation.GetTypeByMetadataName($"{ns}.RelevoxMessageMap")?.GetMembers("Json").OfType<IFieldSymbol>().Single().ConstantValue as string;
+
+    private static string? Markdown(Compilation compilation, string ns = "Subject") =>
+        compilation.GetTypeByMetadataName($"{ns}.RelevoxMessageMap")?.GetMembers("Markdown").OfType<IFieldSymbol>().Single().ConstantValue as string;
+
+    private static string RepositoryRoot()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "Relevox.slnx")))
+        {
+            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("Relevox.slnx not found above the test output.");
+        }
+
+        return root;
+    }
+
+    // jq runs the recipe in docs/message-map.md. CI's runners have it; a machine without it skips the test.
+    private static string Jq(string[] arguments)
+    {
+        ProcessStartInfo start = new("jq") { RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (string argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        Process jq;
+        try
+        {
+            jq = Process.Start(start)!;
+        }
+        catch (System.ComponentModel.Win32Exception) when (Environment.GetEnvironmentVariable("CI") is null)
+        {
+            Assert.Skip("jq is not installed.");
+            throw;
+        }
+
+        using (jq)
+        {
+            string output = jq.StandardOutput.ReadToEnd();
+            string error = jq.StandardError.ReadToEnd();
+            jq.WaitForExit();
+            jq.ExitCode.ShouldBe(0, error);
+            return output.ReplaceLineEndings("\n");
+        }
+    }
 
     private static string Lf(string text) => text.ReplaceLineEndings("\n");
 }
