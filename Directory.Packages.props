@@ -6,6 +6,9 @@
   </PropertyGroup>
 
   <ItemGroup Label="Runtime">
+    <!-- Apache-2.0. Only Relevox.FluentValidation depends on it, at the lowest version it needs. -->
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
   </ItemGroup>

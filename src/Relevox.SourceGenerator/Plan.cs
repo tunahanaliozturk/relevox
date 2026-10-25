@@ -73,7 +73,9 @@ internal sealed record EmitPlan(
     EquatableArray<DiagnosticEntry> Diagnostics,
     EquatableArray<string> OpenNotificationHandlers,
     EquatableArray<ServiceRegistration> HandlerContracts,
-    bool Emits = true);
+    bool Emits = true,
+    EquatableArray<string> ValidationDefinitions = default,
+    EquatableArray<ValidationRegistration> Validations = default);
 
 /// <summary>Turns what discovery found into what gets emitted, deciding every conflict on the way.</summary>
 /// <remarks>
@@ -349,7 +351,12 @@ internal static class Planner
                     handler.HandlerType)))
                 .Distinct()
                 .ToEquatableArray(),
-            Emits: !consumer);
+            Emits: !consumer,
+            ValidationDefinitions: discovery.ValidationDefinitions,
+            // Only requests the mediator dispatches: a validator for anything else has no pipeline to run in.
+            Validations: discovery.Validations
+                .Where(validation => requests.Any(request => !request.Request.IsAbstract && request.Request.Type == validation.Request))
+                .ToEquatableArray());
 
         HandlerModel? Single(IGrouping<string, HandlerModel> group, MessageKind kind)
         {

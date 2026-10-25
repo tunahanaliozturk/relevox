@@ -314,6 +314,22 @@ internal static class Emitter
         code.Line("// Behaviours are resolved from the container on every send, as in MediatR, so these are simply registered.");
         code.Line("// TryAddEnumerable keeps a behaviour added twice from running twice.");
         code.Open($"foreach ({DependencyInjection}.ServiceDescriptor behavior in global::System.Linq.Enumerable.Concat(options.BehaviorsToRegister, options.StreamBehaviorsToRegister))");
+        // AddValidation registers the validation behaviour open; it is closed here, in its place, over the requests
+        // the build found a validator for, and a request without one gets no behaviour at all (ADR 0020).
+        foreach (string definition in plan.ValidationDefinitions)
+        {
+            code.Line($"if (behavior.ServiceType == typeof(global::Relevox.IPipelineBehavior<,>) && behavior.ImplementationType == typeof({definition}))");
+            code.Line("{");
+            foreach (ValidationRegistration validation in plan.Validations.Where(validation => validation.Definition == definition))
+            {
+                code.Line($"    {DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, new {DependencyInjection}.ServiceDescriptor(typeof({validation.ServiceType}), typeof({validation.ImplementationType}), behavior.Lifetime));");
+            }
+
+            code.Line("    continue;");
+            code.Line("}");
+            code.Line();
+        }
+
         code.Line($"{DependencyInjection}.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services, behavior);");
         code.Close();
         code.Line();

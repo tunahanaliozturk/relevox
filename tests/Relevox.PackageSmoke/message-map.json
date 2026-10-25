@@ -23,15 +23,48 @@
       "callSites": [
         {
           "file": "Program.cs",
-          "line": 20
+          "line": 22
         },
         {
           "file": "Program.cs",
-          "line": 21
+          "line": 23
         },
         {
           "file": "Program.cs",
-          "line": 39
+          "line": 44
+        }
+      ]
+    },
+    {
+      "type": "Smoke.Signup",
+      "response": "int",
+      "project": "Relevox.PackageSmoke",
+      "handler": {
+        "type": "Smoke.SignupHandler",
+        "project": "Relevox.PackageSmoke"
+      },
+      "behaviors": [
+        {
+          "type": "Smoke.Counting<Smoke.Signup, int>",
+          "project": "Relevox.PackageSmoke"
+        },
+        {
+          "type": "Relevox.FluentValidation.ValidationBehavior<Smoke.Signup, int>",
+          "project": "Relevox.FluentValidation"
+        }
+      ],
+      "preProcessors": [],
+      "postProcessors": [],
+      "exceptionActions": [],
+      "exceptionHandlers": [],
+      "callSites": [
+        {
+          "file": "Program.cs",
+          "line": 27
+        },
+        {
+          "file": "Program.cs",
+          "line": 28
         }
       ]
     },
@@ -56,7 +89,7 @@
       "callSites": [
         {
           "file": "Program.cs",
-          "line": 22
+          "line": 24
         }
       ]
     }
@@ -74,7 +107,7 @@
       "callSites": [
         {
           "file": "Program.cs",
-          "line": 30
+          "line": 35
         }
       ]
     }
@@ -96,7 +129,7 @@
       "callSites": [
         {
           "file": "Program.cs",
-          "line": 26
+          "line": 31
         }
       ]
     }

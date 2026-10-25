@@ -17,6 +17,8 @@
   <ItemGroup>
     <PackageReference Include="Relevox" Version="$(RelevoxVersion)" />
     <PackageReference Include="Relevox.Testing" Version="$(RelevoxVersion)" />
+    <PackageReference Include="Relevox.FluentValidation" Version="$(RelevoxVersion)" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
 

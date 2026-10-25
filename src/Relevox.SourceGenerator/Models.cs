@@ -196,6 +196,8 @@ internal sealed record OpenNotificationHandler(string Definition, DeclarationOrd
 /// </param>
 /// <param name="OpenNotifications">Generic notification handlers closed at run time.</param>
 /// <param name="ExceptionFamilies">Subclasses of the classes open exception handlers and actions are constrained to.</param>
+/// <param name="ValidationDefinitions">Relevox.FluentValidation's behaviour and the open classes derived from it.</param>
+/// <param name="Validations">Each of those closed over each request a validator was found for.</param>
 internal sealed record DiscoveryModel(
     EquatableArray<HandlerModel> Handlers,
     EquatableArray<MessageModel> Messages,
@@ -203,10 +205,20 @@ internal sealed record DiscoveryModel(
     EquatableArray<OpenRegistration> Open,
     EquatableArray<string> Experimental,
     EquatableArray<OpenNotificationHandler> OpenNotifications,
-    EquatableArray<ExceptionFamily> ExceptionFamilies = default)
+    EquatableArray<ExceptionFamily> ExceptionFamilies = default,
+    EquatableArray<string> ValidationDefinitions = default,
+    EquatableArray<ValidationRegistration> Validations = default)
 {
-    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0 && OpenNotifications.Length == 0 && ExceptionFamilies.Length == 0;
+    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0 && OpenNotifications.Length == 0 && ExceptionFamilies.Length == 0
+        && ValidationDefinitions.Length == 0 && Validations.Length == 0;
 }
+
+/// <summary>A validation behaviour closed over one request that has a validator (ADR 0020).</summary>
+/// <param name="Definition">The open behaviour, such as <c>global::Relevox.FluentValidation.ValidationBehavior&lt;,&gt;</c>.</param>
+/// <param name="ServiceType">The closed <c>IPipelineBehavior&lt;,&gt;</c>.</param>
+/// <param name="ImplementationType">The closed behaviour.</param>
+/// <param name="Request">The request type, to keep the registrations to requests the mediator dispatches.</param>
+internal sealed record ValidationRegistration(string Definition, string ServiceType, string ImplementationType, string Request);
 
 /// <summary>What the referenced assemblies contributed, plus the facts taken from the compilation.</summary>
 /// <param name="AssemblyName">Names the generated namespace.</param>

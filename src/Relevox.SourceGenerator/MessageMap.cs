@@ -169,6 +169,29 @@ internal static class MessageMap
                 continue;
             }
 
+            // Relevox.FluentValidation's AddValidation adds its behaviour, or the class derived from it that it is
+            // given, open; the map lists it only under the requests the build found a validator for (ADR 0020).
+            if (MethodName(invocation) is { Identifier.ValueText: "AddValidation" }
+                && IsOptions(Receiver(invocation), parameters)
+                && model.Compilation.GetTypeByMetadataName("Relevox.FluentValidation.ValidationBehavior`2") is { } validation)
+            {
+                ITypeSymbol?[] given = [.. invocation.ArgumentList.Arguments.Select(static argument => argument.Expression).Where(IsTypes).SelectMany(expression => TypesIn(expression, model, cancellationToken))];
+                if (given.Length == 0 && invocation.ArgumentList.Arguments.All(static argument => !IsTypes(argument.Expression)) && !Kept(invocation))
+                {
+                    registrations.Add(new OptionRegistration(OptionKind.Behavior, null, validation.ConstructUnboundGenericType().ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                }
+                else if (given.Length == 1 && given[0] is INamedTypeSymbol { IsUnboundGenericType: true } derived && !Kept(invocation))
+                {
+                    registrations.Add(new OptionRegistration(OptionKind.Behavior, null, derived.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                }
+                else
+                {
+                    unread.Add(Text(invocation));
+                }
+
+                continue;
+            }
+
             // A method of the same name on something else, such as helper.AddBehavior(...), is not an options call.
             if (MethodName(invocation) is not { } name || !Methods.TryGetValue(name.Identifier.ValueText, out var method)
                 || !IsOptions(Receiver(invocation), parameters))
@@ -592,7 +615,14 @@ internal static class MessageMap
         {
             foreach (OptionRegistration registration in options.Where(registration => registration.Kind == kind))
             {
-                if (registration.Service is null)
+                if (registration.Service is null && plan.ValidationDefinitions.Contains(registration.Implementation))
+                {
+                    foreach (ValidationRegistration validation in plan.Validations.Where(validation => validation.Definition == registration.Implementation && validation.ServiceType == service))
+                    {
+                        yield return (validation.ImplementationType, true);
+                    }
+                }
+                else if (registration.Service is null)
                 {
                     foreach (string closed in OpenClosings([registration.Implementation], arguments))
                     {
