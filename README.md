@@ -24,6 +24,7 @@ handed from runner to runner. A request goes the same way, through each behaviou
 dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
 dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
+dotnet add package Relevox.FluentValidation   # a validation behaviour, only for requests with a validator
 ```
 
 | Package | Version | Downloads | Reference it from |
@@ -31,6 +32,7 @@ dotnet add package Relevox.Testing     # test projects: a fake mediator and a no
 | [Relevox](https://www.nuget.org/packages/Relevox) | [![Relevox](https://img.shields.io/nuget/v/Relevox?label=)](https://www.nuget.org/packages/Relevox) | [![Relevox downloads](https://img.shields.io/nuget/dt/Relevox?label=)](https://www.nuget.org/packages/Relevox) | The application, the project that calls `AddRelevox`. It brings the source generator. |
 | [Relevox.Contracts](https://www.nuget.org/packages/Relevox.Contracts) | [![Relevox.Contracts](https://img.shields.io/nuget/v/Relevox.Contracts?label=)](https://www.nuget.org/packages/Relevox.Contracts) | [![Relevox.Contracts downloads](https://img.shields.io/nuget/dt/Relevox.Contracts?label=)](https://www.nuget.org/packages/Relevox.Contracts) | Libraries that only declare requests and handlers. No dependencies. |
 | [Relevox.Testing](https://www.nuget.org/packages/Relevox.Testing) | [![Relevox.Testing](https://img.shields.io/nuget/v/Relevox.Testing?label=)](https://www.nuget.org/packages/Relevox.Testing) | [![Relevox.Testing downloads](https://img.shields.io/nuget/dt/Relevox.Testing?label=)](https://www.nuget.org/packages/Relevox.Testing) | Test projects ([testing.md](docs/testing.md)). |
+| [Relevox.FluentValidation](https://www.nuget.org/packages/Relevox.FluentValidation) | [![Relevox.FluentValidation](https://img.shields.io/nuget/v/Relevox.FluentValidation?label=)](https://www.nuget.org/packages/Relevox.FluentValidation) | [![Relevox.FluentValidation downloads](https://img.shields.io/nuget/dt/Relevox.FluentValidation?label=)](https://www.nuget.org/packages/Relevox.FluentValidation) | The application, for FluentValidation validators ([validation.md](docs/validation.md)). |
 
 Releases and their notes are on the [releases page](https://github.com/tunahanaliozturk/relevox/releases) and in
 [CHANGELOG.md](CHANGELOG.md).
@@ -147,6 +149,13 @@ drive it over HTTP.
 `Relevox.Testing` has a `FakeMediator` that answers what the test set up and records what was sent and
 published, in place of a mocked `IMediator`, and a recorder for the notifications the real mediator publishes
 in an integration test. [docs/testing.md](docs/testing.md) shows both, next to the Moq version.
+
+## Validation
+
+`Relevox.FluentValidation` has the validation behaviour most MediatR applications copy from a template.
+`options.AddValidation()` puts it in the pipeline, and the build gives it only to the requests that have a
+FluentValidation validator, so the others pay nothing for it. An application with its own validation exception
+derives from the behaviour. [docs/validation.md](docs/validation.md) shows both.
 
 ## Telemetry
 

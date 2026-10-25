@@ -72,6 +72,26 @@ public sealed class OrderedThird : IPipelineBehavior<Piped, int>
     }
 }
 
+// A request with a FluentValidation validator that passes, for ValidationBenchmarks.
+
+public sealed record Checked(int Value) : IRequest<int>;
+
+public sealed class CheckedHandler : IRequestHandler<Checked, int>
+{
+    private static readonly Task<int> Answer = Task.FromResult(42);
+
+    public Task<int> Handle(Checked request, CancellationToken cancellationToken)
+    {
+        Sanity.Count("Relevox validated handler");
+        return Answer;
+    }
+}
+
+public sealed class CheckedValidator : FluentValidation.AbstractValidator<Checked>
+{
+    public CheckedValidator() => FluentValidation.DefaultValidatorExtensions.GreaterThan(RuleFor(static request => request.Value), 0);
+}
+
 public sealed record OneListener : INotification;
 
 public sealed class OneListenerHandler : INotificationHandler<OneListener>

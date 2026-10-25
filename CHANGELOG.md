@@ -20,6 +20,12 @@ All notable changes to this project are written down here. The format follows
   registration order, so nothing moves where it is not used (#97, ADR 0019). The order is worked out on the
   first send of each request type; one whose behaviours it moves gets one new array per send. The message map
   lists behaviours in that order and gives each ordered one an `order` field, a compatible schema change.
+- `Relevox.FluentValidation`, a new package (#100, ADR 0020): `options.AddValidation()` adds a behaviour that runs
+  a request's FluentValidation validators one after another and throws their failures together, as
+  FluentValidation's `ValidationException`. The generated `AddRelevox` registers it only for the requests a
+  validator was found for in the project and its references, so a request without one gets no behaviour. A
+  class derived from the behaviour, passed to `AddValidation`, throws an exception of the application's own
+  ([docs/validation.md](docs/validation.md)). The message map lists it under those requests.
 - [docs/compatibility.md](docs/compatibility.md#the-pipeline) shows how an open behaviour with generic
   constraints, on the request or on the response, runs only for the requests they allow, and a differential
   scenario pins both against MediatR (#99).
