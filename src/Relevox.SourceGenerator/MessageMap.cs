@@ -520,10 +520,13 @@ internal static class MessageMap
 
                 foreach (OpenRegistration registration in plan.OpenProcessors.Where(registration => registration.ServiceType.EndsWith(open, System.StringComparison.Ordinal)))
                 {
-                    string exception = registration.Exception ?? "global::System.Exception";
-                    foreach (string closed in OpenClosings([registration.ImplementationType], [.. arguments, names.Bind(exception)]))
+                    string[] exceptions = registration.Exception is null ? ["global::System.Exception"] : [registration.Exception, .. registration.Subclasses];
+                    foreach (string exception in exceptions)
                     {
-                        found.Add(Exception(closed, exception));
+                        foreach (string closed in OpenClosings([registration.ImplementationType], [.. arguments, names.Bind(exception)]))
+                        {
+                            found.Add(Exception(closed, exception));
+                        }
                     }
                 }
 

@@ -165,7 +165,17 @@ internal sealed record SkippedModel(
 /// The types its request type parameter is constrained to, so that only requests deriving from all of them
 /// look it up. Empty for anything else.
 /// </param>
-internal sealed record OpenRegistration(string ServiceType, string ImplementationType, string? Exception = null, EquatableArray<string> RequestBounds = default);
+/// <param name="Subclasses">
+/// For an exception handler or action constrained to a class narrower than Exception, the classes derived from it
+/// that the solution declares, which the container is asked to close it over too, as MediatR's would be at each
+/// step of a thrown exception's chain. Filled in by the planner; empty for anything else.
+/// </param>
+internal sealed record OpenRegistration(string ServiceType, string ImplementationType, string? Exception = null, EquatableArray<string> RequestBounds = default, EquatableArray<string> Subclasses = default);
+
+/// <summary>The exception classes the solution declares below one class an open exception handler is constrained to.</summary>
+/// <param name="Bound">The class, such as <c>global::Shop.DomainException</c>.</param>
+/// <param name="Subclasses">Every class derived from it, abstract ones included, in name order.</param>
+internal sealed record ExceptionFamily(string Bound, EquatableArray<string> Subclasses);
 
 /// <summary>
 /// A generic notification handler declared as <c>H&lt;T&gt; : INotificationHandler&lt;T&gt;</c>, kept open as well as
@@ -184,15 +194,18 @@ internal sealed record OpenNotificationHandler(string Definition, DeclarationOrd
 /// Diagnostic ids from <c>[Experimental]</c> on any type the generated code names. The generated files
 /// suppress exactly these, so using an experimental handler does not break a build that already opted in.
 /// </param>
+/// <param name="OpenNotifications">Generic notification handlers closed at run time.</param>
+/// <param name="ExceptionFamilies">Subclasses of the classes open exception handlers and actions are constrained to.</param>
 internal sealed record DiscoveryModel(
     EquatableArray<HandlerModel> Handlers,
     EquatableArray<MessageModel> Messages,
     EquatableArray<SkippedModel> Skipped,
     EquatableArray<OpenRegistration> Open,
     EquatableArray<string> Experimental,
-    EquatableArray<OpenNotificationHandler> OpenNotifications)
+    EquatableArray<OpenNotificationHandler> OpenNotifications,
+    EquatableArray<ExceptionFamily> ExceptionFamilies = default)
 {
-    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0 && OpenNotifications.Length == 0;
+    public bool IsEmpty => Handlers.Length == 0 && Messages.Length == 0 && Skipped.Length == 0 && Open.Length == 0 && Experimental.Length == 0 && OpenNotifications.Length == 0 && ExceptionFamilies.Length == 0;
 }
 
 /// <summary>What the referenced assemblies contributed, plus the facts taken from the compilation.</summary>

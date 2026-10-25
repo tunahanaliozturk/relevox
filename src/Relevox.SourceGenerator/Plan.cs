@@ -98,6 +98,20 @@ internal static class Planner
         bool callsAddRelevox = false,
         bool ownOpenProcessors = false)
     {
+        // An open exception handler constrained to a class is asked about that class's subclasses too.
+        Dictionary<string, EquatableArray<string>> families = discovery.ExceptionFamilies
+            .GroupBy(static family => family.Bound, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.First().Subclasses, StringComparer.Ordinal);
+        if (families.Count > 0)
+        {
+            discovery = discovery with
+            {
+                Open = discovery.Open
+                    .Select(open => open.Exception is { } bound && families.TryGetValue(bound, out EquatableArray<string> subclasses) ? open with { Subclasses = subclasses } : open)
+                    .ToEquatableArray(),
+            };
+        }
+
         bool consumer = mediatorCoversReferences
             && !callsAddRelevox
             && !ownOpenProcessors
@@ -456,8 +470,8 @@ internal static class Planner
         ];
 
         // Open generic handlers and actions are closed by the container, but only over exception types the
-        // catalog asks about: Exception, or the class a handler's exception type parameter is constrained to. Every
-        // request's catalog asks about each, so they at least run.
+        // catalog asks about: Exception, or the class a handler's exception type parameter is constrained to and
+        // the solution's classes below it. Every request's catalog asks about each, so they at least run.
         // A request type parameter constrained to, say, ICommand rules out every request that is not one, and the
         // container would close nothing for those; leaving them out keeps their sends off the exception path.
         OpenRegistration[] openHandlers = [.. discovery.Open.Where(static open => open.ServiceType.EndsWith("IRequestExceptionHandler<,,>", StringComparison.Ordinal))];
@@ -468,7 +482,7 @@ internal static class Planner
                 .Where(open => open.RequestBounds.Length == 0
                     || (messages.TryGetValue(Key(requestType, MessageKind.Request), out MessageModel? model)
                         && open.RequestBounds.All(bound => model.AssignableTo.Contains(bound))))
-                .Select(static open => open.Exception ?? "global::System.Exception");
+                .SelectMany(static open => open.Exception is null ? ["global::System.Exception"] : open.Subclasses.Prepend(open.Exception));
 
         List<ExceptionCatalogEntry> catalogs = [];
         foreach (RequestEntry request in requests.Where(static request => !request.Request.IsAbstract).OrderBy(static request => request.Request.Type, StringComparer.Ordinal))

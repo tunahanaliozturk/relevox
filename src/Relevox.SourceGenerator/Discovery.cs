@@ -451,7 +451,8 @@ internal static partial class Discovery
             list.SelectMany(static part => part.Skipped).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Open).Distinct().ToEquatableArray(),
             list.SelectMany(static part => part.Experimental).Distinct().OrderBy(static id => id, System.StringComparer.Ordinal).ToEquatableArray(),
-            list.SelectMany(static part => part.OpenNotifications).Distinct().ToEquatableArray());
+            list.SelectMany(static part => part.OpenNotifications).Distinct().ToEquatableArray(),
+            list.SelectMany(static part => part.ExceptionFamilies).Distinct().ToEquatableArray());
     }
 
     private static bool ReachesContracts(IAssemblySymbol assembly, Dictionary<IAssemblySymbol, bool> memo)
