@@ -78,7 +78,8 @@
       "required": ["type", "project"],
       "properties": {
         "type": { "type": "string" },
-        "project": { "$ref": "#/definitions/project" }
+        "project": { "$ref": "#/definitions/project" },
+        "order": { "type": "integer" }
       }
     },
     "components": {

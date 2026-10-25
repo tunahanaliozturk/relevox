@@ -232,6 +232,58 @@ public class PipelineBenchmarks
 }
 
 /// <summary>
+/// The three-behaviour send with <c>PipelineOrder</c> on each behaviour (#97): registered in that order, where
+/// nothing moves, and in reverse, where the behaviours are put in order on every send.
+/// </summary>
+[MemoryDiagnoser]
+[HideColumns("Error", "StdDev", "Median", "RatioSD")]
+public class PipelineOrderBenchmarks
+{
+    private readonly RelevoxPeer.Piped _piped = new(1);
+    private ServiceProvider _plain = null!;
+    private ServiceProvider _inOrder = null!;
+    private ServiceProvider _reversed = null!;
+    private IServiceScope[] _scopes = null!;
+    private RelevoxMediator _plainTyped = null!;
+    private RelevoxMediator _inOrderTyped = null!;
+    private RelevoxMediator _reversedTyped = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _plain = Containers.Relevox(ServiceLifetime.Transient, withPipeline: true);
+        _inOrder = Containers.RelevoxOrdered(reversed: false);
+        _reversed = Containers.RelevoxOrdered(reversed: true);
+        _scopes = [_plain.CreateScope(), _inOrder.CreateScope(), _reversed.CreateScope()];
+        _plainTyped = _scopes[0].ServiceProvider.GetRequiredService<RelevoxMediator>();
+        _inOrderTyped = _scopes[1].ServiceProvider.GetRequiredService<RelevoxMediator>();
+        _reversedTyped = _scopes[2].ServiceProvider.GetRequiredService<RelevoxMediator>();
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        foreach (IServiceScope scope in _scopes)
+        {
+            scope.Dispose();
+        }
+
+        _plain.Dispose();
+        _inOrder.Dispose();
+        _reversed.Dispose();
+    }
+
+    [Benchmark(Baseline = true, Description = "Relevox, typed, no attribute")]
+    public Task<int> Plain() => _plainTyped.Send(_piped);
+
+    [Benchmark(Description = "Relevox, typed, PipelineOrder, registered in order")]
+    public Task<int> InOrder() => _inOrderTyped.Send(_piped);
+
+    [Benchmark(Description = "Relevox, typed, PipelineOrder, registered in reverse")]
+    public Task<int> Reversed() => _reversedTyped.Send(_piped);
+}
+
+/// <summary>
 /// The pipeline send again, in an application that also configures a pre- and a post-processor for a different
 /// request.
 /// </summary>

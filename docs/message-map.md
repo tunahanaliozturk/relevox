@@ -247,7 +247,7 @@ type name; everything inside a message is in the order it runs.
 | `response` | string or null | The response type; `null` for a request that returns nothing. |
 | `project` | string or null | The project the request type is declared in. |
 | `handler` | component | The handler that runs. |
-| `behaviors` | components | Pipeline behaviours added through the options, outermost first. An open behaviour appears closed over this request, and only when its constraints allow it, as the container decides. |
+| `behaviors` | components | Pipeline behaviours added through the options, outermost first. An open behaviour appears closed over this request, and only when its constraints allow it, as the container decides. A behaviour with `[PipelineOrder]` is placed by it, as it runs, and has an `order` field ([ADR 0019](adr/0019-pipeline-order.md)). |
 | `preProcessors` | components | Pre-processors, in the order they run. Empty unless the options add at least one, because only then does the pre-processor behaviour run ([compatibility](compatibility.md)). Processors found in the code are included when the options set `AutoRegisterRequestProcessors = true`. |
 | `postProcessors` | components | The same for post-processors. |
 | `exceptionActions` | exception components | Exception actions registered for this request, in the order they are tried for one exception type. Which ones run depends on the exception thrown: those for its type, then for each base type up to `Exception`. |
@@ -256,7 +256,8 @@ type name; everything inside a message is in the order it runs.
 
 The pipeline, from the outside in: exception actions and exception handlers (actions outermost with the default
 `ApplyForUnhandledExceptions` strategy, handlers outermost with `ApplyForAllExceptions`), then the
-pre-processors, then the post-processors, then `behaviors`, then the handler.
+pre-processors, then the post-processors, then `behaviors`, then the handler. A behaviour with a negative
+`order` runs outside all of them; the Markdown view lists it above the pre-processors.
 
 ### A stream
 
@@ -266,7 +267,7 @@ pre-processors, then the post-processors, then `behaviors`, then the handler.
 | `response` | string | The type of each item. |
 | `project` | string or null | The project the type is declared in. |
 | `handler` | component | The handler that runs. |
-| `behaviors` | components | Stream behaviours added through the options, outermost first. |
+| `behaviors` | components | Stream behaviours added through the options, outermost first, placed by `[PipelineOrder]` where they have it. |
 | `callSites` | call sites | Where this project creates the stream from. |
 
 ### A notification
@@ -285,7 +286,8 @@ pre-processors, then the post-processors, then `behaviors`, then the handler.
 | `type` | string | The class. |
 | `project` | string or null | The project it is declared in; `null` if the build could not tell. |
 
-An exception component adds `exception`, the exception type it is registered for.
+A behaviour with `[PipelineOrder]` adds `order`, its number; one without has no `order` and runs as 0. An
+exception component adds `exception`, the exception type it is registered for.
 
 ### A call site
 

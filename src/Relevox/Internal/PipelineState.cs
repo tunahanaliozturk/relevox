@@ -28,6 +28,11 @@ namespace Relevox.Internal;
 /// into a faulted task for them.
 /// </para>
 /// <para>
+/// Behaviours that carry <see cref="PipelineOrderAttribute"/> are put in its order on the same first send. A
+/// request type whose behaviours are already in that order, as they are wherever the attribute is not used, is
+/// remembered exactly as it would be without it.
+/// </para>
+/// <para>
 /// Registered as a singleton per generated mediator type, so each container gets its own answers. A race
 /// between two first uses is harmless: both ask, both store the same answer.
 /// </para>
@@ -40,11 +45,12 @@ public sealed class PipelineState<TMediator>
     private const byte Direct = 1;
     private const byte DirectButAsynchronous = 2;
     private const byte Pipeline = 3;
-    private const byte PipelineWithSlots = 4;
+    private const byte PipelineWithPlan = 4;
 
     private readonly byte[] _requests;
     private readonly SlotPlan?[] _plans;
     private readonly byte[] _streams;
+    private readonly BehaviorOrder?[] _streamOrders;
     private readonly bool _builtInsForEveryRequest;
     private byte _everyRequest;
     private byte _sequentialPublish;
@@ -61,6 +67,7 @@ public sealed class PipelineState<TMediator>
         _requests = new byte[requests];
         _plans = new SlotPlan?[requests];
         _streams = new byte[streams];
+        _streamOrders = new BehaviorOrder?[streams];
         _builtInsForEveryRequest = builtInsForEveryRequest;
     }
 
@@ -129,8 +136,42 @@ public sealed class PipelineState<TMediator>
     /// <param name="services">The container or scope to resolve from.</param>
     /// <returns>The behaviours, outermost first, or null.</returns>
     public IStreamPipelineBehavior<TRequest, TResponse>[]? StreamBehaviors<TRequest, TResponse>(int index, IServiceProvider services)
-        where TRequest : notnull =>
-        Resolve<IStreamPipelineBehavior<TRequest, TResponse>>(_streams, index, services, out _);
+        where TRequest : notnull
+    {
+        byte state = _streams[index];
+        if (state == Direct)
+        {
+            return null;
+        }
+
+        IEnumerable<IStreamPipelineBehavior<TRequest, TResponse>> resolved = services.GetServices<IStreamPipelineBehavior<TRequest, TResponse>>();
+        IStreamPipelineBehavior<TRequest, TResponse>[] behaviors = resolved as IStreamPipelineBehavior<TRequest, TResponse>[] ?? [.. resolved];
+        if (state == Pipeline)
+        {
+            return behaviors;
+        }
+
+        if (state == PipelineWithPlan && Volatile.Read(ref _streamOrders[index]) is { } known && known.Fits(behaviors))
+        {
+            return known.Apply(behaviors);
+        }
+
+        BehaviorOrder? order = behaviors.Length == 0 ? null : BehaviorOrder.For(behaviors);
+        if (state == Unknown)
+        {
+            if (order is null)
+            {
+                _streams[index] = behaviors.Length == 0 ? Direct : Pipeline;
+            }
+            else
+            {
+                Volatile.Write(ref _streamOrders[index], order);
+                Volatile.Write(ref _streams[index], PipelineWithPlan);
+            }
+        }
+
+        return behaviors.Length == 0 ? null : order?.Apply(behaviors) ?? behaviors;
+    }
 
     /// <summary>
     /// Whether some behaviour applies to every request type. MediatR then runs a pipeline even for a request it
@@ -170,8 +211,9 @@ public sealed class PipelineState<TMediator>
     }
 
     /// <summary>
-    /// The first send of a request type: finds the slots, asks each whether its behaviour has anything to do,
-    /// and remembers the answer. The behaviours created to ask are the ones this send runs.
+    /// The first send of a request type: puts the behaviours in the order <see cref="PipelineOrderAttribute"/>
+    /// gives, finds the slots, asks each whether its behaviour has anything to do, and remembers the answer. The
+    /// behaviours created to ask are the ones this send runs.
     /// </summary>
     private IPipelineBehavior<TRequest, TResponse>[]? Learn<TRequest, TResponse>(
         int index,
@@ -181,11 +223,14 @@ public sealed class PipelineState<TMediator>
         bool remember)
         where TRequest : notnull
     {
-        IPipelineBehavior<TRequest, TResponse>?[] created = new IPipelineBehavior<TRequest, TResponse>?[behaviors.Length];
+        // Slots are judged in running order, because whether an idle one can go depends on what runs outside it.
+        BehaviorOrder? order = behaviors.Length == 0 ? null : BehaviorOrder.For(behaviors);
+        IPipelineBehavior<TRequest, TResponse>[] running = order?.Apply(behaviors) ?? behaviors;
+        IPipelineBehavior<TRequest, TResponse>?[] created = new IPipelineBehavior<TRequest, TResponse>?[running.Length];
         bool anySlot = false;
-        for (int position = 0; position < behaviors.Length; position++)
+        for (int position = 0; position < running.Length; position++)
         {
-            if (behaviors[position] is BuiltInSlot<TRequest, TResponse> slot)
+            if (running[position] is BuiltInSlot<TRequest, TResponse> slot)
             {
                 anySlot = true;
                 created[position] = slot.Create(services);
@@ -194,7 +239,7 @@ public sealed class PipelineState<TMediator>
 
         // No behaviours at all is the common case, and it must end on the direct path: remembered as a pipeline,
         // every later send asked the container for an empty list and ran an empty chain, about 10 ns each.
-        if (!anySlot)
+        if (!anySlot && order is null)
         {
             if (remember)
             {
@@ -205,7 +250,7 @@ public sealed class PipelineState<TMediator>
             return behaviors.Length == 0 ? null : behaviors;
         }
 
-        SlotPlan plan = SlotPlan.For(behaviors, created);
+        SlotPlan plan = SlotPlan.For(running, created, order);
         asynchronous = plan.Asynchronous;
         if (plan.Kept == 0)
         {
@@ -220,35 +265,16 @@ public sealed class PipelineState<TMediator>
         if (remember)
         {
             Volatile.Write(ref _plans[index], plan);
-            Volatile.Write(ref _requests[index], PipelineWithSlots);
+            Volatile.Write(ref _requests[index], PipelineWithPlan);
         }
 
         return plan.Apply(behaviors, services, created);
     }
 
-    private static T[]? Resolve<T>(byte[] states, int index, IServiceProvider services, out bool asynchronous)
-    {
-        asynchronous = false;
-        byte state = states[index];
-        if (state == Direct)
-        {
-            return null;
-        }
-
-        IEnumerable<T> resolved = services.GetServices<T>();
-        T[] behaviors = resolved as T[] ?? [.. resolved];
-        if (state == Unknown)
-        {
-            states[index] = behaviors.Length == 0 ? Direct : Pipeline;
-        }
-
-        return behaviors.Length == 0 ? null : behaviors;
-    }
-
     /// <summary>A request type that exists only to ask the container about open generic behaviours.</summary>
     private sealed class Probe : IRequest<Unit>;
 
-    /// <summary>What one request type's slots do, learned on its first send.</summary>
+    /// <summary>What one request type's slots do, and the order its behaviours run in, learned on its first send.</summary>
     /// <remarks>
     /// <para>
     /// Idle slots are copied out rather than skipped in place: the copy is one small array, and keeping the
@@ -272,11 +298,13 @@ public sealed class PipelineState<TMediator>
 
         private readonly byte[] _roles;
         private readonly int[] _slots;
+        private readonly BehaviorOrder? _order;
 
-        private SlotPlan(byte[] roles, bool asynchronous)
+        private SlotPlan(byte[] roles, bool asynchronous, BehaviorOrder? order)
         {
             _roles = roles;
             _slots = [.. Enumerable.Range(0, roles.Length).Where(position => roles[position] != Keep)];
+            _order = order;
             Asynchronous = asynchronous;
             Kept = Array.FindAll(roles, static role => role != Idle).Length;
         }
@@ -285,8 +313,8 @@ public sealed class PipelineState<TMediator>
 
         public int Kept { get; }
 
-        /// <summary>Works out each position's role from what the container returned and what the slots created.</summary>
-        public static SlotPlan For<TRequest, TResponse>(IPipelineBehavior<TRequest, TResponse>[] behaviors, IPipelineBehavior<TRequest, TResponse>?[] created)
+        /// <summary>Works out each position's role from the behaviours in running order and what the slots created.</summary>
+        public static SlotPlan For<TRequest, TResponse>(IPipelineBehavior<TRequest, TResponse>[] behaviors, IPipelineBehavior<TRequest, TResponse>?[] created, BehaviorOrder? order)
             where TRequest : notnull
         {
             byte[] roles = new byte[behaviors.Length];
@@ -319,13 +347,18 @@ public sealed class PipelineState<TMediator>
                 }
             }
 
-            return new SlotPlan(roles, asynchronous);
+            return new SlotPlan(roles, asynchronous, order);
         }
 
         /// <summary>Whether the container returned an array of the shape the plan was learned from.</summary>
         public bool Fits<TRequest, TResponse>(IPipelineBehavior<TRequest, TResponse>[] behaviors)
             where TRequest : notnull
         {
+            if (_order is not null)
+            {
+                return _order.Fits(behaviors);
+            }
+
             if (behaviors.Length != _roles.Length)
             {
                 return false;
@@ -348,9 +381,9 @@ public sealed class PipelineState<TMediator>
         /// The behaviours to run: idle slots left out, active ones replaced. A new array, because the container
         /// may hand out the same one again.
         /// </summary>
-        /// <param name="behaviors">What the container returned, slots included.</param>
+        /// <param name="behaviors">What the container returned, slots included, in the container's order.</param>
         /// <param name="services">The container or scope of the send, for the behaviours that are created.</param>
-        /// <param name="created">On the first send, the behaviours already created to ask; otherwise null.</param>
+        /// <param name="created">On the first send, the behaviours already created to ask, in running order; otherwise null.</param>
         /// <returns>The behaviours to run.</returns>
         public IPipelineBehavior<TRequest, TResponse>[] Apply<TRequest, TResponse>(
             IPipelineBehavior<TRequest, TResponse>[] behaviors,
@@ -361,13 +394,14 @@ public sealed class PipelineState<TMediator>
             IPipelineBehavior<TRequest, TResponse>[] running = new IPipelineBehavior<TRequest, TResponse>[Kept];
             for (int position = 0, next = 0; position < behaviors.Length; position++)
             {
+                int source = _order is null ? position : _order[position];
                 switch (_roles[position])
                 {
                     case Keep:
-                        running[next++] = behaviors[position];
+                        running[next++] = behaviors[source];
                         break;
                     case Active:
-                        running[next++] = created?[position] ?? ((BuiltInSlot<TRequest, TResponse>)behaviors[position]).Create(services);
+                        running[next++] = created?[position] ?? ((BuiltInSlot<TRequest, TResponse>)behaviors[source]).Create(services);
                         break;
                     case PassThrough:
                         running[next++] = AsyncPassThrough<TRequest, TResponse>.Instance;

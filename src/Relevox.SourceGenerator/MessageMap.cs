@@ -580,8 +580,12 @@ internal static class MessageMap
 
         List<object?> SentFrom(string type) => sentFrom.TryGetValue(Display(type), out List<object?>? sites) ? sites : [];
 
+        // In the order they run: by PipelineOrder, and in registration order where it is the same (ADR 0019).
         List<object?> Behaviors(OptionKind kind, string service, ITypeSymbol? request, ITypeSymbol? response) =>
-            [.. FromOptions(kind, service, [request, response]).Select(step => Component(names, step.Type))];
+            [.. FromOptions(kind, service, [request, response])
+                .Select(step => (step.Type, Order: Names.Order(names.Bind(step.Type))))
+                .OrderBy(static step => step.Order ?? 0)
+                .Select(step => Ordered(Component(names, step.Type), step.Order))];
 
         // Each class with whether it was registered open, which keeps it apart from a closed registration of it.
         IEnumerable<(string Type, bool Open)> FromOptions(OptionKind kind, string service, ITypeSymbol?[] arguments)
@@ -630,6 +634,16 @@ internal static class MessageMap
 
     private static List<(string, object?)> Component(Names names, string type) =>
         Object(("type", Display(type)), ("project", Names.Project(names.Bind(type))));
+
+    private static List<(string, object?)> Ordered(List<(string, object?)> component, int? order)
+    {
+        if (order is { } value)
+        {
+            component.Add(("order", value));
+        }
+
+        return component;
+    }
 
     private static List<(string, object?)> Object(params (string, object?)[] fields) => [.. fields];
 
@@ -743,5 +757,24 @@ internal static class MessageMap
         }
 
         public static string? Project(ITypeSymbol? type) => type?.OriginalDefinition.ContainingAssembly?.Name;
+
+        /// <summary>The <c>PipelineOrder</c> a behaviour class has or inherits, or null.</summary>
+        public static int? Order(ITypeSymbol? type)
+        {
+            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                foreach (AttributeData attribute in current.GetAttributes())
+                {
+                    if (attribute.AttributeClass is { Name: "PipelineOrderAttribute", ContainingNamespace: { Name: "Relevox", ContainingNamespace.IsGlobalNamespace: true } }
+                        && attribute.ConstructorArguments.Length == 1
+                        && attribute.ConstructorArguments[0].Value is int order)
+                    {
+                        return order;
+                    }
+                }
+            }
+
+            return null;
+        }
     }
 }

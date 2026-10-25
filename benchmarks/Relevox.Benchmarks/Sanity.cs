@@ -59,6 +59,12 @@ internal static class Sanity
         Expect(await builtIns.RelevoxTyped(), 42, "Relevox pipeline send with built-ins");
         builtIns.Cleanup();
 
+        PipelineOrderBenchmarks order = new();
+        order.Setup();
+        Expect(await order.InOrder(), 42, "Relevox ordered pipeline send, registered in order");
+        Expect(await order.Reversed(), 42, "Relevox ordered pipeline send, registered in reverse");
+        order.Cleanup();
+
         PublishBenchmarks publish = new();
         publish.Setup();
         await publish.MediatROne();
@@ -86,8 +92,9 @@ internal static class Sanity
             Expect(Counts.GetValueOrDefault(expected), 1, expected);
         }
 
-        // Once through the plain pipeline and once with the built-ins around it.
-        foreach (string expected in new[] { "MediatR behaviour", "Relevox behaviour" })
+        // Twice each: through the plain pipeline and with the built-ins around it, and the ordered behaviours
+        // registered in their order and in reverse.
+        foreach (string expected in new[] { "MediatR behaviour", "Relevox behaviour", "Relevox ordered behaviour" })
         {
             Expect(Counts.GetValueOrDefault(expected), 2, expected);
         }

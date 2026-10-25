@@ -18,15 +18,23 @@ internal static class MessageMapMarkdown
             .Append("Written by the build from what Relevox's generator sees; the same map as JSON is in the file next to this one. ")
             .Append("Each table lists a message's pipeline from top to bottom in the order it runs. Behaviours wrap the handler, outermost first; ")
             .Append("exception handlers and actions wrap the whole pipeline and run only when it throws. They are listed as they run ")
-            .Append("with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first.\n");
+            .Append("with the default RequestExceptionActionProcessorStrategy, handlers first; with ApplyForAllExceptions the actions run first.");
+        if (Items(map, "requests").Any(static request => Behaviours(request, outside: true).Any()))
+        {
+            markdown.Append(" A behaviour ordered below zero runs outside all of them, the processors included.");
+        }
+
+        markdown.Append('\n');
 
         Section(markdown, "Requests", Items(map, "requests"), static (markdown, request) =>
         {
             Intro(markdown, request, Get(request, "response") is string response ? $"Returns {Code(response)}." : "Returns nothing.");
             From(markdown, request, "Sent from");
+            // A behaviour ordered below zero runs outside the built-in processor and exception behaviours.
             Table(markdown, [
+                .. Behaviours(request, outside: true),
                 .. Rows(request, "preProcessors", "Pre-processor"),
-                .. Rows(request, "behaviors", "Behaviour"),
+                .. Behaviours(request, outside: false),
                 Row("Handler", (List<(string, object?)>)Get(request, "handler")!),
                 .. Rows(request, "postProcessors", "Post-processor"),
                 .. Items(request, "exceptionHandlers").Select(static handler => Row($"Exception handler, {Code((string)Get(handler, "exception")!)}", handler)),
@@ -39,7 +47,7 @@ internal static class MessageMapMarkdown
             Intro(markdown, stream, $"Yields {Code((string)Get(stream, "response")!)}.");
             From(markdown, stream, "Created from");
             Table(markdown, [
-                .. Rows(stream, "behaviors", "Behaviour"),
+                .. Behaviours(stream, outside: null),
                 Row("Handler", (List<(string, object?)>)Get(stream, "handler")!),
             ]);
         });
@@ -125,6 +133,12 @@ internal static class MessageMapMarkdown
 
     private static IEnumerable<string> Rows(List<(string Name, object? Value)> entry, string field, string step) =>
         Items(entry, field).Select(component => Row(step, component));
+
+    private static IEnumerable<string> Behaviours(List<(string Name, object? Value)> entry, bool? outside) =>
+        Items(entry, "behaviors")
+            .Select(static behavior => (Behavior: behavior, Order: behavior.Any(static field => field.Name == "order") ? (int?)Get(behavior, "order") : null))
+            .Where(behavior => outside is not { } wanted || (behavior.Order < 0) == wanted)
+            .Select(static behavior => Row(behavior.Order is { } order ? $"Behaviour, order {order.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : "Behaviour", behavior.Behavior));
 
     private static string Row(string step, List<(string Name, object? Value)> component) =>
         $"| {step} | {Code((string)Get(component, "type")!)} | {Get(component, "project")} |";
