@@ -87,6 +87,30 @@ public sealed class ValidationGeneratorTests
     }
 
     [Fact]
+    public void A_generic_validator_counts_for_every_request_its_constraints_allow()
+    {
+        // Registered by hand, as IValidator<Rename> with RequiredFields<Rename>, which the build cannot see: Rename
+        // gets the behaviour because it meets the constraint, Look does not.
+        GeneratorRun run = GeneratorHarness.Run("Subject", [FluentValidation, Package, Validators], Application, """
+            namespace Shop
+            {
+                public interface INamed;
+                public sealed record Rename(string Name) : Relevox.IRequest<int>, INamed;
+                public sealed class RenameHandler : Relevox.IRequestHandler<Rename, int>
+                {
+                    public System.Threading.Tasks.Task<int> Handle(Rename request, System.Threading.CancellationToken cancellationToken) => System.Threading.Tasks.Task.FromResult(1);
+                }
+                public sealed class RequiredFields<T> : FluentValidation.AbstractValidator<T> where T : INamed;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string registration = run.Sources["RelevoxServiceCollectionExtensions.g.cs"];
+        registration.ShouldContain("typeof(global::Relevox.FluentValidation.ValidationBehavior<global::Shop.Rename, int>)");
+        registration.ShouldNotContain("ValidationBehavior<global::Shop.Look", Case.Sensitive);
+    }
+
+    [Fact]
     public void Without_the_package_nothing_about_validation_is_generated()
     {
         GeneratorRun run = GeneratorHarness.Run("Subject", [FluentValidation, Validators], """
