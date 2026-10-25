@@ -10,6 +10,15 @@ public static partial class Scenarios
     public static Task<string> PipelineCanShortCircuit() =>
         Pipeline(async services => await services.GetRequiredService<ISender>().Send(new Cached("k")));
 
+    // AuditedBehavior is constrained on the request and OutcomeBehavior on the response: each runs only where its
+    // constraint holds, as the container closes it.
+    public static Task<string> PipelineSkipsBehavioursWhoseConstraintsDoNotHold() =>
+        Pipeline(async services =>
+        {
+            ISender sender = services.GetRequiredService<ISender>();
+            return $"{await sender.Send(new Judge())} {await sender.Send(new Cached("c"))}";
+        });
+
     public static Task<string> PipelineCanCallNextTwice() =>
         Pipeline(async services => await services.GetRequiredService<ISender>().Send(new Flaky()));
 
