@@ -59,9 +59,9 @@ class implementing `IValidator<TheRequest>`, usually an `AbstractValidator<TheRe
 through NuGet packages are not looked at, the same rule generic handlers follow.
 
 A generic validator, such as `RequiredFields<T> : AbstractValidator<T> where T : INamed`, is registered by hand,
-closed over types the build cannot see, so it counts for every request its constraints allow, and a generic
-validator of any other shape for every request: no validator the application registered goes unrun, and a
-request it does not cover only resolves an empty list of validators, as it would have without the package.
+closed over types the build cannot see. When the solution declares one, the behaviour is not closed at all: it
+stays open, and the container closes it for every request, as it would without the package. No registered
+validator goes unrun; the requests without one pay what they paid before.
 
 The validator has to be for the request type itself. The container resolves `IValidator<TRequest>` without
 variance, so a validator written for a base class or an interface never runs for a request derived from it,
