@@ -58,6 +58,11 @@ A request gets the behaviour when the project that calls `AddRelevox`, or a proj
 class implementing `IValidator<TheRequest>`, usually an `AbstractValidator<TheRequest>`. Projects only reached
 through NuGet packages are not looked at, the same rule generic handlers follow.
 
+A generic validator, such as `RequiredFields<T> : AbstractValidator<T> where T : INamed`, is registered by hand,
+closed over types the build cannot see, so it counts for every request its constraints allow, and a generic
+validator of any other shape for every request: no validator the application registered goes unrun, and a
+request it does not cover only resolves an empty list of validators, as it would have without the package.
+
 The validator has to be for the request type itself. The container resolves `IValidator<TRequest>` without
 variance, so a validator written for a base class or an interface never runs for a request derived from it,
 here or in the behaviour MediatR applications write.
