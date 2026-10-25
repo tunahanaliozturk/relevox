@@ -72,6 +72,47 @@ public sealed class GenericHandlerTests
     }
 
     [Fact]
+    public void A_generic_exception_handler_constrained_to_a_class_is_closed_over_the_solutions_classes_below_it()
+    {
+        // MediatR closes it over every class in a thrown exception's chain that meets the constraint (#101). The
+        // catalog can only ask about classes it names, so it names the ones the solution declares: here, in the
+        // project and in a referenced domain project that knows nothing of Relevox, abstract ones included. A class
+        // the project cannot see, and one from .NET, are left out.
+        MetadataReference domain = GeneratorHarness.Library("Shop.Domain", [], withGenerator: false, """
+            public class DomainException : System.Exception;
+            public sealed class NotFound : DomainException;
+            public abstract class RuleBroken : DomainException;
+            internal sealed class Hidden : DomainException;
+            """);
+        GeneratorRun run = GeneratorHarness.Run("Subject", [domain], Usings + """
+            using Relevox.Pipeline;
+            public sealed class Conflict : RuleBroken;
+            public sealed record Ping : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+            public sealed class DomainHandler<TRequest, TResponse, TException> : IRequestExceptionHandler<TRequest, TResponse, TException>
+                where TRequest : notnull
+                where TException : DomainException
+            {
+                public Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string registration = run.Sources["RelevoxServiceCollectionExtensions.g.cs"];
+        foreach (string type in new[] { "DomainException", "NotFound", "RuleBroken", "Conflict" })
+        {
+            registration.ShouldContain($"HandleAs<global::{type}>");
+        }
+
+        registration.ShouldNotContain("global::Hidden", Case.Sensitive);
+        registration.ShouldContain("typeof(global::DomainHandler<,,>)", Case.Sensitive);
+        (registration.Split("typeof(global::DomainHandler<,,>)").Length - 1).ShouldBe(1);
+    }
+
+    [Fact]
     public void Constraints_that_name_another_type_parameter_are_left_to_the_container_or_reported()
     {
         // TRequest : IRequest<TResponse> cannot be checked against a request without closing TResponse, so it must

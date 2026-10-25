@@ -6,6 +6,13 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- An open exception handler or action constrained to an exception class, such as `where TException :
+  DomainException`, now also runs at each class below it that the solution declares, abstract ones included, as
+  MediatR's does: a thrown `NotFoundException : DomainException` reaches it at both classes, where 1.4 reached it
+  once (#101). Classes declared only in packages are still not looked up.
+
 ### Added
 
 - [docs/compatibility.md](docs/compatibility.md#the-pipeline) shows how an open behaviour with generic

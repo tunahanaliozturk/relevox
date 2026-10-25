@@ -255,8 +255,17 @@ up only the exception types some handler for that request names, which is what l
 generating code at run time. An exception handler registered directly with the container for some other
 exception type is not found. Open generic exception handlers and actions are closed over those same
 exception types, plus `Exception`, or plus the class their exception type parameter is constrained to, such as
-`DomainException` for `where TException : DomainException`; the container skips any closing that breaks the
-constraint. Only requests that meet the request type parameter's constraints look them up. A subclass of that
-class which no handler names, thrown by a request, reaches such a handler once, at the constrained class, where
-MediatR runs it at the subclass and again at each class above it. A constraint no single exception class can
-meet, such as an interface, is reported as `RVX0004`.
+`DomainException` for `where TException : DomainException`, and every class below it that the solution
+declares; the container skips any closing that breaks the constraint. Only requests that meet the request type
+parameter's constraints look them up. So a thrown `NotFoundException : DomainException` reaches such a handler
+at `NotFoundException` and again at `DomainException`, as in MediatR. A class below it that only a package
+declares, .NET's included, is not looked up: the handler then runs once, at the nearest class above it that
+is, where MediatR runs it at each. A constraint no single exception class can meet, such as an interface, is
+reported as `RVX0004`.
+
+| Open exception handler or action | Closed over | Pinned by |
+|---|---|---|
+| No constraint on the exception, or `where TException : Exception` | `Exception` | `GenericHandlerTests` |
+| `where TException : DomainException` | `DomainException` and the solution's classes below it | `ConstrainedGenericExceptionHandlerAndActionRunForASubclass`, `GenericHandlerTests` |
+| `where TRequest : ICommand` as well | the same, for requests that are an `ICommand` only | `ConstrainedGenericExceptionHandlerAndActionRun`, `GenericHandlerTests` |
+| `where TException : Exception, IRetryable`, a class that names another type parameter, or a struct or `new()` constraint | nothing; reported as `RVX0004` | `GenericHandlerTests` |

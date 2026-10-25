@@ -144,7 +144,80 @@ internal static partial class Discovery
                 }
             }
 
+            ExceptionFamily[] families = [.. Families()];
+            if (families.Length > 0)
+            {
+                _parts.Add(Empty with { ExceptionFamilies = families.ToEquatableArray() });
+            }
+
             return Merge(_parts);
+        }
+
+        /// <summary>
+        /// For each class an open exception handler or action is constrained to, the classes below it that the
+        /// solution declares. MediatR closes such a handler over every class in a thrown exception's chain that
+        /// meets the constraint; the generated catalog can only ask about classes it names, so it names these.
+        /// Classes from packages, .NET's included, are left out, as they are for generic handlers.
+        /// </summary>
+        private IEnumerable<ExceptionFamily> Families()
+        {
+            HashSet<INamedTypeSymbol> bounds = new(SymbolEqualityComparer.Default);
+            foreach (INamedTypeSymbol definition in Definitions)
+            {
+                foreach (INamedTypeSymbol contract in HandlerContracts(definition))
+                {
+                    if (contract.MetadataName is "IRequestExceptionHandler`3" or "IRequestExceptionAction`2"
+                        && IsOpenProcessorShape(definition, [contract])
+                        && contract.TypeArguments[contract.TypeArguments.Length - 1] is ITypeParameterSymbol thrown
+                        && thrown.ConstraintTypes.Where(static bound => bound.ToDisplayString() != "System.Exception").ToArray() is { Length: 1 } narrower
+                        && narrower[0] is INamedTypeSymbol { TypeKind: TypeKind.Class } bound
+                        && !ContainsTypeParameters(bound)
+                        && IsAccessible(bound, _compilation))
+                    {
+                        bounds.Add(bound);
+                    }
+                }
+            }
+
+            foreach (INamedTypeSymbol bound in bounds)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                Dictionary<IAssemblySymbol, bool> memo = new(SymbolEqualityComparer.Default);
+                IEnumerable<INamedTypeSymbol> exceptions = _source.Exceptions;
+                foreach (IAssemblySymbol assembly in _solution)
+                {
+                    if (bound.ContainingAssembly is { } home && Reaches(assembly, home, memo))
+                    {
+                        exceptions = exceptions.Concat(FactsCache.GetValue(assembly, static key => TypeFacts.Of(AllTypes(key.GlobalNamespace))).Exceptions);
+                    }
+                }
+
+                string[] subclasses =
+                [
+                    .. exceptions
+                        .Where(type => !SymbolEqualityComparer.Default.Equals(type, bound) && Derives(type, bound) && IsAccessible(type, _compilation))
+                        .Select(Plain)
+                        .Distinct(StringComparer.Ordinal)
+                        .OrderBy(static name => name, StringComparer.Ordinal),
+                ];
+                if (subclasses.Length > 0)
+                {
+                    yield return new ExceptionFamily(Plain(bound), subclasses.ToEquatableArray());
+                }
+            }
+
+            static bool Derives(INamedTypeSymbol type, INamedTypeSymbol bound)
+            {
+                for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
+                {
+                    if (SymbolEqualityComparer.Default.Equals(current, bound))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
 
         /// <summary>Closes one generic handler, or says which rule it falls foul of and why.</summary>
@@ -434,11 +507,16 @@ internal static partial class Discovery
     {
         private readonly Lazy<INamedTypeSymbol[]> _notifications;
         private readonly Lazy<INamedTypeSymbol[]> _candidates;
+        private readonly Lazy<INamedTypeSymbol[]> _exceptions;
 
         private TypeFacts(INamedTypeSymbol[] types)
         {
             Definitions = [.. types.Where(static type => IsOpen(type) && HandlerContracts(type).Any())];
             _notifications = new(() => NotificationsIn(types));
+            _exceptions = new(() =>
+            [
+                .. types.Where(static type => !IsOpen(type) && type is { TypeKind: TypeKind.Class, CanBeReferencedByName: true } && IsException(type)),
+            ]);
             _candidates = new(() =>
             [
                 .. types.Where(static type => !IsOpen(type) && type is { IsAbstract: false, IsStatic: false, TypeKind: TypeKind.Class or TypeKind.Struct, CanBeReferencedByName: true }),
@@ -454,7 +532,23 @@ internal static partial class Discovery
         /// <summary>Types that could be a type argument of a sent request: concrete, closed and nameable.</summary>
         public INamedTypeSymbol[] Candidates => _candidates.Value;
 
+        /// <summary>Exception classes, abstract ones included: closed and nameable.</summary>
+        public INamedTypeSymbol[] Exceptions => _exceptions.Value;
+
         public static TypeFacts Of(IEnumerable<INamedTypeSymbol> types) => new([.. types]);
+
+        private static bool IsException(INamedTypeSymbol type)
+        {
+            for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
+            {
+                if (current is { Name: "Exception", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } })
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         private static INamedTypeSymbol[] NotificationsIn(INamedTypeSymbol[] types)
         {
