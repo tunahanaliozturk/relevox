@@ -97,11 +97,15 @@ public static class GeneratorHarness
         Analyze(analyzer, new Dictionary<string, string>(), sources);
 
     /// <summary>Like <see cref="Analyze(DiagnosticAnalyzer, string[])"/>, with <c>.editorconfig</c> settings that apply to every file.</summary>
-    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, IReadOnlyDictionary<string, string> settings, params string[] sources)
+    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, IReadOnlyDictionary<string, string> settings, params string[] sources) =>
+        Analyze(analyzer, settings, [], sources);
+
+    /// <summary>Like <see cref="Analyze(DiagnosticAnalyzer, string[])"/>, with settings and referenced projects.</summary>
+    public static ImmutableArray<Diagnostic> Analyze(DiagnosticAnalyzer analyzer, IReadOnlyDictionary<string, string> settings, IEnumerable<MetadataReference> extra, params string[] sources)
     {
         CSharpGeneratorDriver
             .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: ParseOptions)
-            .RunGeneratorsAndUpdateCompilation(Compile("Subject", [], sources), out Compilation output, out _);
+            .RunGeneratorsAndUpdateCompilation(Compile("Subject", extra, sources), out Compilation output, out _);
         return output
             .WithAnalyzers([analyzer], new AnalyzerOptions([], new FileOptionsProvider(settings)))
             .GetAnalyzerDiagnosticsAsync()
