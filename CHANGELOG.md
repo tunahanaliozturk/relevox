@@ -13,6 +13,9 @@ All notable changes to this project are written down here. The format follows
   registration order, so nothing moves where it is not used (#97, ADR 0019). The order is worked out on the
   first send of each request type; one whose behaviours it moves gets one new array per send. The message map
   lists behaviours in that order and gives each ordered one an `order` field, a compatible schema change.
+- [docs/compatibility.md](docs/compatibility.md#the-pipeline) shows how an open behaviour with generic
+  constraints, on the request or on the response, runs only for the requests they allow, and a differential
+  scenario pins both against MediatR (#99).
 
 ## [1.4.0] - 2026-10-25
 

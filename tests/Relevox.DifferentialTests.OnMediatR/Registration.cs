@@ -60,6 +60,7 @@ public static partial class Library
                 configuration.AddOpenBehavior(typeof(OuterBehavior<,>));
                 configuration.AddOpenBehavior(typeof(InnerBehavior<,>));
                 configuration.AddOpenBehavior(typeof(AuditedBehavior<,>));
+                configuration.AddOpenBehavior(typeof(OutcomeBehavior<,>));
                 configuration.AddBehavior<IPipelineBehavior<Ping, string>, PingAudit>();
                 configuration.AddBehavior<IPipelineBehavior<Cached, string>, CacheBehavior>();
                 configuration.AddBehavior<IPipelineBehavior<Flaky, int>, RetryBehavior>();

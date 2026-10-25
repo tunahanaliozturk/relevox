@@ -67,6 +67,7 @@ public static partial class Library
                 options.AddOpenBehavior(typeof(OuterBehavior<,>));
                 options.AddOpenBehavior(typeof(InnerBehavior<,>));
                 options.AddOpenBehavior(typeof(AuditedBehavior<,>));
+                options.AddOpenBehavior(typeof(OutcomeBehavior<,>));
                 options.AddBehavior<IPipelineBehavior<Ping, string>, PingAudit>();
                 options.AddBehavior<IPipelineBehavior<Cached, string>, CacheBehavior>();
                 options.AddBehavior<IPipelineBehavior<Flaky, int>, RetryBehavior>();
