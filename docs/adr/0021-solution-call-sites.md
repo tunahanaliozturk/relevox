@@ -52,7 +52,8 @@ busy when this was written, and the step adds no provider to the ones ADR 0017 m
   included. A request sent only from tests counts as sent. A team that does not want that leaves the test
   projects' maps out of the combine.
 - Matching is by type name across maps. Two mediators in one solution that dispatch the same message type both
-  get the call; that is what the solution's code can do, so the view says so.
+  get every call to it, those in each other's projects included; which one a call reaches depends on the
+  container it runs in, which the build cannot see, so the view lists both.
 - The check finds requests no project sends by their static type. One sent only as `object`, as an interface,
   or from a generic method is reported, as the map cannot see those calls (docs/message-map.md lists them).
 - The combined view is not written by the build. It exists only where the jq step runs, which keeps the build

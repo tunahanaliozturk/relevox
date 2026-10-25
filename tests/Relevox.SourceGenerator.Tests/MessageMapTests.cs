@@ -969,18 +969,22 @@ public sealed class MessageMapTests
                 Save("application", Json(GeneratorHarness.RunWithMessageMap("Shop.Application", [], requests, Setup).Compilation, "Shop.Application")),
                 Save("web", Consumer("Shop.Web", "sender.Send(new Shop.Sent()); sender.Send(new Shop.Shared());")),
                 Save("jobs", Consumer("Shop.Jobs", "sender.Send(new Shop.Shared());")),
+                // A second mediator dispatching two of the same requests, cut down to the fields the program reads.
+                Save("billing", """
+                    { "project": "Shop.Billing", "requests": [ { "type": "Shop.Own", "callSites": [] }, { "type": "Shop.Shared", "callSites": [] } ], "streams": [], "notifications": [], "unread": [] }
+                    """),
             ];
 
             using JsonDocument combined = JsonDocument.Parse(Jq(["--slurp", "--from-file", Path.Combine(RepositoryRoot(), "docs", "message-map-combine.jq"), .. files]));
-            JsonElement mediator = combined.RootElement.EnumerateArray().ShouldHaveSingleItem();
-            mediator.GetProperty("project").GetString().ShouldBe("Shop.Application");
-            Dictionary<string, string[]> sentFrom = mediator.GetProperty("requests").EnumerateArray().ToDictionary(
-                static request => request.GetProperty("type").GetString()!,
-                static request => request.GetProperty("callSites").EnumerateArray().Select(static site => $"{site.GetProperty("project")} {site.GetProperty("file")}:{site.GetProperty("line")}").ToArray());
+            combined.RootElement.EnumerateArray().Select(static mediator => mediator.GetProperty("project").GetString()).ShouldBe(["Shop.Application", "Shop.Billing"]);
+            Dictionary<string, string[]> sentFrom = SentFrom(combined.RootElement[0]);
             sentFrom["Shop.Own"].ShouldBe(["Shop.Application File0.cs:14"]);
             sentFrom["Shop.Sent"].ShouldBe(["Shop.Web File0.cs:1"]);
             sentFrom["Shop.Shared"].ShouldBe(["Shop.Jobs File0.cs:1", "Shop.Web File0.cs:1"]);
             sentFrom["Shop.Unsent"].ShouldBeEmpty();
+            Dictionary<string, string[]> billing = SentFrom(combined.RootElement[1]);
+            billing["Shop.Own"].ShouldBe(sentFrom["Shop.Own"]);
+            billing["Shop.Shared"].ShouldBe(sentFrom["Shop.Shared"]);
 
             // The check docs/message-map.md gives, as written there.
             string combinedFile = Save("combined", combined.RootElement.GetRawText());
@@ -990,6 +994,10 @@ public sealed class MessageMapTests
         {
             Directory.Delete(directory, recursive: true);
         }
+
+        static Dictionary<string, string[]> SentFrom(JsonElement mediator) => mediator.GetProperty("requests").EnumerateArray().ToDictionary(
+            static request => request.GetProperty("type").GetString()!,
+            static request => request.GetProperty("callSites").EnumerateArray().Select(static site => $"{site.GetProperty("project")} {site.GetProperty("file")}:{site.GetProperty("line")}").ToArray());
 
         string Consumer(string name, string calls) => Json(GeneratorHarness.RunWithMessageMap(name, [application], $$"""
             public sealed class Calls(Relevox.ISender sender) { public void Go() { {{calls}} } }
