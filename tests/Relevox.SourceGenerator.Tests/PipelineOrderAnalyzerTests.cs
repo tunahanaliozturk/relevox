@@ -155,6 +155,33 @@ public sealed class PipelineOrderAnalyzerTests
         diagnostics.ShouldHaveSingleItem().GetMessage(CultureInfo.InvariantCulture).ShouldBe("'Metrics<TRequest, TResponse>' has the same PipelineOrder, -1, as 'Tracing<TRequest, TResponse>', so the two run in the order they are registered");
     }
 
+    [Fact]
+    public void A_behaviour_inherited_through_a_library_that_does_not_name_the_contracts_is_found()
+    {
+        // Shop.Shared declares the ordered base; Shop.Billing derives from it and touches nothing of Relevox's
+        // itself, so its metadata references Shop.Shared but not Relevox.Contracts.
+        MetadataReference shared = GeneratorHarness.Library("Shop.Shared", Usings + """
+            [PipelineOrder(5)]
+            public abstract class Audited<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+            {
+                public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+            """);
+        MetadataReference billing = GeneratorHarness.Library("Shop.Billing", [shared], withGenerator: false, """
+            public sealed class BillingAudit<TRequest, TResponse> : Audited<TRequest, TResponse> where TRequest : notnull;
+            """);
+
+        Diagnostic[] diagnostics = [.. GeneratorHarness.Analyze(new PipelineOrderAnalyzer(), new Dictionary<string, string>(), [shared, billing], Usings + Requests + """
+            [PipelineOrder(5)]
+            public sealed class Metrics<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+            {
+                public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+            """)];
+
+        diagnostics.ShouldHaveSingleItem().GetMessage(CultureInfo.InvariantCulture).ShouldBe("'Metrics<TRequest, TResponse>' has the same PipelineOrder, 5, as 'BillingAudit<TRequest, TResponse>', so the two run in the order they are registered");
+    }
+
     private static Diagnostic[] Analyze(string source) =>
         [.. GeneratorHarness.Analyze(new PipelineOrderAnalyzer(), Usings + source)
             .OrderBy(static diagnostic => diagnostic.Location.SourceSpan.Start)];

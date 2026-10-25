@@ -75,10 +75,13 @@ public sealed class PipelineOrderAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
+                // A library can inherit an ordered behaviour from another one without naming Relevox.Contracts
+                // itself, so every reference that reaches it, directly or not, is scanned.
+                Dictionary<IAssemblySymbol, bool> reaches = new(SymbolEqualityComparer.Default);
                 Behavior[] referenced =
                 [
                     .. end.Compilation.SourceModule.ReferencedAssemblySymbols
-                        .Where(static assembly => assembly.Modules.Any(static module => module.ReferencedAssemblySymbols.Any(static reference => reference.Name == "Relevox.Contracts")))
+                        .Where(assembly => assembly.Name != "Relevox.Contracts" && ReachesContracts(assembly, reaches))
                         .SelectMany(Scan),
                 ];
 
@@ -98,6 +101,22 @@ public sealed class PipelineOrderAnalyzer : DiagnosticAnalyzer
                 }
             });
         });
+    }
+
+    /// <summary>Whether the assembly references Relevox.Contracts, directly or through others.</summary>
+    private static bool ReachesContracts(IAssemblySymbol assembly, Dictionary<IAssemblySymbol, bool> memo)
+    {
+        if (memo.TryGetValue(assembly, out bool known))
+        {
+            return known;
+        }
+
+        // A reference cycle, which metadata allows, counts as not reaching it until the way back out says otherwise.
+        memo[assembly] = false;
+        bool reaches = assembly.Name == "Relevox.Contracts"
+            || assembly.Modules.Any(module => module.ReferencedAssemblySymbols.Any(referenced => ReachesContracts(referenced, memo)));
+        memo[assembly] = reaches;
+        return reaches;
     }
 
     /// <summary>
