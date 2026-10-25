@@ -87,10 +87,11 @@ public sealed class ValidationGeneratorTests
     }
 
     [Fact]
-    public void A_generic_validator_counts_for_every_request_its_constraints_allow()
+    public void A_generic_validator_leaves_the_behaviour_open_for_every_request()
     {
-        // Registered by hand, as IValidator<Rename> with RequiredFields<Rename>, which the build cannot see: Rename
-        // gets the behaviour because it meets the constraint, Look does not.
+        // Registered by hand, as IValidator<Rename> with RequiredFields<Rename>, or over a generic request, which the
+        // build cannot see: the behaviour is not closed, so the container closes it for every request as it would
+        // without the package.
         GeneratorRun run = GeneratorHarness.Run("Subject", [FluentValidation, Package, Validators], Application, """
             namespace Shop
             {
@@ -106,8 +107,7 @@ public sealed class ValidationGeneratorTests
 
         run.CompilationErrors.ShouldBeEmpty();
         string registration = run.Sources["RelevoxServiceCollectionExtensions.g.cs"];
-        registration.ShouldContain("typeof(global::Relevox.FluentValidation.ValidationBehavior<global::Shop.Rename, int>)");
-        registration.ShouldNotContain("ValidationBehavior<global::Shop.Look", Case.Sensitive);
+        registration.ShouldNotContain("Validation", Case.Sensitive);
     }
 
     [Fact]

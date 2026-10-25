@@ -252,11 +252,13 @@ internal static partial class Discovery
             ];
 
             HashSet<INamedTypeSymbol> validated = new(SymbolEqualityComparer.Default);
-            INamedTypeSymbol[]? requests = null;
             foreach (INamedTypeSymbol type in types)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
-                if (type is not { TypeKind: TypeKind.Class, IsAbstract: false })
+
+                // FluentValidation's own InlineValidator<T> is a generic validator too, and a solution that restores
+                // packages inside itself has FluentValidation among its references.
+                if (type is not { TypeKind: TypeKind.Class, IsAbstract: false } || type.ContainingAssembly?.Name == "FluentValidation")
                 {
                     continue;
                 }
@@ -268,24 +270,18 @@ internal static partial class Discovery
                         continue;
                     }
 
-                    if (!IsOpen(type))
+                    // A generic validator is registered by hand, closed over types the build cannot know, generic
+                    // requests among them. Rather than guess which requests it covers, the behaviour is left open,
+                    // as the container would close it without the package, so no registered validator goes unrun.
+                    if (IsOpen(type))
                     {
-                        if (contract.TypeArguments[0] is INamedTypeSymbol { IsAbstract: false } request)
-                        {
-                            validated.Add(request);
-                        }
-
-                        continue;
+                        return (EquatableArray<string>.Empty, EquatableArray<ValidationRegistration>.Empty);
                     }
 
-                    // A generic validator is registered by hand, closed over whatever the application chose, which the
-                    // build cannot see. One shaped like RequiredFields<T> : AbstractValidator<T> counts for every
-                    // request its constraints allow; any other shape for every request, so that no validator an
-                    // application registered goes unrun. Either way a request it does not cover pays for an empty
-                    // list of validators, as it would have without the package.
-                    requests ??= [.. types.Where(candidate => candidate is { IsAbstract: false } && !IsOpen(candidate) && IsAccessible(candidate, _compilation) && ResponseOf(candidate) is not null)];
-                    bool simple = type.TypeParameters.Length == 1 && SymbolEqualityComparer.Default.Equals(contract.TypeArguments[0], type.TypeParameters[0]);
-                    validated.UnionWith(simple ? requests.Where(request => Discovery.Close(type, [request], _compilation) is not null) : requests);
+                    if (contract.TypeArguments[0] is INamedTypeSymbol { IsAbstract: false } request)
+                    {
+                        validated.Add(request);
+                    }
                 }
             }
 

@@ -37,6 +37,11 @@ A virtual `CreateException` takes the failures. A class derived from the behavio
 `AddValidation(typeof(Validation<,>))`, is recognised by the generator like the behaviour itself, so Clean
 Architecture keeps its `ValidationException` and its API's problem details.
 
+**A generic validator leaves the behaviour open.** A class such as `RequiredFields<T> : AbstractValidator<T>` is
+registered by hand, closed over types the build cannot know, generic requests among them. Rather than guess
+which requests it covers and risk skipping one, the generated code then leaves the behaviour open for every
+request, as the application had it before. FluentValidation's own `InlineValidator<T>` does not count.
+
 **Exact types only.** The container resolves `IValidator<TRequest>` without variance, so a validator for a base
 type never ran for a derived request in the behaviours this replaces either; closing over base types would make
 the package run validators the application never ran.
