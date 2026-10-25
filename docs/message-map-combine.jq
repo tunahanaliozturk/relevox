@@ -6,12 +6,13 @@
 # every map, the mediator's own and those of the projects that send through it. Each call site gains the
 # project it is in.
 
-# Calls made through another project's mediator, by message type.
-(map(.project as $project | (.calls // [])[] | {type, sites: [.callSites[] | {project: $project} + .]})
+# Every call in every map, by message type: a mediator's calls to its own messages and the calls of projects
+# using another's. Two mediators that dispatch the same type both get all of its calls.
+(map(.project as $project
+    | ((.calls // []), .requests, .streams, .notifications)[]
+    | {type, sites: [(.callSites // [])[] | {project: $project} + .]})
   | group_by(.type)
   | map({key: .[0].type, value: [.[].sites[]]})
   | from_entries) as $calls
 | map(select(has("calls") | not)
-  | .project as $project
-  | (.requests, .streams, .notifications) |= map(
-      .callSites = ([(.callSites // [])[] | {project: $project} + .] + ($calls[.type] // []) | sort_by(.project, .file, .line))))
+  | (.requests, .streams, .notifications) |= map(.callSites = ($calls[.type] // [] | sort_by(.project, .file, .line))))
