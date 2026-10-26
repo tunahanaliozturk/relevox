@@ -6,6 +6,15 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-26
+
+Documentation only; the code is that of 1.5.0.
+
+### Changed
+
+- The `Relevox` package README, the one nuget.org shows, lists `Relevox.FluentValidation` with the other packages
+  and has a diagram of the send, publish and stream flows.
+
 ## [1.5.0] - 2026-10-26
 
 Pipeline order and validation: `[PipelineOrder]` places behaviours by number, the new `Relevox.FluentValidation`

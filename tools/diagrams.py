@@ -152,6 +152,31 @@ def migration(t):
     ]
 
 
+FLOWS = [
+    ("Send", "Send(request)", "Pipeline", "behaviours and processors", "Handler", "one, found at build time", "response"),
+    ("Publish", "Publish(notification)", "Publisher", "one after another by default", "Handlers", "all of them, in order", "Task"),
+    ("Stream", "CreateStream(request)", "Stream behaviours", "wrap the items as they come", "Stream handler", "one, found at build time", "IAsyncEnumerable<T>"),
+]
+
+
+# For the NuGet README as well, which has no dark variant: an opaque card, readable on either page colour.
+def flows(t):
+    parts = [f'<rect x="0" y="0" width="980" height="370" rx="16" fill="{t["fill"]}"/>']
+    for index, (name, call, step, step_line, end, end_line, result) in enumerate(FLOWS):
+        y = 10 + index * 120
+        parts += [
+            lane(t, 10, y, 960, 110, name),
+            pill(t, 30, y + 47, 210, 40, call, mono=True),
+            box(t, 270, y + 34, 240, 68, step, [step_line]),
+            box(t, 550, y + 34, 210, 68, end, [end_line], strong=True),
+            pill(t, 790, y + 47, 170, 40, result, mono=True),
+            arrow(t, f"M240 {y + 67} H264"),
+            arrow(t, f"M510 {y + 67} H544"),
+            arrow(t, f"M760 {y + 67} H784"),
+        ]
+    return parts
+
+
 # The README's benchmark table, from docs/benchmark-results/2026-10-21-1.2.0.md: (label, MediatR, Relevox, unit,
 # ratio). The ratio is BenchmarkDotNet's, as published, not one worked out from the rounded means here, which can
 # differ in the last digit.
@@ -192,6 +217,7 @@ DIAGRAMS = {
     "project-layout": (1000, 172, project_layout),
     "migration": (1090, 172, migration),
     "benchmarks": (960, 390, benchmarks),
+    "flows": (980, 370, flows),
 }
 
 
