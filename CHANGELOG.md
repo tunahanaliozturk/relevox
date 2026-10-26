@@ -32,6 +32,18 @@ All notable changes to this project are written down here. The format follows
   constraints, on the request or on the response, runs only for the requests they allow, and a differential
   scenario pins both against MediatR (#99).
 
+## [1.4.1] - 2026-10-26
+
+Dependency updates only; the API and generated code are those of 1.4.0.
+
+### Changed
+
+- `Relevox.Build`, the message map task, now compiles against `Microsoft.Build.Utilities.Core` 18.11.0 instead of
+  17.14.28. The package ships none of MSBuild's assemblies and their version stays 15.1.0.0, so the task loads
+  in the same hosts as before. `System.Reflection.Metadata` stays at 9.0.0: 10.x would make the generator and
+  analyzers reference `System.Collections.Immutable` 10.0.0.0, which a host with 9.x cannot load.
+- CI uses `github/codeql-action` 4.39.1.
+
 ## [1.4.0] - 2026-10-25
 
 Architecture rules: the analyzers point out handlers that send other requests or each other in a cycle,
