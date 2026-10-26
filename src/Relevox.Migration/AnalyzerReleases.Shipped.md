@@ -20,3 +20,11 @@ RVX0009 | Relevox    | Info     | Handlers send each other in a cycle
 RVX0010 | Relevox    | Info     | A handler, behaviour or processor blocks on a task
 RVX0011 | Relevox    | Info     | A notification is published from a layer its kind may not be published from
 RVX0012 | Relevox    | Warning  | A layer setting cannot be used
+
+## Release 1.5.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|--------------------------------------------------------------
+RVX0013 | Relevox    | Info     | Two behaviours have the same PipelineOrder

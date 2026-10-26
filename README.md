@@ -71,6 +71,8 @@ telemetry off. The machine's own noise moves MediatR's send between 32 and 42 ns
 ratios rather than the times. 1.3.0 did not change the dispatch code; its run, on a machine short of memory, is in
 [docs/benchmark-results/2026-10-23-1.3.0.md](docs/benchmark-results/2026-10-23-1.3.0.md).
 1.4.0 changed none of the paths below either; what it made faster is in the [changelog](CHANGELOG.md#140---2026-10-25).
+1.5.0 works out a pipeline's `[PipelineOrder]` on its first send and leaves the rest of each send as it was; its
+numbers wait for the quiet-machine run in [#85](https://github.com/tunahanaliozturk/relevox/issues/85).
 With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
