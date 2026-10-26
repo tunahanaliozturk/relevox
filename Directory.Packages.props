@@ -24,10 +24,13 @@
   <ItemGroup Label="Build task">
     <!--
       Compile-time references for Relevox.Build. The MSBuild that loads the task supplies its own, newer copies,
-      so these only need to be old enough for every host that builds .NET 10. System.Reflection.Metadata is
-      also pinned for Roslyn, which needs 9.0.0.
+      so these only need to be old enough for every host that builds .NET 10. MSBuild's assemblies keep version
+      15.1.0.0 in every release, so its package can move freely. System.Reflection.Metadata cannot: transitive
+      pinning carries it, and the System.Collections.Immutable it depends on, into the generator and analyzers,
+      and 10.x makes them reference System.Collections.Immutable 10.0.0.0, which a host with 9.x cannot load.
+      Roslyn needs 9.0.0 at least.
     -->
-    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="17.14.28" />
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.11.0" />
     <PackageVersion Include="System.Reflection.Metadata" Version="9.0.0" />
   </ItemGroup>
 
