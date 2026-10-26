@@ -20,11 +20,22 @@ Relevox comes before the plan. Shipped versions are in [CHANGELOG.md](../CHANGEL
 | 1.3 | **Message map.** A JSON and Markdown file listing each message's handler, pipeline and senders, to read and to review in pull requests. |
 | 1.4 | **Architecture analyzers.** Opt-in rules for nested sends, blocking on tasks, unused cancellation tokens, requests nobody sends and layer boundaries. |
 | 1.5 | **Pipeline control and validation.** Explicit behaviour order, and a FluentValidation package that adds nothing to requests without a validator. |
-| 1.6 | **ASP.NET Core endpoints.** `MapRequest<T>` generates NativeAOT-ready endpoints from request types. |
+| 1.6 | **One feature at a time.** MediatR and Relevox run side by side through `Relevox.MediatRBridge`, so a large solution moves in small pull requests. |
 | 1.7 | **`ValueTask` handlers.** An option for handlers that want it, and a code fix for moving from the Mediator library. |
 | 1.8 | **Performance and scale.** A faster singleton path, allocation-free publish, and published benchmarks up to 5,000 messages. |
 | 1.9 | **Developer experience.** Code fixes that write handlers, `dotnet new` templates and a documentation site. |
 | 2.0 | **First major version.** A new baseline on the next .NET LTS, with the upgrade from 1.x done by one code fix. |
+| 2.1 | **From MediatR 9, 10 and 11.** Code fixes for what MediatR 12 changed, so older applications move in one step. |
+| 2.2 | **Publish strategies.** One after another, in parallel or continuing on error, chosen per notification at build time, with handler order. |
+| 2.3 | **Ready-made behaviours.** Logging, slow request, exception and transaction behaviours, attached only to the requests that need them. |
+| 2.4 | **Compile-time checks, round two.** Captive dependencies, notifications nobody handles, CQRS rules and behaviours that never call `next`. |
+| 2.5 | **Performance across 2.x.** Every 2.x addition measured on a repeatable benchmark machine, and NativeAOT size reduced. |
+| 2.6 | **ASP.NET Core endpoints.** `MapRequest<T>` generates NativeAOT-ready endpoints from request types. |
+| 3.0 | **Second major version.** The LTS of November 2029, the removals announced during 2.x, and a one-command upgrade. |
+
+Moving off MediatR is what Relevox is for, so the work that makes that easier comes first: endpoint
+generation moved from 1.6 to 2.6 for it. Outbox, retries and other distributed messaging are not planned;
+MassTransit, Wolverine and NServiceBus do that, and Relevox stays in-process.
 
 Within 1.x there are no breaking changes: package validation checks every build against the released API
 ([ADR 0011](adr/0011-internal-api-is-a-contract.md)), and new behaviour is opt-in.
