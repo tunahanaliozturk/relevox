@@ -6,6 +6,14 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-26
+
+Pipeline order and validation: `[PipelineOrder]` places behaviours by number, the new `Relevox.FluentValidation`
+package validates only the requests that have a validator, and a project that uses another project's mediator now
+writes its calls to the message map, so a solution can check that every request is sent from somewhere.
+Constrained exception handlers also run at every class the solution declares below their constraint, as
+MediatR's do. RVX0013 is Info, so moving to 1.5.0 adds no warning to any build.
+
 ### Fixed
 
 - An open exception handler or action constrained to an exception class, such as `where TException :
