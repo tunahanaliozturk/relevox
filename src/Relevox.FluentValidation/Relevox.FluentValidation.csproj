@@ -9,8 +9,6 @@
     <Description>A FluentValidation pipeline behaviour for Relevox, registered at build time only for the requests that have a validator.</Description>
     <PackageTags>mediator;cqrs;mediatr;validation;fluentvalidation</PackageTags>
     <RelevoxPackageReadme>$(MSBuildThisFileDirectory)../../docs/fluent-validation-package-readme.md</RelevoxPackageReadme>
-    <!-- New in 1.5.0: nothing to compare against until it has shipped once. -->
-    <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <ItemGroup>

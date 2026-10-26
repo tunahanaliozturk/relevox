@@ -60,9 +60,9 @@ NuGet, waits for an approval.
    publishing policy on nuget.org has to cover each package id, or its push is refused; `Relevox*` does.
 6. Once the packages are on nuget.org, set `PackageValidationBaselineVersion` in `Directory.Build.props` to the
    version just released. Every later pack then fails on a member removed or changed since that release,
-   `Relevox.Internal` included ([ADR 0011](docs/adr/0011-internal-api-is-a-contract.md)). After
-   `Relevox.Testing`'s first release, also remove the empty override in its project file, which keeps
-   validation from looking for a version that does not exist yet.
+   `Relevox.Internal` included ([ADR 0011](docs/adr/0011-internal-api-is-a-contract.md)). A new
+   package's project file sets the property empty, which keeps validation from looking for a version that does
+   not exist yet; remove that override after the package's first release.
 
    A new major version is the one release allowed to break it, and the check would still stop it. Record each
    intended break in the pull request that makes it: pack with `-p:ApiCompatGenerateSuppressionFile=true`, which
