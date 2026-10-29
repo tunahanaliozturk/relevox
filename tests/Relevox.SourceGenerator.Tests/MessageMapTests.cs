@@ -1148,6 +1148,35 @@ public sealed class MessageMapTests
     }
 
     [Fact]
+    public void An_open_MediatR_handler_is_listed_for_each_message_it_closes_over()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap("Subject", [BridgeAnalyzerTests.MediatR, Legacy], HalfMoved + """
+
+            public interface IAudited;
+            public sealed record Packed(int Id) : MediatR.INotification, IAudited;
+            public sealed class Audit<T> : MediatR.INotificationHandler<T> where T : MediatR.INotification, IAudited
+            {
+                public Task Handle(T notification, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            public sealed class Fallback<TRequest, TResponse> : MediatR.IRequestHandler<TRequest, TResponse> where TRequest : MediatR.IRequest<TResponse>
+            {
+                public Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken) => Task.FromResult(default(TResponse)!);
+            }
+            """, Setup);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldEndWith(Lf("""
+            | Message | Kind | Handler | Project |
+            |---|---|---|---|
+            | `Shop.Legacy.Refund` | request | `Shop.Fallback<Shop.Legacy.Refund, int>` | Subject |
+            | `Shop.Legacy.Refund` | request | `Shop.Legacy.RefundHandler` | Shop.Legacy |
+            | `Shop.Packed` | notification | `Shop.Audit<Shop.Packed>` | Subject |
+            | `Shop.Shipped` | notification | `Shop.ShippedMail` | Subject |
+
+            """));
+    }
+
+    [Fact]
     public void With_nothing_left_on_MediatR_the_map_says_the_bridge_can_go()
     {
         GeneratorRun run = GeneratorHarness.RunWithMessageMap("Subject", [BridgeAnalyzerTests.MediatR], HalfMoved.Replace("MediatR.INotificationHandler<Shipped>", "Relevox.INotificationHandler<Shipped>").Replace(": MediatR.INotification;", ": MediatR.INotification, Relevox.INotification;"), Setup);
