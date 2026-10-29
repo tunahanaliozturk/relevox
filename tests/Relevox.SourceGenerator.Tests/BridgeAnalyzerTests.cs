@@ -11,7 +11,8 @@ namespace Relevox.SourceGenerator.Tests;
 /// </remarks>
 public sealed class BridgeAnalyzerTests
 {
-    private static readonly MetadataReference MediatR = GeneratorHarness.Library("MediatR", """
+    /// <summary>A stand-in for MediatR 12, with its names; the message map tests use it too.</summary>
+    internal static readonly MetadataReference MediatR = GeneratorHarness.Library("MediatR", """
         using System.Collections.Generic;
         using System.Threading;
         using System.Threading.Tasks;

@@ -69,6 +69,19 @@
           "callSites": { "$ref": "#/definitions/callSites" }
         }
       }
+    },
+    "notMoved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "kind", "project", "handler"],
+        "properties": {
+          "type": { "type": "string" },
+          "kind": { "enum": ["request", "stream", "notification"] },
+          "project": { "$ref": "#/definitions/project" },
+          "handler": { "$ref": "#/definitions/component" }
+        }
+      }
     }
   },
   "definitions": {
