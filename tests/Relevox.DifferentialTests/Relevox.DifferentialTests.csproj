@@ -18,6 +18,7 @@
     -->
     <ProjectReference Include="../Relevox.DifferentialTests.OnMediatR/Relevox.DifferentialTests.OnMediatR.csproj" Aliases="onmediatr" />
     <ProjectReference Include="../Relevox.DifferentialTests.OnRelevox/Relevox.DifferentialTests.OnRelevox.csproj" Aliases="onrelevox" />
+    <ProjectReference Include="../Relevox.DifferentialTests.OnBridge/Relevox.DifferentialTests.OnBridge.csproj" Aliases="onbridge" />
   </ItemGroup>
 
 </Project>
