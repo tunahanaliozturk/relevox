@@ -166,6 +166,45 @@ odd parts: which processors run, the order handlers run in, when a send throws i
 - **`new Mediator(serviceProvider)` does not exist.** The mediator is generated; resolve `IMediator`,
   `ISender` or `IPublisher` from the container.
 
+## One feature at a time
+
+The steps above move a whole solution in one change. In a large solution that is one pull request nobody
+wants to review. `Relevox.MediatRBridge` lets MediatR and Relevox run side by side instead, so a team can move
+a feature folder at a time and every step builds and passes its tests
+([ADR 0022](adr/0022-mediatr-bridge.md)).
+
+```bash
+dotnet add package Relevox
+dotnet add package Relevox.MediatRBridge
+```
+
+```csharp
+services.AddMediatR(options => options.RegisterServicesFromAssemblyContaining<Program>()); // stays until the end
+services.AddRelevox();
+services.AddMediatRBridge();
+```
+
+The bridge takes MediatR's `IMediator`, `ISender` and `IPublisher`. Code that injects them does not change. A
+message whose type implements Relevox's interface goes to Relevox; anything else goes to MediatR, as before.
+
+To move a feature:
+
+1. **Give its messages Relevox's interface as well as MediatR's**, so callers on MediatR's `ISender` still
+   compile: `record PlaceOrder : MediatR.IRequest<int>, Relevox.IRequest<int>`.
+2. **Move its handlers to Relevox's interfaces.** The build reports RVX0001 for a request that has Relevox's
+   interface and no Relevox handler, so a half-moved feature does not compile.
+3. **Move the behaviours its requests need before the requests.** A request runs the pipeline of the library
+   that handles it, and only that one. A behaviour that implements both libraries' interfaces, registered with
+   both, runs once per request whichever side handles it.
+4. **Build and run the tests.**
+
+A notification can have handlers on both sides while they move: MediatR's run first, then Relevox's. Once
+nothing is left on MediatR, remove `AddMediatRBridge`, `AddMediatR`, MediatR's interfaces from the messages, and
+the MediatR package, then finish with the steps above.
+
+Code that injects Relevox's `ISender` cannot send a message that is still on MediatR, so move callers after the
+messages they send.
+
 ## After the migration
 
 Nothing below is needed to migrate. Each is a choice MediatR did not offer.

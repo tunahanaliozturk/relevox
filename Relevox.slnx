@@ -7,6 +7,7 @@
     <Project Path="src/Relevox.Migration/Relevox.Migration.csproj" />
     <Project Path="src/Relevox.Testing/Relevox.Testing.csproj" />
     <Project Path="src/Relevox.FluentValidation/Relevox.FluentValidation.csproj" />
+    <Project Path="src/Relevox.MediatRBridge/Relevox.MediatRBridge.csproj" />
     <Project Path="src/Relevox/Relevox.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -17,6 +18,7 @@
     <Project Path="tests/Relevox.Samples.Web.Tests/Relevox.Samples.Web.Tests.csproj" />
     <Project Path="tests/Relevox.Testing.Tests/Relevox.Testing.Tests.csproj" />
     <Project Path="tests/Relevox.FluentValidation.Tests/Relevox.FluentValidation.Tests.csproj" />
+    <Project Path="tests/Relevox.MediatRBridge.Tests/Relevox.MediatRBridge.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Relevox.Samples.Aot/Relevox.Samples.Aot.csproj" />

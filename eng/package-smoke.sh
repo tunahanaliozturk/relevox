@@ -21,8 +21,9 @@ dotnet pack "$root/src/Relevox.Contracts" --configuration Release --output "$fee
 dotnet pack "$root/src/Relevox" --configuration Release --output "$feed" -p:Version="$version"
 dotnet pack "$root/src/Relevox.Testing" --configuration Release --output "$feed" -p:Version="$version"
 dotnet pack "$root/src/Relevox.FluentValidation" --configuration Release --output "$feed" -p:Version="$version"
+dotnet pack "$root/src/Relevox.MediatRBridge" --configuration Release --output "$feed" -p:Version="$version"
 
-for package in Relevox Relevox.Contracts Relevox.Testing Relevox.FluentValidation; do
+for package in Relevox Relevox.Contracts Relevox.Testing Relevox.FluentValidation Relevox.MediatRBridge; do
   contents="$(unzip -l "$feed/$package.$version.nupkg")"
   for expected in icon.png README.md "lib/net10.0/$package.dll" "lib/net10.0/$package.xml"; do
     grep -q " $expected\$" <<<"$contents" || { echo "$package.$version.nupkg has no $expected" >&2; exit 1; }
@@ -50,6 +51,14 @@ unzip -p "$feed/Relevox.Testing.$version.nupkg" Relevox.Testing.nuspec | grep 'i
 unzip -p "$feed/Relevox.FluentValidation.$version.nupkg" Relevox.FluentValidation.nuspec | grep 'id="Relevox"' | grep -q 'include="[^"]*"' \
   && ! unzip -p "$feed/Relevox.FluentValidation.$version.nupkg" Relevox.FluentValidation.nuspec | grep 'id="Relevox"' | grep -q 'Analyzers' \
   || { echo "Relevox.FluentValidation.$version.nupkg lets Relevox's analyzers flow through it" >&2; exit 1; }
+
+# The bridge leaves the application its own MediatR: 12.0.0 as a minimum, with no upper bound and no other
+# Relevox package than the contracts.
+bridge="$(unzip -p "$feed/Relevox.MediatRBridge.$version.nupkg" Relevox.MediatRBridge.nuspec)"
+grep -q 'id="MediatR" version="12.0.0"' <<<"$bridge" \
+  && grep -q "id=\"Relevox.Contracts\" version=\"$version\"" <<<"$bridge" \
+  && ! grep -q 'id="Relevox"' <<<"$bridge" \
+  || { echo "Relevox.MediatRBridge.$version.nupkg has the wrong dependencies" >&2; exit 1; }
 
 dotnet run --project "$app" --configuration Release -p:RelevoxVersion="$version"
 
