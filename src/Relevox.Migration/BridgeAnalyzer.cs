@@ -23,9 +23,11 @@ namespace Relevox.Migration;
 /// </para>
 /// <para>
 /// RVX0015 is a warning because a request that has moved silently loses whatever a MediatR-only behaviour did:
-/// logging, authorisation, a transaction. It fires only once something has moved: a message in the project carries
-/// both libraries' interfaces, or the project references the bridge and has a Relevox handler. No build without
-/// the bridge gets it, and neither does the first step of a migration, which adds the bridge and moves nothing.
+/// logging, authorisation, a transaction. It fires only once something has moved: a message in the project, or in a
+/// project it references, carries both libraries' interfaces, or the project references the bridge and it or a
+/// project it references has a Relevox handler. No build without the bridge gets it, and neither does the first
+/// step of a migration, which adds the bridge and moves nothing. A behaviour in a project below the one that moved
+/// cannot see the move, and is counted only by RVX0014.
 /// </para>
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -156,10 +158,12 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
 
             start.RegisterCompilationEndAction(end =>
             {
-                bool inUse = Volatile.Read(ref dual) == 1
-                    || (Volatile.Read(ref relevoxHandler) == 1
-                        && end.Compilation.ReferencedAssemblyNames.Any(static identity => identity.Name == BridgeAssembly));
-                if (inUse)
+                bool bridge = end.Compilation.ReferencedAssemblyNames.Any(static identity => identity.Name == BridgeAssembly);
+                bool inUse = Volatile.Read(ref dual) == 1 || (bridge && Volatile.Read(ref relevoxHandler) == 1);
+
+                // The references are read only when there is something to warn about, since that walks every type in them.
+                if (own.Any(static pair => pair.Found.Unmoved is not null)
+                    && (inUse || types.MovedInReferences(end.Compilation, bridge, end.CancellationToken)))
                 {
                     foreach ((INamedTypeSymbol type, Classification found) in own.OrderBy(static pair => pair.Type.Locations[0].SourceTree?.FilePath, StringComparer.Ordinal).ThenBy(static pair => pair.Type.Locations[0].SourceSpan.Start))
                     {
@@ -279,7 +283,14 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
             && type.AllInterfaces.Any(contract => _relevoxMessages.Contains(contract.OriginalDefinition));
 
         /// <summary>The MediatR types of every referenced assembly that references MediatR, MediatR's own excluded.</summary>
-        public IEnumerable<Classification> InReferences(Compilation compilation, CancellationToken cancellationToken)
+        public IEnumerable<Classification> InReferences(Compilation compilation, CancellationToken cancellationToken) =>
+            TypesInReferences(compilation, cancellationToken).SelectMany(Classify);
+
+        /// <summary>Whether a referenced project has moved something, as <see cref="CarriesBoth"/> and <see cref="HandlesOnRelevox"/> tell it.</summary>
+        public bool MovedInReferences(Compilation compilation, bool bridge, CancellationToken cancellationToken) =>
+            TypesInReferences(compilation, cancellationToken).Any(type => CarriesBoth(type) || (bridge && HandlesOnRelevox(type)));
+
+        private static IEnumerable<INamedTypeSymbol> TypesInReferences(Compilation compilation, CancellationToken cancellationToken)
         {
             foreach (IAssemblySymbol assembly in compilation.SourceModule.ReferencedAssemblySymbols)
             {
@@ -292,10 +303,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
 
                 foreach (INamedTypeSymbol type in AllTypes(assembly.GlobalNamespace))
                 {
-                    foreach (Classification found in Classify(type))
-                    {
-                        yield return found;
-                    }
+                    yield return type;
                 }
             }
         }
