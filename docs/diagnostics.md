@@ -376,8 +376,9 @@ build.
 
 Through the bridge each request runs the pipeline of the library that handles it. A behaviour or processor with
 only MediatR's interface runs for the requests still on MediatR and never for those that have moved, so whatever
-it does, logging, authorisation, a transaction, silently stops for them. Reported where the bridge is in use: in a
-project that references `Relevox.MediatRBridge`, or that declares a message with both libraries' interfaces.
+it does, logging, authorisation, a transaction, silently stops for them. Reported once something has moved: in a
+project that declares a message with both libraries' interfaces, or that references `Relevox.MediatRBridge` and
+has a Relevox handler. Adding the bridge with nothing moved yet reports nothing.
 
 ```csharp
 public sealed class Audit<TRequest, TResponse> : MediatR.IPipelineBehavior<TRequest, TResponse> ... // RVX0015
