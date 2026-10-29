@@ -17,6 +17,9 @@ All notable changes to this project are written down here. The format follows
   RVX0016 (Info) says when no handler is left so the bridge can go, and RVX0015 (Warning) points at a MediatR
   behaviour or processor without Relevox's interface, which requests moved to Relevox skip. RVX0015 fires only
   where the bridge is in use, so no build without it gets a new warning (#132).
+- `docs/migration-trial.md` has Clean Architecture moved off MediatR 14.2.0 a second time, through the bridge in
+  six steps with all 33 tests passing after each, and `docs/migration.md` how to move a behaviour that has to
+  serve both libraries (#133).
 
 ## [1.5.1] - 2026-10-26
 

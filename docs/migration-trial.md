@@ -177,6 +177,39 @@ on the line of a real `Send` in `Endpoints/`. The two maps put through
 [message-map-combine.jq](message-map-combine.jq) give each of Application's nine requests its call from Web,
 and the [check for requests nothing sends](message-map.md#requests-nothing-sends) reports none.
 
+## Clean Architecture, one feature at a time
+
+The same template, from the same upstream commit on MediatR 14.2.0, moved a second time through
+`Relevox.MediatRBridge` ([one feature at a time](migration.md#one-feature-at-a-time)), in six steps. After each
+step the solution built with warnings as errors, and all 33 tests passed: 6 domain, 8 application, 19
+functional.
+
+| Step | What changed | Files | RVX0014 / RVX0016 after it |
+|---|---|---:|---|
+| 1 | `Relevox` and `Relevox.MediatRBridge` added, `AddRelevox()` and `AddMediatRBridge()` after `AddMediatR`. Nothing moved. | 3 | handlers 10, behaviours 4, processors 1 |
+| 2 | The four behaviours and the logging pre-processor implement Relevox's interfaces as well, and `AddRelevox` registers them in the same order. | 6 | handlers 10, behaviours 0, processors 0 |
+| 3 | TodoLists: four requests carry both interfaces, their handlers implement Relevox's. | 4 | handlers 6, behaviours 0, processors 0 |
+| 4 | TodoItems and the domain events: four requests, `BaseEvent`, and the one event handler. Domain gains `Relevox.Contracts`. | 7 | handlers 1, behaviours 0, processors 0 |
+| 5 | WeatherForecasts, the last query. | 1 | RVX0016: the bridge can go |
+| 6 | MediatR removed: its interfaces and the MediatR overloads deleted, the registration and the packages removed, then the RVX0007 fix for the `using` directives. | 23 | |
+
+The functional tests send through MediatR's `ISender` until step 6, so from step 3 they exercise the bridge.
+That the moved requests really ran Relevox's pipeline was checked by taking `ValidationBehaviour` out of
+`AddRelevox` after step 3: exactly the three TodoLists validation tests failed, and the TodoItems ones, still
+on MediatR, passed.
+
+### What it found
+
+- **RVX0015 warned before anything had moved.** As first written it fired wherever the bridge was referenced,
+  so step 1, which moves nothing, failed under warnings as errors with one warning per behaviour. It now waits
+  until the project has a Relevox handler or a message with both interfaces.
+- **A behaviour needs its body once and two `Handle` methods.** The two libraries' delegates are different
+  types, so a behaviour that serves both forwards each to one private method taking `Func<Task<TResponse>>`.
+  A pre-processor needs nothing of the sort: both interfaces have the same `Process` method, which serves both.
+- **The last step is the largest.** Removing MediatR touched 23 files, most of them to delete the half of each
+  type the bridge needed. The RVX0007 fix could not do it alone: run on a type carrying both interfaces, it
+  would rename MediatR's to Relevox's and leave the interface twice.
+
 ## Why bother
 
 None of what the first trial found showed up in the repository's own tests, which reference Relevox's projects
