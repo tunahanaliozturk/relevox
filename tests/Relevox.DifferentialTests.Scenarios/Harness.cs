@@ -42,10 +42,14 @@ public static partial class Library
         Trace trace = new();
         services.AddSingleton(trace);
         Register(services, lifetime, profile, trace);
+        Bridge(services, lifetime);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
     static partial void Register(IServiceCollection services, ServiceLifetime lifetime, Profile profile, Trace trace);
+
+    // Only the half-moved assembly has one: it adds Relevox and the bridge after MediatR's registration (#131).
+    static partial void Bridge(IServiceCollection services, ServiceLifetime lifetime);
 }
 
 /// <summary>Which optional parts of each library a scenario registers.</summary>

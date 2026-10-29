@@ -232,6 +232,30 @@ no handler exists, cannot close a generic behaviour over a type it has no dispat
 straight away. The exception type is the same; the behaviours' side effects are missing. The build has
 already warned about such a request with `RVX0001`.
 
+## Half moved through the bridge
+
+The same scenarios run a third time, half moved: compiled against MediatR, with the requests in `Messages.cs`
+moved to Relevox the way [one feature at a time](migration.md#one-feature-at-a-time) describes, each keeping
+MediatR's interface, and everything sent through `Relevox.MediatRBridge`
+([ADR 0022](adr/0022-mediatr-bridge.md)). The build rewrites `Messages.cs` for that assembly, so the scenarios
+stay one source. Every scenario must give what MediatR alone gives, except these, which a test lists by name
+and fails on once they agree again:
+
+**MediatR's pipeline does not run for a moved request.** Eleven scenarios send a moved request through
+behaviours and processors registered with MediatR, and none of them runs. That is the bridge's rule, one
+pipeline per request, and why the migration guide moves the behaviours before the requests; RVX0015 points at
+each behaviour that would be skipped.
+
+**A moved request can throw out of `Send`.** The scenarios register exception handlers with MediatR, and in
+MediatR those make every send asynchronous. Relevox has none in that assembly, so a moved request whose handler
+throws before its first `await`, or that has no handler, throws out of `Send` instead of faulting the task
+(three scenarios). Once Relevox has an exception handler of its own, every send through it is asynchronous
+again, by the rule [above](#the-pipeline), so moving the exception handlers with the behaviours brings it back.
+
+Notifications, streams and the requests in the other files stay on MediatR and agree in every scenario,
+handler order included. The order holds only because the rewritten file is compiled where the original was:
+MediatR runs handlers in metadata order.
+
 ## Not supported
 
 **Handlers in generated code.** MediatR's scan finds every handler in the assembly. Relevox leaves out what the
