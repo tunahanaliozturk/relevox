@@ -23,8 +23,9 @@ namespace Relevox.Migration;
 /// </para>
 /// <para>
 /// RVX0015 is a warning because a request that has moved silently loses whatever a MediatR-only behaviour did:
-/// logging, authorisation, a transaction. It fires only where the bridge is in use, either referenced or implied
-/// by a message carrying both libraries' interfaces, so no build without the bridge gets it.
+/// logging, authorisation, a transaction. It fires only once something has moved: a message in the project carries
+/// both libraries' interfaces, or the project references the bridge and has a Relevox handler. No build without
+/// the bridge gets it, and neither does the first step of a migration, which adds the bridge and moves nothing.
 /// </para>
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -92,6 +93,14 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
     private static readonly string[] MediatRMessages = ["MediatR.IBaseRequest", "MediatR.INotification", "MediatR.IStreamRequest`1"];
     private static readonly string[] RelevoxMessages = ["Relevox.IBaseRequest", "Relevox.INotification", "Relevox.IStreamRequest`1"];
 
+    private static readonly string[] RelevoxHandlers =
+    [
+        "Relevox.IRequestHandler`1",
+        "Relevox.IRequestHandler`2",
+        "Relevox.INotificationHandler`1",
+        "Relevox.IStreamRequestHandler`2",
+    ];
+
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [StillOnMediatR, SkippedByMoved, BridgeCanGo];
 
@@ -110,6 +119,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
             ConcurrentBag<(INamedTypeSymbol Type, Classification Found)> own = [];
             ConcurrentBag<Location> calls = [];
             int dual = 0;
+            int relevoxHandler = 0;
 
             start.RegisterSymbolAction(
                 symbol =>
@@ -123,6 +133,11 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
                     if (types.CarriesBoth(type))
                     {
                         _ = Interlocked.Exchange(ref dual, 1);
+                    }
+
+                    if (types.HandlesOnRelevox(type))
+                    {
+                        _ = Interlocked.Exchange(ref relevoxHandler, 1);
                     }
                 },
                 SymbolKind.NamedType);
@@ -142,7 +157,8 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
             start.RegisterCompilationEndAction(end =>
             {
                 bool inUse = Volatile.Read(ref dual) == 1
-                    || end.Compilation.ReferencedAssemblyNames.Any(static identity => identity.Name == BridgeAssembly);
+                    || (Volatile.Read(ref relevoxHandler) == 1
+                        && end.Compilation.ReferencedAssemblyNames.Any(static identity => identity.Name == BridgeAssembly));
                 if (inUse)
                 {
                     foreach ((INamedTypeSymbol type, Classification found) in own.OrderBy(static pair => pair.Type.Locations[0].SourceTree?.FilePath, StringComparer.Ordinal).ThenBy(static pair => pair.Type.Locations[0].SourceSpan.Start))
@@ -195,17 +211,20 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
         private readonly (INamedTypeSymbol MediatR, INamedTypeSymbol? Relevox, bool Behavior)[] _pipeline;
         private readonly HashSet<INamedTypeSymbol> _mediatrMessages;
         private readonly HashSet<INamedTypeSymbol> _relevoxMessages;
+        private readonly HashSet<INamedTypeSymbol> _relevoxHandlers;
 
         private Types(
             HashSet<INamedTypeSymbol> handlers,
             (INamedTypeSymbol, INamedTypeSymbol?, bool)[] pipeline,
             HashSet<INamedTypeSymbol> mediatrMessages,
-            HashSet<INamedTypeSymbol> relevoxMessages)
+            HashSet<INamedTypeSymbol> relevoxMessages,
+            HashSet<INamedTypeSymbol> relevoxHandlers)
         {
             _handlers = handlers;
             _pipeline = pipeline;
             _mediatrMessages = mediatrMessages;
             _relevoxMessages = relevoxMessages;
+            _relevoxHandlers = relevoxHandlers;
         }
 
         /// <summary>Null unless the project sees both MediatR and Relevox, the only case with anything to say.</summary>
@@ -225,7 +244,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
                     .Where(static entry => entry.MediatR is not null)
                     .Select(static entry => (entry.MediatR!, entry.Relevox, entry.Behavior)),
             ];
-            return new Types(handlers, pipeline, Resolve(compilation, MediatRMessages), relevoxMessages);
+            return new Types(handlers, pipeline, Resolve(compilation, MediatRMessages), relevoxMessages, Resolve(compilation, RelevoxHandlers));
         }
 
         public Classification? Classify(INamedTypeSymbol type)
@@ -252,6 +271,9 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
 
             return null;
         }
+
+        public bool HandlesOnRelevox(INamedTypeSymbol type) =>
+            type.TypeKind == TypeKind.Class && type.AllInterfaces.Any(contract => _relevoxHandlers.Contains(contract.OriginalDefinition));
 
         public bool CarriesBoth(INamedTypeSymbol type) =>
             type.AllInterfaces.Any(contract => _mediatrMessages.Contains(contract.OriginalDefinition))

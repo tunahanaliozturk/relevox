@@ -157,6 +157,19 @@ public sealed class BridgeAnalyzerTests
     }
 
     [Fact]
+    public void A_project_that_references_the_bridge_and_has_moved_nothing_gets_no_warning()
+    {
+        Analyze([MediatR, Bridge], Legacy + MediatROnlyBehavior + MediatROnlyProcessor).ShouldBeEmpty();
+        Analyze([MediatR, Bridge], Legacy + MediatROnlyBehavior + """
+            public sealed record Moved : Relevox.IRequest<int>;
+            public sealed class MovedHandler : Relevox.IRequestHandler<Moved, int>
+            {
+                public Task<int> Handle(Moved request, CancellationToken cancellationToken) => Task.FromResult(4);
+            }
+            """).ShouldHaveSingleItem().Id.ShouldBe("RVX0015");
+    }
+
+    [Fact]
     public void Nothing_is_reported_without_the_bridge()
     {
         Analyze([MediatR], Legacy + MediatROnlyBehavior + MediatROnlyProcessor).ShouldBeEmpty();
