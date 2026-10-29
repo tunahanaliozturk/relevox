@@ -75,6 +75,7 @@ ratios rather than the times. 1.3.0 did not change the dispatch code; its run, o
 1.4.0 changed none of the paths below either; what it made faster is in the [changelog](CHANGELOG.md#140---2026-10-25).
 1.5.0 works out a pipeline's `[PipelineOrder]` on its first send and leaves the rest of each send as it was; its
 numbers wait for the quiet-machine run in [#85](https://github.com/tunahanaliozturk/relevox/issues/85).
+1.6.0 adds the bridge in a package of its own and changes none of the paths below.
 With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
