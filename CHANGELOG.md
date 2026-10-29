@@ -6,6 +6,14 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-30
+
+One feature at a time: the new `Relevox.MediatRBridge` package runs MediatR and Relevox side by side, so a
+solution too large to move in one pull request can move a feature per pull request. RVX0014 and RVX0016 say what
+is left and when the bridge can go, and the message map lists each message not moved yet. The shared differential
+scenarios also run half moved through the bridge, and the 14 of 116 that differ from MediatR alone are listed in
+`docs/compatibility.md`. RVX0015 is the only new warning, and it fires only in a build that uses the bridge.
+
 ### Added
 
 - The message map of a project that sees MediatR has `notMoved`, each message still handled on MediatR in the
