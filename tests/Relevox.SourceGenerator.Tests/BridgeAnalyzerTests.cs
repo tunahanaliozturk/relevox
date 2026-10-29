@@ -174,6 +174,24 @@ public sealed class BridgeAnalyzerTests
     }
 
     [Fact]
+    public void A_move_in_a_referenced_project_is_seen_by_a_project_with_a_MediatR_only_behaviour()
+    {
+        MetadataReference dual = GeneratorHarness.Library("Feature", [MediatR], withGenerator: false, Usings + Moved);
+        Analyze([MediatR, dual], MediatROnlyBehavior).ShouldHaveSingleItem().Id.ShouldBe("RVX0015");
+
+        // A Relevox handler alone says nothing has moved unless the bridge is in the project too.
+        MetadataReference relevoxOnly = GeneratorHarness.Library("Feature", [MediatR], withGenerator: false, Usings + Legacy + """
+            public sealed record Moved : Relevox.IRequest<int>;
+            public sealed class MovedHandler : Relevox.IRequestHandler<Moved, int>
+            {
+                public Task<int> Handle(Moved request, CancellationToken cancellationToken) => Task.FromResult(4);
+            }
+            """);
+        Analyze([MediatR, relevoxOnly], MediatROnlyBehavior).ShouldBeEmpty();
+        Analyze([MediatR, Bridge, relevoxOnly], MediatROnlyBehavior).ShouldHaveSingleItem().Id.ShouldBe("RVX0015");
+    }
+
+    [Fact]
     public void A_project_that_references_the_bridge_and_has_moved_nothing_gets_no_warning()
     {
         Analyze([MediatR, Bridge], Legacy + MediatROnlyBehavior + MediatROnlyProcessor).ShouldBeEmpty();
