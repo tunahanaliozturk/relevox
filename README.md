@@ -25,6 +25,7 @@ dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
 dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
 dotnet add package Relevox.FluentValidation   # a validation behaviour, only for requests with a validator
+dotnet add package Relevox.MediatRBridge      # MediatR and Relevox side by side while a solution moves
 ```
 
 | Package | Version | Downloads | Reference it from |
@@ -33,6 +34,7 @@ dotnet add package Relevox.FluentValidation   # a validation behaviour, only for
 | [Relevox.Contracts](https://www.nuget.org/packages/Relevox.Contracts) | [![Relevox.Contracts](https://img.shields.io/nuget/v/Relevox.Contracts?label=)](https://www.nuget.org/packages/Relevox.Contracts) | [![Relevox.Contracts downloads](https://img.shields.io/nuget/dt/Relevox.Contracts?label=)](https://www.nuget.org/packages/Relevox.Contracts) | Libraries that only declare requests and handlers. No dependencies. |
 | [Relevox.Testing](https://www.nuget.org/packages/Relevox.Testing) | [![Relevox.Testing](https://img.shields.io/nuget/v/Relevox.Testing?label=)](https://www.nuget.org/packages/Relevox.Testing) | [![Relevox.Testing downloads](https://img.shields.io/nuget/dt/Relevox.Testing?label=)](https://www.nuget.org/packages/Relevox.Testing) | Test projects ([testing.md](docs/testing.md)). |
 | [Relevox.FluentValidation](https://www.nuget.org/packages/Relevox.FluentValidation) | [![Relevox.FluentValidation](https://img.shields.io/nuget/v/Relevox.FluentValidation?label=)](https://www.nuget.org/packages/Relevox.FluentValidation) | [![Relevox.FluentValidation downloads](https://img.shields.io/nuget/dt/Relevox.FluentValidation?label=)](https://www.nuget.org/packages/Relevox.FluentValidation) | The application, for FluentValidation validators ([validation.md](docs/validation.md)). |
+| [Relevox.MediatRBridge](https://www.nuget.org/packages/Relevox.MediatRBridge) | [![Relevox.MediatRBridge](https://img.shields.io/nuget/v/Relevox.MediatRBridge?label=)](https://www.nuget.org/packages/Relevox.MediatRBridge) | [![Relevox.MediatRBridge downloads](https://img.shields.io/nuget/dt/Relevox.MediatRBridge?label=)](https://www.nuget.org/packages/Relevox.MediatRBridge) | The application, while it moves from MediatR one feature at a time ([migration.md](docs/migration.md#one-feature-at-a-time)). |
 
 Releases and their notes are on the [releases page](https://github.com/tunahanaliozturk/relevox/releases) and in
 [CHANGELOG.md](CHANGELOG.md).
@@ -141,6 +143,8 @@ The command rewrites `using MediatR`, `AddMediatR` and the scanning settings. In
 [migration-trial.md](docs/migration-trial.md).
 
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.
+In a solution too large to move in one pull request, `Relevox.MediatRBridge` runs MediatR and Relevox side by
+side, so a team moves one feature at a time ([one feature at a time](docs/migration.md#one-feature-at-a-time)).
 [samples/Migration](samples/Migration) holds the same order service on both libraries; CI runs the two and
 fails if their output differs. [samples/Relevox.Samples.Web](samples/Relevox.Samples.Web) is an ASP.NET Core
 minimal API on Relevox, with its [`.http` file](samples/Relevox.Samples.Web/Relevox.Samples.Web.http) and tests that
@@ -217,6 +221,11 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [15. What the message map says, and how the build learns about behaviours](docs/adr/0015-message-map-content.md)
 - [16. The Markdown view of the message map is written by the generator](docs/adr/0016-message-map-markdown.md)
 - [17. The message map records where each message is sent from](docs/adr/0017-message-map-call-sites.md)
+- [18. Architecture rules are Info by default and ship with the contracts](docs/adr/0018-architecture-rule-defaults.md)
+- [19. Behaviours can be ordered by number, worked out on the first send](docs/adr/0019-pipeline-order.md)
+- [20. The validation behaviour is closed at build time over the requests with a validator](docs/adr/0020-validation-package.md)
+- [21. Projects using another project's mediator write their calls, and a jq recipe combines the maps](docs/adr/0021-solution-call-sites.md)
+- [22. MediatR and Relevox side by side, routed by the message's interface](docs/adr/0022-mediatr-bridge.md)
 
 ## Roadmap
 

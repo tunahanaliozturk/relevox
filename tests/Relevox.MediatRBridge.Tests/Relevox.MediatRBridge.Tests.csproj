@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MediatR 12.5.0, the newest Apache-2.0 release, for the half of the application that has not moved yet. -->
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <!-- Handlers on both sides and a generated mediator of its own, as in an application halfway through. -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Relevox/Relevox.csproj" />
+    <ProjectReference Include="../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../src/Relevox.MediatRBridge/Relevox.MediatRBridge.csproj" />
+  </ItemGroup>
+
+</Project>

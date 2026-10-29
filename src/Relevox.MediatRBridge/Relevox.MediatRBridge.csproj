@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      Not marked AOT compatible: MediatR finds its handlers by reflection at run time, so an application using the
+      bridge is not trimmable anyway, and the bridge's own interface check on stream requests uses reflection too.
+    -->
+    <PackageId>Relevox.MediatRBridge</PackageId>
+    <Description>Runs MediatR and Relevox side by side: MediatR's IMediator, ISender and IPublisher send each message to whichever library has its handler, so a solution can move to Relevox one feature at a time.</Description>
+    <PackageTags>mediator;cqrs;mediatr;migration</PackageTags>
+    <RelevoxPackageReadme>$(MSBuildThisFileDirectory)../../docs/mediatr-bridge-package-readme.md</RelevoxPackageReadme>
+    <!-- New in 1.6.0: nothing to compare against until it has shipped once. -->
+    <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      12.0.0 is the first MediatR with the interfaces the bridge implements, and the lowest it accepts, so an
+      application keeps the MediatR it chose. 12.x is Apache-2.0. An application on 13 or later brings that
+      version and its licence itself; nothing from MediatR 13 or later is in this repository (ADR 0006, ADR 0022).
+    -->
+    <PackageReference Include="MediatR" VersionOverride="12.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Only the contracts: the bridge calls Relevox's IMediator, which the application's generated mediator
+      implements. The migration analyzer stays behind, since the application has it from its own reference.
+    -->
+    <ProjectReference Include="../Relevox.Contracts/Relevox.Contracts.csproj" PrivateAssets="analyzers" />
+  </ItemGroup>
+
+</Project>

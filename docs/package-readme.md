@@ -13,6 +13,7 @@ dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
 dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
 dotnet add package Relevox.FluentValidation   # a validation behaviour, only for requests with a validator
+dotnet add package Relevox.MediatRBridge      # MediatR and Relevox side by side while a solution moves
 ```
 
 ![Send runs the pipeline of behaviours and processors, then the one handler found at build time, and returns the response. Publish hands the notification to the publisher, which runs every handler in order. CreateStream runs the stream behaviours around the one stream handler and returns an IAsyncEnumerable.](https://raw.githubusercontent.com/tunahanaliozturk/relevox/v1.5.1/docs/images/flows-light.png)
@@ -35,6 +36,7 @@ dotnet add package Relevox.FluentValidation   # a validation behaviour, only for
 | `Relevox.Contracts` | Projects that only declare requests and handlers: domain, application, feature libraries. |
 | `Relevox.Testing` | Test projects: a fake `IMediator` and a recorder for published notifications ([testing.md](https://github.com/tunahanaliozturk/relevox/blob/main/docs/testing.md)). |
 | `Relevox.FluentValidation` | The application, for FluentValidation validators: the build gives the behaviour only to the requests that have one ([validation.md](https://github.com/tunahanaliozturk/relevox/blob/main/docs/validation.md)). |
+| `Relevox.MediatRBridge` | The application, while it moves from MediatR one feature at a time: MediatR's interfaces send each message to the library that has its handler ([migration.md](https://github.com/tunahanaliozturk/relevox/blob/main/docs/migration.md#one-feature-at-a-time)). |
 
 ## Quick start
 

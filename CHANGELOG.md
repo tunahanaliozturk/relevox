@@ -6,6 +6,14 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `Relevox.MediatRBridge`, a new package, runs MediatR and Relevox side by side so a solution can move one
+  feature at a time. `services.AddMediatRBridge()` takes MediatR's `IMediator`, `ISender` and `IPublisher`: a
+  message whose type implements Relevox's interface goes to Relevox, anything else to MediatR's own mediator. A
+  notification with handlers on both sides runs MediatR's, then Relevox's. Works with MediatR 12.0 and later
+  (ADR 0022, #130).
+
 ## [1.5.1] - 2026-10-26
 
 Documentation only; the code is that of 1.5.0.

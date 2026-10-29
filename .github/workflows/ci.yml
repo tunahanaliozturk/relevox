@@ -62,6 +62,10 @@ jobs:
       - name: FluentValidation package tests
         run: dotnet run --project tests/Relevox.FluentValidation.Tests --configuration Release --no-build
 
+      # Relevox.MediatRBridge: MediatR 12.5.0 and Relevox in one container, each message routed to its library.
+      - name: MediatR bridge tests
+        run: dotnet run --project tests/Relevox.MediatRBridge.Tests --configuration Release --no-build
+
       # The same order service on MediatR 12.5 and moved to Relevox by following docs/migration.md. Both print
       # what they did; any difference in the transcripts fails the build.
       - name: Migration sample prints the same before and after
