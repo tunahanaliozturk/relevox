@@ -8,6 +8,9 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- The message map of a project that sees MediatR has `notMoved`, each message still handled on MediatR in the
+  project and the projects it references, and its Markdown view a "Not moved yet" table. A map without MediatR
+  is unchanged (#132).
 - `Relevox.MediatRBridge`, a new package, runs MediatR and Relevox side by side so a solution can move one
   feature at a time. `services.AddMediatRBridge()` takes MediatR's `IMediator`, `ISender` and `IPublisher`: a
   message whose type implements Relevox's interface goes to Relevox, anything else to MediatR's own mediator. A

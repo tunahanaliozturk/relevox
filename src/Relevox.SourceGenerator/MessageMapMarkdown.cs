@@ -97,6 +97,28 @@ internal static class MessageMapMarkdown
             }
         }
 
+        // Only in a project that sees MediatR, while the bridge runs the two side by side (ADR 0022).
+        if (map.Any(static field => field.Name == "notMoved"))
+        {
+            List<List<(string Name, object? Value)>> left = Items(map, "notMoved");
+            markdown.Append("\n## Not moved yet\n\n");
+            if (left.Count == 0)
+            {
+                markdown.Append("No handler is left on MediatR, so the bridge can go.\n");
+            }
+            else
+            {
+                markdown.Append("These messages are still handled on MediatR, so they are not in the lists above; through the bridge they run MediatR's pipeline.\n\n")
+                    .Append("| Message | Kind | Handler | Project |\n|---|---|---|---|\n");
+                foreach (List<(string Name, object? Value)> message in left)
+                {
+                    List<(string Name, object? Value)> handler = (List<(string Name, object? Value)>)Get(message, "handler")!;
+                    markdown.Append("| ").Append(Code((string)Get(message, "type")!)).Append(" | ").Append(Get(message, "kind"))
+                        .Append(" | ").Append(Code((string)Get(handler, "type")!)).Append(" | ").Append(Get(handler, "project")).Append(" |\n");
+                }
+            }
+        }
+
         return markdown.ToString();
     }
 
