@@ -192,7 +192,8 @@ To move a feature:
 1. **Give its messages Relevox's interface as well as MediatR's**, so callers on MediatR's `ISender` still
    compile: `record PlaceOrder : MediatR.IRequest<int>, Relevox.IRequest<int>`.
 2. **Move its handlers to Relevox's interfaces.** The build reports RVX0001 for a request that has Relevox's
-   interface and no Relevox handler, so a half-moved feature does not compile.
+   interface and no Relevox handler, so a half-moved feature shows up as a warning, or as an error with
+   warnings treated as errors.
 3. **Move the behaviours its requests need before the requests.** A request runs the pipeline of the library
    that handles it, and only that one. A behaviour that implements both libraries' interfaces, registered with
    both, runs once per request whichever side handles it.

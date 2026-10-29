@@ -28,8 +28,9 @@ Relevox request goes to Relevox, anything else to MediatR. The same holds for vo
 and the untyped overloads. A void request sent untyped answers with MediatR's `Unit`, as MediatR would, because
 the caller is on MediatR's interface.
 
-The rule needs no list of handlers at run time, and the compiler checks it: RVX0001 fails the build for a
-Relevox request with no Relevox handler, so the bridge never routes a request to a library without its handler.
+The rule needs no list of handlers at run time, and the compiler checks it: RVX0001 warns at build time about a
+Relevox request with no Relevox handler, and with warnings as errors the build stops there. A request whose
+handler is still on MediatR is reported before the bridge could send it to the wrong library.
 
 **Each request runs one pipeline.** It goes to one mediator and through that mediator's behaviours,
 processors and exception handlers only. A behaviour moved by implementing both libraries' interfaces, and

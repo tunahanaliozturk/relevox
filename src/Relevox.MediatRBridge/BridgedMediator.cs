@@ -7,8 +7,8 @@ namespace Relevox.MediatRBridge;
 /// </summary>
 /// <remarks>
 /// A message has moved when its type implements Relevox's interface. That is a decision the compiler can check:
-/// RVX0001 fails the build for a Relevox request with no Relevox handler, so a request never reaches a library
-/// that cannot handle it. Each request goes to one mediator, through that mediator's pipeline only, so a behaviour
+/// RVX0001 warns about a Relevox request with no Relevox handler, so a request whose handler has not moved is
+/// reported at build time rather than sent to a library that cannot handle it. Each request goes to one mediator, through that mediator's pipeline only, so a behaviour
 /// registered with both runs once. See ADR 0022.
 /// </remarks>
 internal sealed class BridgedMediator(MediatR.IMediator mediatr, IMediator relevox) : MediatR.IMediator
