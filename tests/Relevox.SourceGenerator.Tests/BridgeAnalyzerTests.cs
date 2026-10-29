@@ -151,6 +151,23 @@ public sealed class BridgeAnalyzerTests
     }
 
     [Fact]
+    public void A_class_that_is_both_a_handler_and_a_behaviour_counts_as_both_and_is_warned_about()
+    {
+        Diagnostic[] diagnostics = Analyze([MediatR, Bridge], Moved + """
+            public sealed record Ping : MediatR.IRequest<int>;
+            public sealed class PingEverything : MediatR.IRequestHandler<Ping, int>, MediatR.IPipelineBehavior<Ping, int>
+            {
+                public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);
+                public Task<int> Handle(Ping request, MediatR.RequestHandlerDelegate<int> next, CancellationToken cancellationToken) => next(cancellationToken);
+            }
+
+            """ + Registration);
+
+        diagnostics.Select(static diagnostic => diagnostic.Id).ShouldBe(["RVX0015", "RVX0014"]);
+        diagnostics[1].GetMessage(CultureInfo.InvariantCulture).ShouldBe("Still on MediatR, in this project and the projects it references: handlers 1, behaviours 1, processors 0");
+    }
+
+    [Fact]
     public void A_message_with_both_interfaces_means_the_bridge_is_in_use_in_a_project_that_does_not_reference_it()
     {
         Analyze([MediatR], Moved + MediatROnlyBehavior).ShouldHaveSingleItem().Id.ShouldBe("RVX0015");

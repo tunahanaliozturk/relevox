@@ -125,7 +125,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
                 symbol =>
                 {
                     INamedTypeSymbol type = (INamedTypeSymbol)symbol.Symbol;
-                    if (types.Classify(type) is { } found)
+                    foreach (Classification found in types.Classify(type))
                     {
                         own.Add((type, found));
                     }
@@ -247,17 +247,18 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
             return new Types(handlers, pipeline, Resolve(compilation, MediatRMessages), relevoxMessages, Resolve(compilation, RelevoxHandlers));
         }
 
-        public Classification? Classify(INamedTypeSymbol type)
+        /// <summary>Each role the type has on MediatR: one class can be a handler and a behaviour at once.</summary>
+        public IEnumerable<Classification> Classify(INamedTypeSymbol type)
         {
             if (type.TypeKind != TypeKind.Class || type.IsAbstract)
             {
-                return null;
+                yield break;
             }
 
             ImmutableArray<INamedTypeSymbol> interfaces = type.AllInterfaces;
             if (interfaces.Any(contract => _handlers.Contains(contract.OriginalDefinition)))
             {
-                return new Classification(Kind.Handler, null);
+                yield return new Classification(Kind.Handler, null);
             }
 
             foreach ((INamedTypeSymbol mediatr, INamedTypeSymbol? relevox, bool behavior) in _pipeline)
@@ -265,11 +266,9 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
                 if (interfaces.Any(contract => SymbolEqualityComparer.Default.Equals(contract.OriginalDefinition, mediatr))
                     && (relevox is null || !interfaces.Any(contract => SymbolEqualityComparer.Default.Equals(contract.OriginalDefinition, relevox))))
                 {
-                    return new Classification(behavior ? Kind.Behavior : Kind.Processor, mediatr.Name);
+                    yield return new Classification(behavior ? Kind.Behavior : Kind.Processor, mediatr.Name);
                 }
             }
-
-            return null;
         }
 
         public bool HandlesOnRelevox(INamedTypeSymbol type) =>
@@ -293,7 +292,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
 
                 foreach (INamedTypeSymbol type in AllTypes(assembly.GlobalNamespace))
                 {
-                    if (Classify(type) is { } found)
+                    foreach (Classification found in Classify(type))
                     {
                         yield return found;
                     }
