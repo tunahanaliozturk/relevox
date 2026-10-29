@@ -196,7 +196,9 @@ To move a feature:
    warnings treated as errors.
 3. **Move the behaviours its requests need before the requests.** A request runs the pipeline of the library
    that handles it, and only that one. A behaviour that implements both libraries' interfaces, registered with
-   both, runs once per request whichever side handles it. RVX0015 points at any that would be skipped.
+   both, runs once per request whichever side handles it. RVX0015 points at any that would be skipped in the
+   project that moved or a project above it. It cannot see the move from a project below, such as a shared
+   library of behaviours, so check those by hand; RVX0014 at the bridge call still counts them.
 4. **Build and run the tests.**
 
 Since the two libraries' delegates are different types, a behaviour serving both keeps its body in one place
