@@ -196,12 +196,41 @@ To move a feature:
    warnings treated as errors.
 3. **Move the behaviours its requests need before the requests.** A request runs the pipeline of the library
    that handles it, and only that one. A behaviour that implements both libraries' interfaces, registered with
-   both, runs once per request whichever side handles it.
+   both, runs once per request whichever side handles it. RVX0015 points at any that would be skipped.
 4. **Build and run the tests.**
 
-A notification can have handlers on both sides while they move: MediatR's run first, then Relevox's. Once
-nothing is left on MediatR, remove `AddMediatRBridge`, `AddMediatR`, MediatR's interfaces from the messages, and
-the MediatR package, then finish with the steps above.
+Since the two libraries' delegates are different types, a behaviour serving both keeps its body in one place
+and forwards to it:
+
+```csharp
+public class Logging<TRequest, TResponse>
+    : MediatR.IPipelineBehavior<TRequest, TResponse>, Relevox.IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+{
+    public Task<TResponse> Handle(TRequest request, MediatR.RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) =>
+        Run(request, () => next(), cancellationToken);
+
+    public Task<TResponse> Handle(TRequest request, Relevox.RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) =>
+        Run(request, () => next(), cancellationToken);
+
+    private async Task<TResponse> Run(TRequest request, Func<Task<TResponse>> next, CancellationToken cancellationToken)
+    {
+        // the original body
+    }
+}
+```
+
+Pre and post processors, exception handlers and actions have the same method in both libraries, so adding
+Relevox's interface is enough.
+
+A notification can have handlers on both sides while they move: MediatR's run first, then Relevox's.
+[RVX0014](diagnostics.md#rvx0014), at the `AddMediatRBridge` call, counts what is left. Once
+[RVX0016](diagnostics.md#rvx0016) says nothing is, delete MediatR's half of every type that has both, and the
+MediatR overloads of the behaviours, then remove `AddMediatRBridge`, `AddMediatR` and the MediatR package, and
+finish with the steps above. The order matters: the RVX0007 fix renames MediatR's interfaces to Relevox's, and
+on a type that still has both it would leave the interface twice.
+[migration-trial.md](migration-trial.md#clean-architecture-one-feature-at-a-time) has a solution moved this
+way in six steps.
 
 Code that injects Relevox's `ISender` cannot send a message that is still on MediatR, so move callers after the
 messages they send.
