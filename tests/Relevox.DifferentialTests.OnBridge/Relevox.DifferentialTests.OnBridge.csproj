@@ -65,10 +65,11 @@
     order, so a file compiled out of place changes the order handlers run in.
   -->
   <Target Name="MoveRequests" BeforeTargets="CoreCompile">
+    <!-- The task reads and writes plain strings, so both paths are anchored here rather than at the working directory. -->
     <PropertyGroup>
-      <MovedMessages>$(IntermediateOutputPath)Moved/Messages.cs</MovedMessages>
+      <MovedMessages>$([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(IntermediateOutputPath), 'Moved', 'Messages.cs'))</MovedMessages>
     </PropertyGroup>
-    <MoveRequests Source="../Relevox.DifferentialTests.Scenarios/Messages.cs" Destination="$(MovedMessages)" />
+    <MoveRequests Source="$(MSBuildProjectDirectory)/../Relevox.DifferentialTests.Scenarios/Messages.cs" Destination="$(MovedMessages)" />
     <ItemGroup>
       <Scenario Condition="'%(Filename)' == 'Messages'">
         <Compiled>$(MovedMessages)</Compiled>
