@@ -22,6 +22,9 @@ that hold most handlers and reference only the contracts.
 | [RVX0011](#rvx0011) | Info | Notification published from the wrong layer |
 | [RVX0012](#rvx0012) | Warning | Layer setting cannot be used |
 | [RVX0013](#rvx0013) | Info | Two behaviours have the same `PipelineOrder` |
+| [RVX0014](#rvx0014) | Info | Code still on MediatR |
+| [RVX0015](#rvx0015) | Warning | A MediatR behaviour does not run for requests moved to Relevox |
+| [RVX0016](#rvx0016) | Info | Nothing is left on MediatR |
 
 ## Architecture rules
 
@@ -349,3 +352,46 @@ one in a referenced project is reported in the project; two in the reference are
 
 **Fix:** give each behaviour its own number, or remove the attribute from both if registration order is what
 you want.
+
+## RVX0014
+
+**Code still on MediatR.** Info.
+
+Reported at the `AddMediatRBridge` call while MediatR and Relevox run side by side
+([ADR 0022](adr/0022-mediatr-bridge.md)). It counts what still runs on MediatR in the project and the projects it
+references: handlers on MediatR's interfaces, and behaviours and processors that have MediatR's interface without
+Relevox's. A referenced project is usually seen through its reference assembly, which leaves out internal types
+unless `InternalsVisibleTo` grants them, so internal handlers in other projects may be missing from the count.
+
+```
+Still on MediatR, in this project and the projects it references: handlers 12, behaviours 2, processors 0
+```
+
+**Fix:** nothing to fix; it is a progress report. Raise it to `warning` in `.editorconfig` to see it on every
+build.
+
+## RVX0015
+
+**A MediatR behaviour does not run for requests moved to Relevox.** Warning.
+
+Through the bridge each request runs the pipeline of the library that handles it. A behaviour or processor with
+only MediatR's interface runs for the requests still on MediatR and never for those that have moved, so whatever
+it does, logging, authorisation, a transaction, silently stops for them. Reported where the bridge is in use: in a
+project that references `Relevox.MediatRBridge`, or that declares a message with both libraries' interfaces.
+
+```csharp
+public sealed class Audit<TRequest, TResponse> : MediatR.IPipelineBehavior<TRequest, TResponse> ... // RVX0015
+```
+
+**Fix:** implement Relevox's interface as well, with a second `Handle` taking Relevox's delegate, and register
+the behaviour with `AddRelevox` as well as `AddMediatR`. Each request still runs it once.
+
+## RVX0016
+
+**Nothing is left on MediatR.** Info.
+
+Reported at the `AddMediatRBridge` call once no handler in the project or the projects it references is on
+MediatR: the bridge sends nothing to MediatR any more.
+
+**Fix:** remove `AddMediatRBridge`, `AddMediatR`, MediatR's interfaces from the messages and the MediatR
+package, then finish with [the migration steps](migration.md).

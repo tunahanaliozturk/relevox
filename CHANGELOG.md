@@ -6,6 +6,13 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- RVX0014 (Info) counts the handlers, behaviours and processors still on MediatR at the `AddMediatRBridge` call,
+  RVX0016 (Info) says when no handler is left so the bridge can go, and RVX0015 (Warning) points at a MediatR
+  behaviour or processor without Relevox's interface, which requests moved to Relevox skip. RVX0015 fires only
+  where the bridge is in use, so no build without it gets a new warning (#132).
+
 ## [1.5.1] - 2026-10-26
 
 Documentation only; the code is that of 1.5.0.
