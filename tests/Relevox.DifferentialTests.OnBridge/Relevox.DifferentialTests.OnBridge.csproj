@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The shared scenarios half moved (#131): compiled against MediatR 12.5.0 as in OnMediatR, except that the
+    requests in Messages.cs and their handlers are moved to Relevox the way docs/migration.md says, keeping
+    MediatR's interface on each request. Everything goes through Relevox.MediatRBridge, so the scenarios' calls
+    on MediatR's ISender reach Relevox for the moved requests and MediatR for the rest.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      RVX0001: the scenarios declare requests without a handler on purpose. RVX0015: the MediatR behaviours that
+      moved requests skip are the point of the comparison, listed in docs/compatibility.md.
+    -->
+    <NoWarn>$(NoWarn);RVX0001;RVX0015</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="MediatR" />
+    <Using Include="MediatR.Pipeline" />
+    <Using Include="MediatR.NotificationPublishers" />
+    <Scenario Include="../Relevox.DifferentialTests.Scenarios/*.cs" Compiled="%(Identity)" />
+    <Compile Include="../Relevox.DifferentialTests.OnMediatR/Registration.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Relevox/Relevox.csproj" />
+    <ProjectReference Include="../../src/Relevox.MediatRBridge/Relevox.MediatRBridge.csproj" />
+    <ProjectReference Include="../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <UsingTask TaskName="MoveRequests" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Source ParameterType="System.String" Required="true" />
+      <Destination ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // Each request keeps MediatR's interface for its callers and gains Relevox's; its handler moves.
+        string text = File.ReadAllText(Source);
+        text = Regex.Replace(text, @": IRequest<([^;{]+)>;", ": IRequest<$1>, Relevox.IRequest<$1>;");
+        text = Regex.Replace(text, @": IRequest;", ": IRequest, Relevox.IRequest;");
+        text = Regex.Replace(text, @"\bIRequestHandler<", "Relevox.IRequestHandler<");
+        Directory.CreateDirectory(Path.GetDirectoryName(Destination));
+        if (!File.Exists(Destination) || File.ReadAllText(Destination) != text)
+        {
+            File.WriteAllText(Destination, text);
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!--
+    The rewritten Messages.cs goes into the compilation where the original was: MediatR runs handlers in metadata
+    order, so a file compiled out of place changes the order handlers run in.
+  -->
+  <Target Name="MoveRequests" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <MovedMessages>$(IntermediateOutputPath)Moved/Messages.cs</MovedMessages>
+    </PropertyGroup>
+    <MoveRequests Source="../Relevox.DifferentialTests.Scenarios/Messages.cs" Destination="$(MovedMessages)" />
+    <ItemGroup>
+      <Scenario Condition="'%(Filename)' == 'Messages'">
+        <Compiled>$(MovedMessages)</Compiled>
+      </Scenario>
+      <Compile Include="@(Scenario->'%(Compiled)')" />
+      <FileWrites Include="$(MovedMessages)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

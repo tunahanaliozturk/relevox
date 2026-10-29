@@ -14,6 +14,7 @@
     <Project Path="tests/Relevox.SourceGenerator.Tests/Relevox.SourceGenerator.Tests.csproj" />
     <Project Path="tests/Relevox.DifferentialTests.OnRelevox/Relevox.DifferentialTests.OnRelevox.csproj" />
     <Project Path="tests/Relevox.DifferentialTests.OnMediatR/Relevox.DifferentialTests.OnMediatR.csproj" />
+    <Project Path="tests/Relevox.DifferentialTests.OnBridge/Relevox.DifferentialTests.OnBridge.csproj" />
     <Project Path="tests/Relevox.DifferentialTests/Relevox.DifferentialTests.csproj" />
     <Project Path="tests/Relevox.Samples.Web.Tests/Relevox.Samples.Web.Tests.csproj" />
     <Project Path="tests/Relevox.Testing.Tests/Relevox.Testing.Tests.csproj" />
