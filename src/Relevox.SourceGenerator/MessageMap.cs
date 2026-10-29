@@ -55,13 +55,14 @@ internal static class MessageMap
     /// <summary>The MSBuild property that turns the map on, as the compiler passes it to analyzers.</summary>
     public const string Switch = "build_property.RelevoxMessageMap";
 
-    // MediatR's handler interfaces and the kind of message each handles, for notMoved (#132).
-    private static readonly (string Contract, string Kind)[] MediatRHandlers =
+    // MediatR's handler interfaces, the kind of message each handles and that message's interface, for notMoved
+    // (#132).
+    private static readonly (string Contract, string Kind, string Message)[] MediatRHandlers =
     [
-        ("MediatR.IRequestHandler`1", "request"),
-        ("MediatR.IRequestHandler`2", "request"),
-        ("MediatR.IStreamRequestHandler`2", "stream"),
-        ("MediatR.INotificationHandler`1", "notification"),
+        ("MediatR.IRequestHandler`1", "request", "MediatR.IRequest"),
+        ("MediatR.IRequestHandler`2", "request", "MediatR.IRequest`1"),
+        ("MediatR.IStreamRequestHandler`2", "stream", "MediatR.IStreamRequest`1"),
+        ("MediatR.INotificationHandler`1", "notification", "MediatR.INotification"),
     ];
 
     // The options methods, by name: the list they add to, whether they take an open generic, and the contract a
@@ -667,16 +668,18 @@ internal static class MessageMap
     /// </summary>
     /// <remarks>
     /// A referenced project is read through its reference assembly, which leaves out internal handlers unless
-    /// InternalsVisibleTo grants them, as RVX0014 counts them.
+    /// InternalsVisibleTo grants them, as RVX0014 counts them. An open handler such as <c>Audit&lt;T&gt; :
+    /// INotificationHandler&lt;T&gt;</c> is listed once for each message here that the container could close it
+    /// over, since that is what it handles.
     /// </remarks>
     private static List<object?>? NotMoved(Compilation compilation, Names names)
     {
-        Dictionary<INamedTypeSymbol, string> contracts = new(SymbolEqualityComparer.Default);
-        foreach ((string name, string kind) in MediatRHandlers)
+        Dictionary<INamedTypeSymbol, (string Kind, INamedTypeSymbol? Message)> contracts = new(SymbolEqualityComparer.Default);
+        foreach ((string name, string kind, string message) in MediatRHandlers)
         {
             if (compilation.GetTypeByMetadataName(name) is { } contract)
             {
-                contracts[contract] = kind;
+                contracts[contract] = (kind, compilation.GetTypeByMetadataName(message));
             }
         }
 
@@ -693,8 +696,9 @@ internal static class MessageMap
                 && assembly.Modules.Any(static module => module.ReferencedAssemblies.Any(static identity => identity.Name == "MediatR"))),
         ];
 
+        INamedTypeSymbol[] types = [.. assemblies.SelectMany(static assembly => Discovery.AllTypes(assembly.GlobalNamespace))];
         List<(string Message, string Handler, List<(string, object?)> Entry)> found = [];
-        foreach (INamedTypeSymbol type in assemblies.SelectMany(static assembly => Discovery.AllTypes(assembly.GlobalNamespace)))
+        foreach (INamedTypeSymbol type in types)
         {
             if (type.TypeKind != TypeKind.Class || type.IsAbstract)
             {
@@ -703,13 +707,17 @@ internal static class MessageMap
 
             foreach (INamedTypeSymbol contract in type.AllInterfaces)
             {
-                if (contracts.TryGetValue(contract.OriginalDefinition, out string? kind))
+                if (!contracts.TryGetValue(contract.OriginalDefinition, out (string Kind, INamedTypeSymbol? Message) handled))
                 {
-                    ITypeSymbol message = contract.TypeArguments[0];
-                    string handler = names.Remember(type);
+                    continue;
+                }
+
+                foreach ((ITypeSymbol message, INamedTypeSymbol closed) in Closings(type, contract, handled.Kind, handled.Message, types, compilation))
+                {
+                    string handler = names.Remember(closed);
                     found.Add((Display(Plain(message)), Display(handler), Object(
                         ("type", Display(Plain(message))),
-                        ("kind", kind),
+                        ("kind", handled.Kind),
                         ("project", Names.Project(message)),
                         ("handler", Component(names, handler)))));
                 }
@@ -720,6 +728,43 @@ internal static class MessageMap
             .OrderBy(static entry => entry.Message, System.StringComparer.Ordinal)
             .ThenBy(static entry => entry.Handler, System.StringComparer.Ordinal)
             .Select(static entry => (object?)entry.Entry)];
+    }
+
+    /// <summary>
+    /// The messages a MediatR handler handles, each with the handler as it runs for it. A closed handler handles the
+    /// message its interface names. An open one whose interface takes its type parameters in order, the shape the
+    /// container closes, handles each message in <paramref name="types"/> it can be closed over: every notification,
+    /// as the bridge runs MediatR's handlers for one that has moved too, and the requests and streams still on
+    /// MediatR. Any other open shape is left as its interface names it.
+    /// </summary>
+    private static IEnumerable<(ITypeSymbol Message, INamedTypeSymbol Handler)> Closings(
+        INamedTypeSymbol type, INamedTypeSymbol contract, string kind, INamedTypeSymbol? message, INamedTypeSymbol[] types, Compilation compilation)
+    {
+        bool open = type.TypeParameters.Length > 0
+            && contract.TypeArguments.Length == type.TypeParameters.Length
+            && contract.TypeArguments.Select((argument, index) => SymbolEqualityComparer.Default.Equals(argument, type.TypeParameters[index])).All(static same => same);
+        if (!open || message is null)
+        {
+            yield return (contract.TypeArguments[0], type);
+            yield break;
+        }
+
+        foreach (INamedTypeSymbol candidate in types)
+        {
+            if (candidate is not { IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct, TypeParameters.Length: 0 }
+                || (kind != "notification" && candidate.AllInterfaces.Any(static face => face.ContainingNamespace?.ToDisplayString() == "Relevox"))
+                || candidate.AllInterfaces.FirstOrDefault(face => SymbolEqualityComparer.Default.Equals(face.OriginalDefinition, message)) is not { } implemented)
+            {
+                continue;
+            }
+
+            // IRequestHandler<TRequest, TResponse> and its stream twin close over the response the message names.
+            ITypeSymbol[] arguments = contract.TypeArguments.Length == 2 ? [candidate, implemented.TypeArguments[0]] : [candidate];
+            if (Discovery.Close(type, arguments, compilation) is { } closed)
+            {
+                yield return (candidate, closed);
+            }
+        }
     }
 
     /// <summary>

@@ -381,6 +381,13 @@ means every handler is on Relevox and the bridge can go, which [RVX0016](diagnos
 A referenced project's internal handlers are left out unless it grants `InternalsVisibleTo`, since a project
 reference compiles against its public surface. The Markdown view lists the same messages under "Not moved yet".
 
+An open handler such as `Audit<T> : INotificationHandler<T>` is listed once for each message it can be closed
+over, as `Shop.Audit<Shop.Packed>`, because those are the messages it handles: a message that breaks one of its
+constraints is not listed with it. It takes every notification, since the bridge runs MediatR's handlers for one
+that has moved as well, but only the requests and streams still on MediatR, since a moved request never reaches
+MediatR. An open handler of any other shape, such as `Handler<T> : IRequestHandler<Wrapper<T>, int>`, is listed
+under the type its interface names.
+
 ### A call site
 
 A `Send`, `Publish` or `CreateStream` call on `ISender`, `IPublisher`, `IMediator` or a class implementing one
