@@ -1074,6 +1074,105 @@ public sealed class MessageMapTests
         steps[TrackingNames.MessageMap].ShouldAllBe(reason => reason == IncrementalStepRunReason.Cached || reason == IncrementalStepRunReason.Unchanged);
     }
 
+    // While the bridge runs both (ADR 0022): a request on MediatR in a referenced project, a notification on MediatR
+    // here, and a request that has moved, which keeps MediatR's interface and is not listed.
+    private const string HalfMoved = """
+        using System.Threading; using System.Threading.Tasks;
+        namespace Shop;
+        public sealed record Shipped(int Id) : MediatR.INotification;
+        public sealed class ShippedMail : MediatR.INotificationHandler<Shipped>
+        {
+            public Task Handle(Shipped notification, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+        public sealed record Moved(int Id) : MediatR.IRequest<int>, Relevox.IRequest<int>;
+        public sealed class MovedHandler : Relevox.IRequestHandler<Moved, int>
+        {
+            public Task<int> Handle(Moved request, CancellationToken cancellationToken) => Task.FromResult(request.Id);
+        }
+        """;
+
+    private static readonly MetadataReference Legacy = GeneratorHarness.Library("Shop.Legacy", [BridgeAnalyzerTests.MediatR], withGenerator: false, """
+        using System.Threading; using System.Threading.Tasks;
+        namespace Shop.Legacy;
+        public sealed record Refund(int Id) : MediatR.IRequest<int>;
+        public sealed class RefundHandler : MediatR.IRequestHandler<Refund, int>
+        {
+            public Task<int> Handle(Refund request, CancellationToken cancellationToken) => Task.FromResult(request.Id);
+        }
+        """);
+
+    [Fact]
+    public void A_project_that_sees_MediatR_lists_what_has_not_moved()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap("Subject", [BridgeAnalyzerTests.MediatR, Legacy], HalfMoved, Setup);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        string map = Json(run.Compilation).ShouldNotBeNull();
+        map.ShouldContain("\"type\": \"Shop.Moved\"");
+        map.ShouldEndWith(Lf("""
+              "unread": [],
+              "notMoved": [
+                {
+                  "type": "Shop.Legacy.Refund",
+                  "kind": "request",
+                  "project": "Shop.Legacy",
+                  "handler": {
+                    "type": "Shop.Legacy.RefundHandler",
+                    "project": "Shop.Legacy"
+                  }
+                },
+                {
+                  "type": "Shop.Shipped",
+                  "kind": "notification",
+                  "project": "Subject",
+                  "handler": {
+                    "type": "Shop.ShippedMail",
+                    "project": "Subject"
+                  }
+                }
+              ]
+            }
+
+            """));
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldEndWith(Lf("""
+            ## Not moved yet
+
+            These messages are still handled on MediatR, so they are not in the lists above; through the bridge they run MediatR's pipeline.
+
+            | Message | Kind | Handler | Project |
+            |---|---|---|---|
+            | `Shop.Legacy.Refund` | request | `Shop.Legacy.RefundHandler` | Shop.Legacy |
+            | `Shop.Shipped` | notification | `Shop.ShippedMail` | Subject |
+
+            """));
+    }
+
+    [Fact]
+    public void With_nothing_left_on_MediatR_the_map_says_the_bridge_can_go()
+    {
+        GeneratorRun run = GeneratorHarness.RunWithMessageMap("Subject", [BridgeAnalyzerTests.MediatR], HalfMoved.Replace("MediatR.INotificationHandler<Shipped>", "Relevox.INotificationHandler<Shipped>").Replace(": MediatR.INotification;", ": MediatR.INotification, Relevox.INotification;"), Setup);
+
+        run.CompilationErrors.ShouldBeEmpty();
+        Json(run.Compilation).ShouldNotBeNull().ShouldEndWith(Lf("""
+              "unread": [],
+              "notMoved": []
+            }
+
+            """));
+        Markdown(run.Compilation).ShouldNotBeNull().ShouldEndWith(Lf("""
+            ## Not moved yet
+
+            No handler is left on MediatR, so the bridge can go.
+
+            """));
+    }
+
+    [Fact]
+    public void A_project_that_does_not_see_MediatR_has_no_list_of_what_has_not_moved()
+    {
+        Json(GeneratorHarness.RunWithMessageMap(Handlers, Setup).Compilation).ShouldNotBeNull().ShouldNotContain("notMoved");
+    }
+
     [Fact]
     public async Task Every_map_here_matches_the_published_schema()
     {
@@ -1089,6 +1188,7 @@ public sealed class MessageMapTests
                 Handlers,
                 "using Microsoft.Extensions.DependencyInjection; public static class Setup { public static IServiceCollection Add(IServiceCollection s, System.Type t) => s.AddRelevox(o => o.AddOpenBehavior(t)); }").Compilation)!,
             Json(GeneratorHarness.RunWithMessageMap("Shop.Web", [application], "public sealed class Calls(Relevox.ISender sender) { public void Go() => sender.Send(new Shop.Touch()); }").Compilation, "Shop.Web")!,
+            Json(GeneratorHarness.RunWithMessageMap("Subject", [BridgeAnalyzerTests.MediatR, Legacy], HalfMoved, Setup).Compilation)!,
         ];
 
         foreach (string map in maps)

@@ -55,6 +55,15 @@ internal static class MessageMap
     /// <summary>The MSBuild property that turns the map on, as the compiler passes it to analyzers.</summary>
     public const string Switch = "build_property.RelevoxMessageMap";
 
+    // MediatR's handler interfaces and the kind of message each handles, for notMoved (#132).
+    private static readonly (string Contract, string Kind)[] MediatRHandlers =
+    [
+        ("MediatR.IRequestHandler`1", "request"),
+        ("MediatR.IRequestHandler`2", "request"),
+        ("MediatR.IStreamRequestHandler`2", "stream"),
+        ("MediatR.INotificationHandler`1", "notification"),
+    ];
+
     // The options methods, by name: the list they add to, whether they take an open generic, and the contract a
     // closed implementation is registered under, as its metadata name.
     private static readonly Dictionary<string, (OptionKind Kind, bool Open, string Contract)> Methods = new(System.StringComparer.Ordinal)
@@ -582,13 +591,19 @@ internal static class MessageMap
                 ("callSites", SentFrom(entry.Notification.Type))));
         }
 
-        return Finish(Object(
+        List<(string, object?)> map = Object(
             ("schemaVersion", 1),
             ("project", compilation.AssemblyName),
             ("requests", Sorted(requests)),
             ("streams", Sorted(streams)),
             ("notifications", Sorted(notifications)),
-            ("unread", unread)));
+            ("unread", unread));
+        if (NotMoved(compilation, names) is { } notMoved)
+        {
+            map.Add(("notMoved", notMoved));
+        }
+
+        return Finish(map);
 
         List<object?> SentFrom(string type) => sentFrom.TryGetValue(Display(type), out List<object?>? sites) ? sites : [];
 
@@ -643,6 +658,68 @@ internal static class MessageMap
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The messages still handled on MediatR, in this project and the projects it references that use MediatR,
+    /// while the bridge runs the two side by side (ADR 0022). Null when the project does not see MediatR, so a map
+    /// without it is what it was before.
+    /// </summary>
+    /// <remarks>
+    /// A referenced project is read through its reference assembly, which leaves out internal handlers unless
+    /// InternalsVisibleTo grants them, as RVX0014 counts them.
+    /// </remarks>
+    private static List<object?>? NotMoved(Compilation compilation, Names names)
+    {
+        Dictionary<INamedTypeSymbol, string> contracts = new(SymbolEqualityComparer.Default);
+        foreach ((string name, string kind) in MediatRHandlers)
+        {
+            if (compilation.GetTypeByMetadataName(name) is { } contract)
+            {
+                contracts[contract] = kind;
+            }
+        }
+
+        if (contracts.Count == 0)
+        {
+            return null;
+        }
+
+        IAssemblySymbol[] assemblies =
+        [
+            compilation.Assembly,
+            .. compilation.SourceModule.ReferencedAssemblySymbols.Where(static assembly =>
+                !assembly.Name.StartsWith("MediatR", System.StringComparison.Ordinal)
+                && assembly.Modules.Any(static module => module.ReferencedAssemblies.Any(static identity => identity.Name == "MediatR"))),
+        ];
+
+        List<(string Message, string Handler, List<(string, object?)> Entry)> found = [];
+        foreach (INamedTypeSymbol type in assemblies.SelectMany(static assembly => Discovery.AllTypes(assembly.GlobalNamespace)))
+        {
+            if (type.TypeKind != TypeKind.Class || type.IsAbstract)
+            {
+                continue;
+            }
+
+            foreach (INamedTypeSymbol contract in type.AllInterfaces)
+            {
+                if (contracts.TryGetValue(contract.OriginalDefinition, out string? kind))
+                {
+                    ITypeSymbol message = contract.TypeArguments[0];
+                    string handler = names.Remember(type);
+                    found.Add((Display(Plain(message)), Display(handler), Object(
+                        ("type", Display(Plain(message))),
+                        ("kind", kind),
+                        ("project", Names.Project(message)),
+                        ("handler", Component(names, handler)))));
+                }
+            }
+        }
+
+        return [.. found
+            .OrderBy(static entry => entry.Message, System.StringComparer.Ordinal)
+            .ThenBy(static entry => entry.Handler, System.StringComparer.Ordinal)
+            .Select(static entry => (object?)entry.Entry)];
     }
 
     /// <summary>

@@ -550,7 +550,7 @@ internal static partial class Discovery
             && attribute.ConstructorArguments.Length > 0
             && attribute.ConstructorArguments[0].Value is "Relevox");
 
-    private static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol root)
+    internal static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol root)
     {
         Stack<INamespaceOrTypeSymbol> pending = new();
         pending.Push(root);

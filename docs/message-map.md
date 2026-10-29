@@ -312,6 +312,7 @@ type name; everything inside a message is in the order it runs.
 | `notifications` | array | Every notification type the build saw, sorted by `type`. |
 | `unread` | array of strings | Registrations in an `AddRelevox` options lambda that the build could not read, as written, such as `options.AddOpenBehavior(behaviorType)`. Behaviours and processors registered there are missing from the map. Empty when everything was read. |
 | `calls` | array | Only in the map of a project that uses another project's mediator: each message type it sends, sorted by `type`, with its `callSites`. The four lists above are then empty. |
+| `notMoved` | array | Only in the map of a project that sees MediatR, as one does while [the bridge](migration.md#one-feature-at-a-time) runs the two side by side: each message still handled on MediatR, [below](#not-moved-yet). |
 
 ### A request
 
@@ -362,6 +363,23 @@ pre-processors, then the post-processors, then `behaviors`, then the handler. A 
 
 A behaviour with `[PipelineOrder]` adds `order`, its number; one without has no `order` and runs as 0. An
 exception component adds `exception`, the exception type it is registered for.
+
+### Not moved yet
+
+One entry per MediatR handler and the message it handles, in this project and in the projects it references
+that use MediatR, sorted by message `type` and then by handler. A message that has moved, one whose handler
+implements Relevox's interface, is not listed, even while it keeps MediatR's interface for callers. An empty list
+means every handler is on Relevox and the bridge can go, which [RVX0016](diagnostics.md#rvx0016) also reports.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `type` | string | The message the handler handles. |
+| `kind` | string | `request`, `stream` or `notification`. |
+| `project` | string or null | The project the message is declared in. |
+| `handler` | component | The MediatR handler. |
+
+A referenced project's internal handlers are left out unless it grants `InternalsVisibleTo`, since a project
+reference compiles against its public surface. The Markdown view lists the same messages under "Not moved yet".
 
 ### A call site
 
