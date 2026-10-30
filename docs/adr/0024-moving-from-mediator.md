@@ -83,6 +83,20 @@ did:
   across the project and its references, and generates nothing an application names.
 - Anything else, an options object passed in or a custom notification publisher, gets no fix.
 
+**Settled while building it.**
+
+- An interface that extends `ICommand<T>` or another mapped name is moved as a type is.
+- A name only counts as Mediator's when it does not resolve, or resolves into `Relevox` after the namespace
+  rename. A project's own `ICommand<T>` is left alone, and a void `IRequest` that is already Relevox's is never
+  turned into `IRequest<Unit>`.
+- A Name inside a type that is being moved is fixed by moving that type, so every fix in the type is the same edit
+  and "Fix all" merges them into one.
+- The `AddMediator` lambda is rebuilt, so one with a comment or a `#if` in it gets no fix rather than lose them.
+  The lifetime is written several times, so it has to be a name such as `ServiceLifetime.Scoped`; a call that
+  computes it gets no fix.
+- Not recognised, and left for the compiler: an explicit interface implementation of `Handle`, `next.Invoke(...)`,
+  completed returns inside `?:` or parentheses, and a `ValueTask` built around an existing task.
+
 ## Consequences
 
 - The common shapes of a Mediator project move in one "Fix all". What is not rewritten is listed in
