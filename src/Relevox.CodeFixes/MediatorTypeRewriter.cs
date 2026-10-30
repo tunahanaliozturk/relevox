@@ -170,7 +170,7 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             method = method.WithReturnType(Retyped(method.ReturnType));
             if (!method.Modifiers.Any(SyntaxKind.AsyncKeyword))
             {
-                method = CompletedReturns(method, generic: Last(node.ReturnType) is GenericNameSyntax);
+                method = CompletedReturns(method, Last(method.ReturnType) is GenericNameSyntax task ? task.TypeArgumentList.Arguments[0] : null);
             }
         }
 
@@ -263,11 +263,11 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
     // Task is what the handler returns now, so what it hands back already finished has to be a finished Task: the
     // completed forms Mediator code uses are rewritten; any other expression is left for the compiler, since only its
     // type tells whether it needs AsTask(), and that type went with the package.
-    private static MethodDeclarationSyntax CompletedReturns(MethodDeclarationSyntax method, bool generic)
+    private static MethodDeclarationSyntax CompletedReturns(MethodDeclarationSyntax method, TypeSyntax? result)
     {
         if (method.ExpressionBody is { } body)
         {
-            return method.WithExpressionBody(body.WithExpression(Completed(body.Expression, generic)));
+            return method.WithExpressionBody(body.WithExpression(Completed(body.Expression, result)));
         }
 
         if (method.Body is null)
@@ -279,11 +279,12 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             .DescendantNodes(static node => node is not (LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax))
             .OfType<ReturnStatementSyntax>()
             .Where(static statement => statement.Expression is not null);
-        return method.ReplaceNodes(returns, (original, _) => original.WithExpression(Completed(original.Expression!, generic)));
+        return method.ReplaceNodes(returns, (original, _) => original.WithExpression(Completed(original.Expression!, result)));
     }
 
-    private static ExpressionSyntax Completed(ExpressionSyntax expression, bool generic)
+    private static ExpressionSyntax Completed(ExpressionSyntax expression, TypeSyntax? result)
     {
+        bool generic = result is not null;
         ExpressionSyntax? task = expression switch
         {
             // new ValueTask<T>(x) and new(x), where the method returns ValueTask<T>.
@@ -308,6 +309,11 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             // default for a ValueTask that is not generic is the completed one.
             LiteralExpressionSyntax literal when !generic && literal.IsKind(SyntaxKind.DefaultLiteralExpression) => CompletedTask(),
             DefaultExpressionSyntax { Type: var type } when !generic && Last(type) is { Identifier.ValueText: "ValueTask" } and not GenericNameSyntax => CompletedTask(),
+
+            // default for a ValueTask<T> is one completed with default(T). Left as it is, it would be a null Task,
+            // which compiles without nullable analysis and throws where it is awaited.
+            LiteralExpressionSyntax literal when generic && literal.IsKind(SyntaxKind.DefaultLiteralExpression) => DefaultResult(result!),
+            DefaultExpressionSyntax { Type: var type } when generic && Last(type) is GenericNameSyntax { Identifier.ValueText: "ValueTask" } => DefaultResult(result!),
             _ => null,
         };
 
@@ -317,6 +323,17 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("Task"), SyntaxFactory.IdentifierName("FromResult")),
                 SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(value.WithoutTrivia()))));
+
+        // Task.FromResult<T>(default!): the type argument keeps the result Task<T> rather than Task<T?>, and the
+        // operator keeps nullable analysis from warning about a default it already accepted as ValueTask<T>'s.
+        static ExpressionSyntax DefaultResult(TypeSyntax type) =>
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName("Task"),
+                    SyntaxFactory.GenericName(SyntaxFactory.Identifier("FromResult"), SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList(type.WithoutTrivia())))),
+                SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(
+                    SyntaxFactory.PostfixUnaryExpression(SyntaxKind.SuppressNullableWarningExpression, SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression))))));
 
         static ExpressionSyntax CompletedTask() =>
             SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("Task"), SyntaxFactory.IdentifierName("CompletedTask"));

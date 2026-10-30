@@ -429,7 +429,7 @@ either moved or left untouched, never half moved:
   `IRequest` becomes `IRequest<Unit>`, so its handler's `return Unit.Value;` stays valid;
 - `ValueTask<T>` and `ValueTask` on `Handle` become `Task<T>` and `Task`. A method that is not `async` also has the
   completed returns rewritten: `new ValueTask<T>(x)`, `new(x)` and `ValueTask.FromResult(x)` to
-  `Task.FromResult(x)`, `ValueTask.CompletedTask` and `default` (for `ValueTask`) to `Task.CompletedTask`, and
+  `Task.FromResult(x)`, `ValueTask.CompletedTask` and `default` (for `ValueTask`) to `Task.CompletedTask`, `default` (for `ValueTask<T>`) to `Task.FromResult<T>(default!)`, and
   `Unit.ValueTask` to `Task.FromResult(Unit.Value)`;
 - in a behaviour, `MessageHandlerDelegate<TMessage, TResponse>` becomes `RequestHandlerDelegate<TResponse>`,
   `StreamHandlerDelegate<TMessage, TResponse>` becomes `StreamHandlerDelegate<TResponse>`, and `next(message,
@@ -450,7 +450,7 @@ It leaves alone, for a person to decide, and the compiler errors stay to point a
 - a type that derives from `MessagePreProcessor`, `MessagePostProcessor` or `MessageExceptionHandler`, or names
   `INotificationPublisher` or another Mediator type Relevox has no counterpart for;
 - a returned expression that is none of the forms above, such as a call to a method that returns `ValueTask<T>`,
-  which needs `.AsTask()`; and `default` for a `ValueTask<T>`;
+  which needs `.AsTask()`;
 - a `next` call that passes a different message from the one the behaviour received, which Relevox's pipeline,
   carrying one request, cannot express;
 - an options object passed to `AddMediator`, a method group, a custom notification publisher, a behaviour list

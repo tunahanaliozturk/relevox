@@ -141,7 +141,8 @@ public static class MediatorSyntax
                 _ => null,
             };
 
-            return root is { Identifier.ValueText: "Mediator" } && !Resolves(model, root, cancellationToken)
+            return root is IdentifierNameSyntax rootName
+                && ((rootName.Identifier.ValueText == "Mediator" && !Resolves(model, rootName, cancellationToken)) || IsMediatorAlias(rootName))
                 ? new Name(right, left, resolved: false)
                 : null;
         }
@@ -159,6 +160,23 @@ public static class MediatorSyntax
         }
 
         return symbol.ContainingNamespace?.ToDisplayString() == "Relevox" ? new Name(simple, null, resolved: true) : null;
+    }
+
+    // using M = Mediator; in the file or an enclosing namespace. The fix renames the alias's target, so M.ICommand<T>
+    // is still Mediator's to read and becomes M.IRequest<T>.
+    private static bool IsMediatorAlias(IdentifierNameSyntax root)
+    {
+        string alias = root.Identifier.ValueText;
+        return root.Ancestors()
+            .SelectMany(static node => node switch
+            {
+                CompilationUnitSyntax unit => unit.Usings,
+                BaseNamespaceDeclarationSyntax space => space.Usings,
+                _ => default(SyntaxList<UsingDirectiveSyntax>),
+            })
+            .Any(directive => directive.Alias?.Name.Identifier.ValueText == alias
+                && directive.NamespaceOrType is IdentifierNameSyntax { Identifier.ValueText: "Mediator" }
+                    or AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global", Name.Identifier.ValueText: "Mediator" });
     }
 
     /// <summary>Whether the table in ADR 0024 rewrites this name, which is when it is not already Relevox's.</summary>

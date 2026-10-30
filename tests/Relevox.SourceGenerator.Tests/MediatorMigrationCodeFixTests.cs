@@ -294,11 +294,12 @@ public sealed class MediatorMigrationCodeFixTests
     }
 
     [Fact]
-    public async Task A_default_return_is_only_rewritten_for_the_ValueTask_that_is_not_generic()
+    public async Task A_default_return_becomes_a_completed_task_with_the_default_result()
     {
         string[] fixedSources = await Migrate(Header + """
             public sealed record Quiet : INotification;
             public sealed record Loud(int V) : IRequest<int>;
+            public sealed record Named(int V) : IRequest<string>;
 
             public sealed class QuietHandler : INotificationHandler<Quiet>
             {
@@ -309,12 +310,53 @@ public sealed class MediatorMigrationCodeFixTests
             {
                 public ValueTask<int> Handle(Loud request, CancellationToken cancellationToken) => default;
             }
+
+            public sealed class NamedHandler : IRequestHandler<Named, string>
+            {
+                public ValueTask<string> Handle(Named request, CancellationToken cancellationToken)
+                {
+                    if (request.V > 0)
+                    {
+                        return default(ValueTask<string>);
+                    }
+
+                    return default;
+                }
+            }
             """);
 
         fixedSources[0].ShouldContain("Task Handle(Quiet notification, CancellationToken cancellationToken) => Task.CompletedTask;");
 
-        // default(ValueTask<int>) has a result, 0, that default(Task<int>) does not, so it is left to the compiler.
-        fixedSources[0].ShouldContain("Task<int> Handle(Loud request, CancellationToken cancellationToken) => default;");
+        // default(ValueTask<T>) is completed with default(T). Left as default it would be a null Task<T>, which
+        // compiles without nullable analysis and throws where it is awaited.
+        fixedSources[0].ShouldContain("Task<int> Handle(Loud request, CancellationToken cancellationToken) => Task.FromResult<int>(default!);");
+        fixedSources[0].ShouldContain("return Task.FromResult<string>(default!);");
+        fixedSources[0].ShouldNotContain("return default");
+        BuildErrors(fixedSources).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_name_through_an_alias_of_Mediator_is_moved()
+    {
+        string[] fixedSources = await Migrate("""
+            using System.Threading;
+            using System.Threading.Tasks;
+            using M = Mediator;
+
+            namespace Shop;
+
+            public sealed record Ping(int V) : M.ICommand<int>;
+            public sealed class PingHandler : M.ICommandHandler<Ping, int>
+            {
+                public ValueTask<int> Handle(Ping command, CancellationToken cancellationToken) => new(command.V);
+            }
+            """);
+
+        fixedSources[0].ShouldContain("using M = Relevox;");
+        fixedSources[0].ShouldContain("record Ping(int V) : Relevox.IRequest<int>;");
+        fixedSources[0].ShouldContain("PingHandler : Relevox.IRequestHandler<Ping, int>");
+        fixedSources[0].ShouldContain("=> Task.FromResult(command.V);");
+        BuildErrors(fixedSources).ShouldBeEmpty();
     }
 
     [Fact]

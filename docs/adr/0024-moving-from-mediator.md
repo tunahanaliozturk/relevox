@@ -59,7 +59,8 @@ stays valid, and a caller's `await sender.Send(command)` still gets a `Unit`. Re
 **Returns.** A `Handle` method's `ValueTask<T>` becomes `Task<T>` and `ValueTask` becomes `Task`. An `async` method
 needs nothing else. In one that is not, the common completed returns are rewritten: `new ValueTask<T>(x)`, `new(x)`
 and `ValueTask.FromResult(x)` to `Task.FromResult(x)`; `ValueTask.CompletedTask` and `default` (for `ValueTask`)
-to `Task.CompletedTask`; `Unit.ValueTask` to `Task.FromResult(Unit.Value)`. Any other returned expression is left
+to `Task.CompletedTask`; `default` for a `ValueTask<T>` to `Task.FromResult<T>(default!)`, since left alone it would
+be a null task; `Unit.ValueTask` to `Task.FromResult(Unit.Value)`. Any other returned expression is left
 for the compiler to point at, since only its type tells whether it needs `.AsTask()`, and that type is gone with
 the package.
 
@@ -94,6 +95,8 @@ did:
 - The `AddMediator` lambda is rebuilt, so one with a comment or a `#if` in it gets no fix rather than lose them.
   The lifetime is written several times, so it has to be a name such as `ServiceLifetime.Scoped`; a call that
   computes it gets no fix.
+- A qualifier that is an alias of the namespace, as in `using M = Mediator;` and `M.ICommand<T>`, counts as
+  `Mediator`. The alias is renamed with the usings, and the moved name is written out as `Relevox.IRequest<T>`.
 - Not recognised, and left for the compiler: an explicit interface implementation of `Handle`, `next.Invoke(...)`,
   completed returns inside `?:` or parentheses, and a `ValueTask` built around an existing task.
 
