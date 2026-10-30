@@ -42,8 +42,13 @@ ones, which is a signature change per handler, done by the fix rather than by ha
 
 - One handler shape, so the generator, RVX0002 and the test matrix stay as they are, and package validation has
   nothing new to guard.
-- A project coming from Mediator pays a `Task` per synchronous send that it did not pay before: 72 B, the same as
-  every MediatR project already pays. `docs/migration-from-mediator.md` (#146) says so.
+- A project coming from Mediator pays for a `Task` on a synchronous send where it did not before: 72 B for an
+  `int` result, the same as every MediatR project already pays. Not every such send allocates: `Task.FromResult`
+  hands back a cached task for `true`, `false`, `null`, the `int` values -1 to 8 and the default of value types
+  such as `long`, `double`, `decimal` and `Guid` (checked on .NET 10.0.13 with `ReferenceEquals` on two calls),
+  and a handler can return a
+  task it keeps, such as `Task.CompletedTask`. The probe offsets its results to stay out of that cache, so its
+  72 B is the uncached case. `docs/migration-from-mediator.md` (#146) says so.
 - Code that sends in a tight loop to a handler that completes synchronously cannot get to zero allocations
   through Relevox. If that turns out to matter to someone, the answer is a `ValueTask`-returning send next to
   `ISender.Send` with its own interfaces, as a separate proposal; nothing in this decision blocks it.
