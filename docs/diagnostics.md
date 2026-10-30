@@ -25,6 +25,7 @@ that hold most handlers and reference only the contracts.
 | [RVX0014](#rvx0014) | Info | Code still on MediatR |
 | [RVX0015](#rvx0015) | Warning | A MediatR behaviour does not run for requests moved to Relevox |
 | [RVX0016](#rvx0016) | Info | Nothing is left on MediatR |
+| [RVX0017](#rvx0017) | Info | Mediator code to move to Relevox |
 
 ## Architecture rules
 
@@ -398,3 +399,64 @@ MediatR: the bridge sends nothing to MediatR any more.
 
 **Fix:** remove `AddMediatRBridge`, `AddMediatR`, MediatR's interfaces from the messages and the MediatR
 package, then finish with [the migration steps](migration.md).
+
+## RVX0017
+
+**Mediator code to move to Relevox.** Info.
+
+Reported once the [Mediator](https://github.com/martinothamar/Mediator) package is gone, on each piece of Mediator
+code the compiler can no longer resolve. It has three kinds, under the one id so that a single *Fix all
+occurrences in: Solution* does the whole move:
+
+- a name rooted at `Mediator`, in a `using` directive or a qualified name such as `Mediator.IMediator` or
+  `global::Mediator.Unit.Value`;
+- a class, record, struct or interface in Mediator's shape, reported as a whole: its base list names `ICommand`,
+  `IQuery`, `IStreamCommand`, `IStreamQuery`, a void `IRequest` or one of their handlers, or it implements a
+  handler or a behaviour and has a `Handle` method that returns `ValueTask` or takes a `MessageHandlerDelegate`
+  or `StreamHandlerDelegate`;
+- every `AddMediator` call.
+
+Nothing is reported while the Mediator package is still referenced, so a project can move over when it is ready.
+Names that resolve to something of your own are not reported either: your own `ICommand<T>` or your own
+namespace called `Mediator` stays as it is.
+
+**Fix:** apply the code fix **Move from Mediator to Relevox**. It renames `Mediator` to `Relevox`, keeping the usings
+in order and dropping a `using Relevox;` the rename would repeat, and rewrites each type in one go, so a type is
+either moved or left untouched, never half moved:
+
+- commands and queries become requests (`ICommand<T>` and `IQuery<T>` to `IRequest<T>`, the streams to
+  `IStreamRequest<T>`, the handlers to `IRequestHandler` and `IStreamRequestHandler`), and a void `ICommand` or
+  `IRequest` becomes `IRequest<Unit>`, so its handler's `return Unit.Value;` stays valid;
+- `ValueTask<T>` and `ValueTask` on `Handle` become `Task<T>` and `Task`. A method that is not `async` also has the
+  completed returns rewritten: `new ValueTask<T>(x)`, `new(x)` and `ValueTask.FromResult(x)` to
+  `Task.FromResult(x)`, `ValueTask.CompletedTask` and `default` (for `ValueTask`) to `Task.CompletedTask`, and
+  `Unit.ValueTask` to `Task.FromResult(Unit.Value)`;
+- in a behaviour, `MessageHandlerDelegate<TMessage, TResponse>` becomes `RequestHandlerDelegate<TResponse>`,
+  `StreamHandlerDelegate<TMessage, TResponse>` becomes `StreamHandlerDelegate<TResponse>`, and `next(message,
+  cancellationToken)` becomes `next(cancellationToken)`, or `next()` for a stream, when the message passed on is
+  the behaviour's own; an `IMessage` constraint becomes `notnull`, or is dropped where the list has other
+  constraints;
+- `AddMediator(...)` becomes `AddRelevox(...)` with the lifetime written out. Mediator's is `Singleton` unless
+  `ServiceLifetime` says otherwise, and covers the mediator, the handlers and the behaviours, so the fix sets
+  `Lifetime`, `HandlerLifetime` and each behaviour's registration to it rather than slip into Relevox's transient
+  default. `PipelineBehaviors` and `StreamPipelineBehaviors` written as an array or collection of `typeof(...)`
+  become `AddOpenBehavior` and `AddOpenStreamBehavior` calls (`AddBehavior` and `AddStreamBehavior` for a closed
+  type), `NotificationPublisherType` naming `ForeachAwaitPublisher` or `TaskWhenAllPublisher` names Relevox's, and
+  `Namespace`, `GenerateTypesAsInternal` and `Assemblies` are dropped, since Relevox finds handlers at build time
+  across the project and its references.
+
+It leaves alone, for a person to decide, and the compiler errors stay to point at them:
+
+- a type that derives from `MessagePreProcessor`, `MessagePostProcessor` or `MessageExceptionHandler`, or names
+  `INotificationPublisher` or another Mediator type Relevox has no counterpart for;
+- a returned expression that is none of the forms above, such as a call to a method that returns `ValueTask<T>`,
+  which needs `.AsTask()`; and `default` for a `ValueTask<T>`;
+- a `next` call that passes a different message from the one the behaviour received, which Relevox's pipeline,
+  carrying one request, cannot express;
+- an options object passed to `AddMediator`, a method group, a custom notification publisher, a behaviour list
+  that is not written out as `typeof(...)`, an option the fix does not know, and a lambda with a comment or an
+  `#if` in it, which the fix would otherwise lose;
+- variables, fields and parameters typed `ValueTask` at call sites, and `Mediator` names in XML documentation
+  `cref`s.
+
+The mapping and the reasons are in [ADR 0024](adr/0024-moving-from-mediator.md).

@@ -6,6 +6,16 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- RVX0017, an Info diagnostic for Mediator code left once the Mediator package (martinothamar/Mediator 3.0.2) is
+  removed, and the code fix **Move from Mediator to Relevox**, so one *Fix all in: Solution* moves a project that
+  uses it, as RVX0007 does for MediatR (#145). It renames the namespace, rewrites each command, query, handler and
+  behaviour as a whole (commands and queries to requests, `ValueTask` to `Task`, `next(message, cancellationToken)`
+  to `next(cancellationToken)`) and turns `AddMediator(...)` into `AddRelevox(...)` with Mediator's lifetime
+  written out. What it leaves for a person is listed with the diagnostic and in
+  [ADR 0024](docs/adr/0024-moving-from-mediator.md).
+
 ## [1.6.0] - 2026-10-30
 
 One feature at a time: the new `Relevox.MediatRBridge` package runs MediatR and Relevox side by side, so a
