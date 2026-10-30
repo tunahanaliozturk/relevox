@@ -21,7 +21,7 @@ Relevox comes before the plan. Shipped versions are in [CHANGELOG.md](../CHANGEL
 | 1.4 | **Architecture analyzers.** Opt-in rules for nested sends, blocking on tasks, unused cancellation tokens, requests nobody sends and layer boundaries. |
 | 1.5 | **Pipeline control and validation.** Explicit behaviour order, and a FluentValidation package that adds nothing to requests without a validator. |
 | 1.6 | **One feature at a time.** MediatR and Relevox run side by side through `Relevox.MediatRBridge`, so a large solution moves in small pull requests. |
-| 1.7 | **`ValueTask` handlers.** An option for handlers that want it, and a code fix for moving from the Mediator library. |
+| 1.7 | **Moving from Mediator.** A code fix for projects on the Mediator library, tried on a real one. Handlers stay on `Task`: a `ValueTask` handler behind `ISender` measured slower, not faster ([ADR 0023](adr/0023-no-valuetask-handlers.md)). |
 | 1.8 | **Performance and scale.** A faster singleton path, allocation-free publish, and published benchmarks up to 5,000 messages. |
 | 1.9 | **Developer experience.** Code fixes that write handlers, `dotnet new` templates and a documentation site. |
 | 2.0 | **First major version.** What built up during 1.x cleared, with the upgrade done by one code fix. |
