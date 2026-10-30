@@ -39,3 +39,11 @@ itself; Mediator 3.0, whose handlers return `ValueTask`, takes 28.3 ns and alloc
 faster, the difference comes from holding handlers as singletons, which Relevox also does when asked to. The
 `Task` a synchronous handler allocates is real, and small next to what both libraries spend elsewhere. See
 [the M4 results](../benchmark-results/2026-10-17-m4.md).
+
+## Revisited for 1.7
+
+1.7 planned a `ValueTask` handler interface next to this one, on condition that it made a send faster. A probe
+of the send's shape showed it cannot while `ISender.Send` returns `Task`: a synchronous `ValueTask` handler took
+18.1 ns against 7.9 ns, and the send still allocated the same 72 B. The interface was dropped;
+[ADR 0023](0023-no-valuetask-handlers.md) has the numbers and what would have to change for a `ValueTask` path to
+pay.

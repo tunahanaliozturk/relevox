@@ -227,6 +227,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [20. The validation behaviour is closed at build time over the requests with a validator](docs/adr/0020-validation-package.md)
 - [21. Projects using another project's mediator write their calls, and a jq recipe combines the maps](docs/adr/0021-solution-call-sites.md)
 - [22. MediatR and Relevox side by side, routed by the message's interface](docs/adr/0022-mediatr-bridge.md)
+- [23. No ValueTask handlers in 1.7](docs/adr/0023-no-valuetask-handlers.md)
 
 ## Roadmap
 
