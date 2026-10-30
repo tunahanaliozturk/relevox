@@ -12,8 +12,6 @@
     <Description>Runs MediatR and Relevox side by side: MediatR's IMediator, ISender and IPublisher send each message to whichever library has its handler, so a solution can move to Relevox one feature at a time.</Description>
     <PackageTags>mediator;cqrs;mediatr;migration</PackageTags>
     <RelevoxPackageReadme>$(MSBuildThisFileDirectory)../../docs/mediatr-bridge-package-readme.md</RelevoxPackageReadme>
-    <!-- New in 1.6.0: nothing to compare against until it has shipped once. -->
-    <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <ItemGroup>

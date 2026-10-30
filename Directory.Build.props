@@ -36,7 +36,7 @@
       Compares every public member with the last release, Relevox.Internal included, and fails the pack on a
       breaking change (ADR 0011). Moved forward after each release.
     -->
-    <PackageValidationBaselineVersion>1.5.1</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.6.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!--
