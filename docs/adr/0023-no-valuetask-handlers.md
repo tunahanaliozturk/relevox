@@ -46,9 +46,8 @@ ones, which is a signature change per handler, done by the fix rather than by ha
   `int` result, the same as every MediatR project already pays. Not every such send allocates: `Task.FromResult`
   hands back a cached task for `true`, `false`, `null`, the `int` values -1 to 8 and the default of value types
   such as `long`, `double`, `decimal` and `Guid` (checked on .NET 10.0.13 with `ReferenceEquals` on two calls),
-  and a handler can return a
-  task it keeps, such as `Task.CompletedTask`. The probe offsets its results to stay out of that cache, so its
-  72 B is the uncached case. `docs/migration-from-mediator.md` (#146) says so.
+  and a handler can return a task it keeps, such as `Task.CompletedTask`. The probe offsets its results to stay
+  out of that cache, so its 72 B is the uncached case. `docs/migration-from-mediator.md` (#146) says so.
 - Code that sends in a tight loop to a handler that completes synchronously cannot get to zero allocations
   through Relevox. If that turns out to matter to someone, the answer is a `ValueTask`-returning send next to
   `ISender.Send` with its own interfaces, as a separate proposal; nothing in this decision blocks it.
