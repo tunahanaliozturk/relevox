@@ -8,8 +8,8 @@
   <ItemGroup Label="Runtime">
     <!-- Apache-2.0. Only Relevox.FluentValidation depends on it, at the lowest version it needs. -->
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
-    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
   </ItemGroup>
 
@@ -19,9 +19,9 @@
       floor of what can load it: 5.0.0 shipped with the first .NET 10 SDK, so every .NET 10 SDK can run it.
       Referencing 5.9 would refuse to load on the earlier 10.0 SDK bands. See ADR 0003.
     -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" />
   </ItemGroup>
 
   <ItemGroup Label="Build task">
@@ -33,8 +33,8 @@
       and 10.x makes them reference System.Collections.Immutable 10.0.0.0, which a host with 9.x cannot load.
       Roslyn needs 9.0.0 at least.
     -->
-    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.11.0" />
-    <PackageVersion Include="System.Reflection.Metadata" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.12.2" />
+    <PackageVersion Include="System.Reflection.Metadata" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Samples">
@@ -42,17 +42,17 @@
       OpenTelemetry's own packages (Apache-2.0), used only by the web sample to export over OTLP. Relevox itself
       depends on none of them: it emits through System.Diagnostics, which OpenTelemetry listens to.
     -->
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.21.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.21.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.21.0" />
   </ItemGroup>
 
   <ItemGroup Label="Testing and measurement">
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
-    <PackageVersion Include="NJsonSchema" Version="11.6.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.15" />
+    <PackageVersion Include="NJsonSchema" Version="11.6.2" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
   </ItemGroup>
 
   <ItemGroup Label="Baselines">
