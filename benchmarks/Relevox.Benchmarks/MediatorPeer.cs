@@ -44,7 +44,11 @@ public sealed record OneListener : INotification;
 
 public sealed class OneListenerHandler : INotificationHandler<OneListener>
 {
-    public ValueTask Handle(OneListener notification, CancellationToken cancellationToken) => default;
+    public ValueTask Handle(OneListener notification, CancellationToken cancellationToken)
+    {
+        Sanity.Count("Mediator one listener");
+        return default;
+    }
 }
 
 public sealed record FiveListeners : INotification;
