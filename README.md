@@ -231,6 +231,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [21. Projects using another project's mediator write their calls, and a jq recipe combines the maps](docs/adr/0021-solution-call-sites.md)
 - [22. MediatR and Relevox side by side, routed by the message's interface](docs/adr/0022-mediatr-bridge.md)
 - [23. No ValueTask handlers in 1.7](docs/adr/0023-no-valuetask-handlers.md)
+- [24. Moving from the Mediator library](docs/adr/0024-moving-from-mediator.md)
 - [25. net11.0 alongside net10.0, and two packages that stay pinned](docs/adr/0025-net11-alongside-net10.md)
 
 ## Roadmap

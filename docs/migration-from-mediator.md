@@ -15,8 +15,9 @@ Everything below was done to a real application first: the Blazor Clean Architec
 
 ## Before you start
 
-- **.NET 10 or later.** Relevox's packages target `net10.0` ([ADR 0003](adr/0003-net10-only.md)); the trial
-  application targets `net11.0` and used them as they are.
+- **.NET 10 or .NET 11.** Relevox's packages target `net10.0` and `net11.0`
+  ([ADR 0025](adr/0025-net11-alongside-net10.md)). The trial application targets `net11.0`; it ran before the
+  `net11.0` target existed, on the `net10.0` build of the packages.
 - **Mediator 3.x.** The fix is written against the names in `Mediator.Abstractions` 3.0.2.
 - **Find every `AddMediator` call**, test projects included. Mediator generates `AddMediator` once, in the
   project with its source generator, as a public method any project can call. Relevox generates `AddRelevox` in
