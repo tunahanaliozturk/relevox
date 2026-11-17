@@ -403,6 +403,33 @@ public sealed class MediatorMigrationCodeFixTests
     }
 
     [Fact]
+    public async Task A_ValueTask_built_around_a_task_returns_the_task()
+    {
+        string[] fixedSources = await Migrate(Header + """
+            public sealed record Ping(int V) : IRequest<int>;
+            public sealed class PingHandler : IRequestHandler<Ping, int>
+            {
+                public ValueTask<int> Handle(Ping request, CancellationToken cancellationToken) => new ValueTask<int>(Load(request.V));
+
+                private static Task<int> Load(int value) => Task.FromResult(value);
+            }
+
+            public sealed record Pong(int V) : IRequest<int>;
+            public sealed class PongHandler : IRequestHandler<Pong, int>
+            {
+                public ValueTask<int> Handle(Pong request, CancellationToken cancellationToken)
+                {
+                    return new(Task.Run(() => request.V, cancellationToken));
+                }
+            }
+            """);
+
+        fixedSources[0].ShouldContain("public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Load(request.V);");
+        fixedSources[0].ShouldContain("return Task.Run(() => request.V, cancellationToken);");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
     public async Task An_async_handler_is_only_retyped()
     {
         string[] fixedSources = await Migrate(Header + """

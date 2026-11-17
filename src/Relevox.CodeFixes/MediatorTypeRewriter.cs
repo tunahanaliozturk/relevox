@@ -161,10 +161,10 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             return base.VisitMethodDeclaration(node);
         }
 
-        // Which returned expressions are a ValueTask of the project's own, such as a call to a private helper, asked
-        // of the original: their type resolves, unlike anything of Mediator's, and AsTask() makes them a Task.
-        bool[] ownValueTasks = valueTask && !node.Modifiers.Any(SyntaxKind.AsyncKeyword)
-            ? [.. Returned(node).Select(IsValueTask)]
+        // What each returned expression's type says, asked of the original: a ValueTask of the project's own, such as
+        // a call to a private helper, resolves, unlike anything of Mediator's, and so does the Task a ValueTask wraps.
+        ReturnShape[] shapes = valueTask && !node.Modifiers.Any(SyntaxKind.AsyncKeyword)
+            ? [.. Returned(node).Select(Shape)]
             : [];
 
         (ISymbol?[] Nexts, ISymbol? Message) outer = (nextParameters, messageParameter);
@@ -194,7 +194,7 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             method = method.WithReturnType(Retyped(method.ReturnType));
             if (!method.Modifiers.Any(SyntaxKind.AsyncKeyword))
             {
-                method = CompletedReturns(method, Last(method.ReturnType) is GenericNameSyntax task ? task.TypeArgumentList.Arguments[0] : null, ownValueTasks);
+                method = CompletedReturns(method, Last(method.ReturnType) is GenericNameSyntax task ? task.TypeArgumentList.Arguments[0] : null, shapes);
             }
         }
 
@@ -312,28 +312,49 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
                 .Where(static statement => statement.Expression is not null)
                 .Select(static statement => statement.Expression!) ?? [];
 
-    private bool IsValueTask(ExpressionSyntax expression) =>
-        model.GetTypeInfo(expression, cancellationToken).Type is INamedTypeSymbol { Name: "ValueTask" } type
+    private ReturnShape Shape(ExpressionSyntax expression) => expression switch
+    {
+        // new ValueTask<T>(task) and new(task): the Task it was built around is the answer, not Task.FromResult(task).
+        BaseObjectCreationExpressionSyntax { ArgumentList.Arguments.Count: 1 } creation
+            when IsTasks(expression, "ValueTask") && IsTasks(creation.ArgumentList.Arguments[0].Expression, "Task") => ReturnShape.WrappedTask,
+        _ when IsTasks(expression, "ValueTask") => ReturnShape.OwnValueTask,
+        _ => ReturnShape.Other,
+    };
+
+    // Whether the expression's type is System.Threading.Tasks' type of that name, generic or not.
+    private bool IsTasks(ExpressionSyntax expression, string name) =>
+        model.GetTypeInfo(expression, cancellationToken).Type is INamedTypeSymbol type
+        && type.Name == name
         && type.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks";
+
+    private enum ReturnShape
+    {
+        Other,
+        OwnValueTask,
+        WrappedTask,
+    }
 
     // Task is what the handler returns now, so what it hands back already finished has to be a finished Task: the
     // completed forms Mediator code uses are rewritten, and a ValueTask of the project's own gets AsTask(). Anything
     // else is left for the compiler: its type is unknown, usually because it was Mediator's and went with the package.
-    private static MethodDeclarationSyntax CompletedReturns(MethodDeclarationSyntax method, TypeSyntax? result, bool[] ownValueTasks)
+    private static MethodDeclarationSyntax CompletedReturns(MethodDeclarationSyntax method, TypeSyntax? result, ReturnShape[] shapes)
     {
         ExpressionSyntax[] returned = [.. Returned(method)];
         return method.ReplaceNodes(returned, (original, _) =>
         {
             int index = System.Array.IndexOf(returned, original);
-            return Completed(original, result, index < ownValueTasks.Length && ownValueTasks[index]);
+            return Completed(original, result, index < shapes.Length ? shapes[index] : ReturnShape.Other);
         });
     }
 
-    private static ExpressionSyntax Completed(ExpressionSyntax expression, TypeSyntax? result, bool ownValueTask)
+    private static ExpressionSyntax Completed(ExpressionSyntax expression, TypeSyntax? result, ReturnShape shape)
     {
         bool generic = result is not null;
         ExpressionSyntax? task = expression switch
         {
+            BaseObjectCreationExpressionSyntax creation when shape == ReturnShape.WrappedTask =>
+                creation.ArgumentList!.Arguments[0].Expression.WithoutTrivia(),
+
             // new ValueTask<T>(x) and new(x), where the method returns ValueTask<T>.
             ObjectCreationExpressionSyntax { Type: var type, ArgumentList.Arguments.Count: 1 } creation
                 when Last(type) is GenericNameSyntax { Identifier.ValueText: "ValueTask" } =>
@@ -362,7 +383,7 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             LiteralExpressionSyntax literal when generic && literal.IsKind(SyntaxKind.DefaultLiteralExpression) => DefaultResult(result!),
             DefaultExpressionSyntax { Type: var type } when generic && Last(type) is GenericNameSyntax { Identifier.ValueText: "ValueTask" } => DefaultResult(result!),
 
-            _ when ownValueTask => AsTask(expression),
+            _ when shape == ReturnShape.OwnValueTask => AsTask(expression),
             _ => null,
         };
 
