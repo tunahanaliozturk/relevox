@@ -538,6 +538,28 @@ public sealed class MediatorMigrationCodeFixTests
     }
 
     [Fact]
+    public async Task A_local_function_parameter_that_shadows_next_is_not_rewritten()
+    {
+        string[] fixedSources = await Migrate(Header + """
+            public sealed class Retry<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse> where TMessage : IMessage
+            {
+                public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
+                {
+                    int tries = Twice(static (message, cancellationToken) => 1, message, cancellationToken);
+                    return await next(message, cancellationToken).AsTask();
+
+                    static int Twice(System.Func<TMessage, CancellationToken, int> next, TMessage message, CancellationToken cancellationToken) =>
+                        next(message, cancellationToken) + next(message, cancellationToken);
+                }
+            }
+            """);
+
+        fixedSources[0].ShouldContain("return await next(cancellationToken);");
+        fixedSources[0].ShouldContain("next(message, cancellationToken) + next(message, cancellationToken);");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
     public async Task A_behaviour_that_passes_a_different_message_on_keeps_that_call_and_the_build_points_at_it()
     {
         string[] fixedSources = await Migrate(Header + """

@@ -25,7 +25,14 @@ namespace Relevox.CodeFixes;
 /// </remarks>
 internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToken cancellationToken) : CSharpSyntaxRewriter
 {
+    // Marks a next(message, cancellationToken) call found by symbol on the original tree, for NextCalls to rewrite.
+    private static readonly SyntaxAnnotation NextCall = new("Relevox.NextCall");
+
     private bool active;
+
+    // The Handle method being moved: its delegate parameters and its message parameter, as symbols.
+    private ISymbol?[] nextParameters = [];
+    private ISymbol? messageParameter;
 
     /// <summary>The outermost type containing the node that is moved, or null when none is.</summary>
     /// <param name="node">Any node, usually a diagnostic's.</param>
@@ -160,8 +167,19 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             ? [.. Returned(node).Select(IsValueTask)]
             : [];
 
-        MethodDeclarationSyntax method = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!;
-        string message = method.ParameterList.Parameters.Count > 0 ? method.ParameterList.Parameters[0].Identifier.ValueText : string.Empty;
+        (ISymbol?[] Nexts, ISymbol? Message) outer = (nextParameters, messageParameter);
+        nextParameters = [.. delegateParameters.Select(parameter => model.GetDeclaredSymbol(parameter, cancellationToken))];
+        messageParameter = node.ParameterList.Parameters.Count > 0 ? model.GetDeclaredSymbol(node.ParameterList.Parameters[0], cancellationToken) : null;
+        MethodDeclarationSyntax method;
+        try
+        {
+            method = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!;
+        }
+        finally
+        {
+            (nextParameters, messageParameter) = outer;
+        }
+
         List<(string Name, bool Stream)> nexts = [];
         foreach (int index in delegates)
         {
@@ -180,7 +198,25 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             }
         }
 
-        return nexts.Count == 0 ? method : NextCalls(method, message, nexts);
+        return nexts.Count == 0 ? method : NextCalls(method, nexts);
+    }
+
+    /// <inheritdoc />
+    public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
+    {
+        SyntaxNode? visited = base.VisitInvocationExpression(node);
+
+        // By symbol, so a lambda or local function parameter of the same name, which C# lets shadow it, is left alone.
+        return nextParameters.Length > 0
+            && node is { Expression: IdentifierNameSyntax callee, ArgumentList.Arguments.Count: 2 }
+            && nextParameters.Contains(Bound(callee), SymbolEqualityComparer.Default)
+            && messageParameter is not null
+            && SymbolEqualityComparer.Default.Equals(Bound(node.ArgumentList.Arguments[0].Expression), messageParameter)
+                ? visited!.WithAdditionalAnnotations(NextCall)
+                : visited;
+
+        ISymbol? Bound(ExpressionSyntax expression) =>
+            model.GetSymbolInfo(expression, cancellationToken) is { } info ? info.Symbol ?? info.CandidateSymbols.FirstOrDefault() : null;
     }
 
     // The simple name a type ends in: ValueTask in System.Threading.Tasks.ValueTask<int>.
@@ -375,15 +411,12 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
     // message down cannot be written there, and that call stays as it is for the compiler to point at.
     // next(message, cancellationToken).AsTask() loses the AsTask() too: it turned Mediator's ValueTask into a Task,
     // which Relevox's next already returns, and Task has no AsTask().
-    private static MethodDeclarationSyntax NextCalls(MethodDeclarationSyntax method, string message, List<(string Name, bool Stream)> nexts)
+    private static MethodDeclarationSyntax NextCalls(MethodDeclarationSyntax method, List<(string Name, bool Stream)> nexts)
     {
         // Whether a call is one to rewrite, and if so whether its next is a stream's; null when it is not one.
         bool? Stream(InvocationExpressionSyntax call)
         {
-            if (call.Expression is not IdentifierNameSyntax callee
-                || call.ArgumentList.Arguments.Count != 2
-                || call.ArgumentList.Arguments[0].Expression is not IdentifierNameSyntax first
-                || first.Identifier.ValueText != message)
+            if (!call.HasAnnotation(NextCall) || call.Expression is not IdentifierNameSyntax callee)
             {
                 return null;
             }
