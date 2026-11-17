@@ -268,7 +268,6 @@ internal static partial class Discovery
                 exception is null ? EquatableArray<string>.Empty : Chain(exception),
                 kind == HandlerKind.PostProcessor && response is not null ? AssignableTo(response) : EquatableArray<string>.Empty,
                 symbol.DeclaredAccessibility == Accessibility.Public,
-                // Worked out here rather than for every type with a base list: it walks the syntax trees.
                 closedFrom is null
                     ? OrderOf(symbol, compilation, fromSource)
                     : OrderOf(closedFrom, compilation, closedFrom.Locations.Any(static candidate => candidate.IsInSource)),
