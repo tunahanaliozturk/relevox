@@ -4,9 +4,9 @@
 #pragma warning disable CA1050, CS1591
 
 // The one request the typed and ISender rows send: the middle of the range.
+global using MediatorProbe = Scale.MediatorPeer.Request250;
 global using MediatRProbe = Scale.MediatRPeer.Request250;
 global using RelevoxProbe = Scale.RelevoxPeer.Request250;
-global using MediatorProbe = Scale.MediatorPeer.Request250;
 
 namespace Scale
 {
