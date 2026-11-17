@@ -217,10 +217,12 @@ jobs:
       # Proves every scenario reaches its handler, behaviours and listeners, then runs each benchmark once.
       # Shared runners are far too noisy for nanosecond claims; real numbers come from named hardware and
       # are committed under docs/benchmark-results.
+      # The scale project is checked at its smallest size, 100 types: any other size than the committed 500 runs
+      # generate.py, which needs the runner's python3, and a smaller project builds faster.
       - name: Sanity
         run: |
           dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --sanity
-          dotnet run -c Release --project benchmarks/Relevox.Benchmarks.Scale -- --sanity
+          ScaleCount=100 dotnet run -c Release --project benchmarks/Relevox.Benchmarks.Scale -- --sanity
 
       - name: Dry run
         run: dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --filter '*' --job Dry
