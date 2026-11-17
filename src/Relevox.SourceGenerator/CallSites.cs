@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -25,15 +26,39 @@ internal static class CallSites
         })?.Identifier.ValueText is "Send" or "Publish" or "CreateStream";
 
     /// <summary>
+    /// The candidates that are calls the map can use, in the order given. Bound here rather than in the syntax
+    /// provider, so that a project with the map off, the default, binds none of them on an edit.
+    /// </summary>
+    public static ImmutableArray<CallSite> Read(ImmutableArray<InvocationExpressionSyntax> candidates, Compilation compilation, CancellationToken cancellationToken)
+    {
+        ImmutableArray<CallSite>.Builder sites = ImmutableArray.CreateBuilder<CallSite>();
+        SemanticModel? model = null;
+        foreach (InvocationExpressionSyntax candidate in candidates)
+        {
+            // Candidates come tree by tree, so one model serves every call in a file.
+            if (model?.SyntaxTree != candidate.SyntaxTree)
+            {
+                model = compilation.GetSemanticModel(candidate.SyntaxTree);
+            }
+
+            if (Read(candidate, model, cancellationToken) is { } site)
+            {
+                sites.Add(site);
+            }
+        }
+
+        return sites.ToImmutable();
+    }
+
+    /// <summary>
     /// The call, when it is made on <c>ISender</c>, <c>IPublisher</c>, <c>IMediator</c> or a class implementing one of
     /// them, and the message's static type is known. A message passed as <c>object</c>, an interface or an abstract
     /// class is left out: the map cannot tell what it is.
     /// </summary>
-    public static CallSite? Read(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    private static CallSite? Read(InvocationExpressionSyntax invocation, SemanticModel model, CancellationToken cancellationToken)
     {
-        InvocationExpressionSyntax invocation = (InvocationExpressionSyntax)context.Node;
         ArgumentSyntax? argument;
-        if (context.SemanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method)
+        if (model.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method)
         {
             if (method.Parameters.Length == 0 || !IsMediator(method.ContainingType))
             {
@@ -49,13 +74,13 @@ internal static class CallSites
             // The generated RelevoxMediator is not written yet when this runs, so a call on it binds to nothing. Its
             // methods take the message first, named request or notification.
             argument = Owner(invocation) is { } owner
-                && context.SemanticModel.GetTypeInfo(owner, cancellationToken).Type is IErrorTypeSymbol { Name: "RelevoxMediator" }
+                && model.GetTypeInfo(owner, cancellationToken).Type is IErrorTypeSymbol { Name: "RelevoxMediator" }
                 ? invocation.ArgumentList.Arguments.FirstOrDefault(static argument => argument.NameColon?.Name.Identifier.ValueText is "request" or "notification")
                     ?? First(invocation)
                 : null;
         }
 
-        ITypeSymbol? message = argument is null ? null : context.SemanticModel.GetTypeInfo(argument.Expression, cancellationToken).Type;
+        ITypeSymbol? message = argument is null ? null : model.GetTypeInfo(argument.Expression, cancellationToken).Type;
         if (message is null or IErrorTypeSymbol or ITypeParameterSymbol or { IsAbstract: true } || message.SpecialType == SpecialType.System_Object)
         {
             return null;

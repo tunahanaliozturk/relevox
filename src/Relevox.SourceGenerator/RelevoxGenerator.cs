@@ -114,12 +114,11 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             .Select(static (options, _) => options.GlobalOptions.TryGetValue(MessageMap.Switch, out string? value)
                 && string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase));
 
-        // Send, Publish and CreateStream calls, for where each message is sent from. Read per call, so an edit only
-        // rereads the calls in the file it changed.
-        IncrementalValueProvider<ImmutableArray<CallSite>> callSites = context.SyntaxProvider
-            .CreateSyntaxProvider(static (node, _) => CallSites.IsCandidate(node), CallSites.Read)
-            .Where(static site => site is not null)
-            .Select(static (site, _) => site!)
+        // Send, Publish and CreateStream calls, for where each message is sent from. Found from syntax here, which
+        // an edit only redoes for the file it changed, and bound below only when the map is asked for: binding
+        // them here would bind every call in the project on every edit, map or no map.
+        IncrementalValueProvider<ImmutableArray<InvocationExpressionSyntax>> callSites = context.SyntaxProvider
+            .CreateSyntaxProvider(static (node, _) => CallSites.IsCandidate(node), static (call, _) => (InvocationExpressionSyntax)call.Node)
             .WithTrackingName(TrackingNames.CallSites)
             .Collect();
 
@@ -131,13 +130,15 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
             .Combine(addRelevoxCalls)
             .Combine(callSites.Combine(projectDirectory))
             .Combine(context.CompilationProvider)
-            .Select(static (pair, _) =>
+            .Select(static (pair, cancellationToken) =>
             {
-                (((EmitPlan plan, bool requested), ImmutableArray<PipelineOptions> calls), (ImmutableArray<CallSite> sites, string? directory)) = pair.Left;
+                (((EmitPlan plan, bool requested), ImmutableArray<PipelineOptions> calls), (ImmutableArray<InvocationExpressionSyntax> candidates, string? directory)) = pair.Left;
                 if (!requested)
                 {
                     return ((string, string, string)?)null;
                 }
+
+                ImmutableArray<CallSite> sites = CallSites.Read(candidates, pair.Right, cancellationToken);
 
                 // A project using another project's mediator writes only the calls it makes (ADR 0021).
                 (string Json, string Markdown)? rendered = plan.Emits
