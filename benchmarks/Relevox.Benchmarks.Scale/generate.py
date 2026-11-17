@@ -40,7 +40,8 @@ parts = [
     "",
     "// The one request the typed and ISender rows send: the middle of the range.",
 ]
-for namespace, _, alias, _ in PEERS:
+# In the order dotnet format wants its usings, or the build's style check fails on the committed file.
+for namespace, _, alias, _ in sorted(PEERS, key=lambda peer: peer[2].lower()):
     parts.append(f"global using {alias} = {namespace}.Request{probe};")
 parts += [
     "",
