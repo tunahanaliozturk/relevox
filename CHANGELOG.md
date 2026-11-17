@@ -6,6 +6,11 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The repository compiles as C# 14 (`LangVersion` 14.0) instead of `preview`, which under the .NET 11 SDK had
+  started to mean C# 15 with its preview features. Nothing in the packages' API or behaviour changes.
+
 ## [1.7.0] - 2026-11-17
 
 Moving from Mediator, and .NET 11. RVX0017 and its code fix move a project off martinothamar/Mediator 3.x the way
