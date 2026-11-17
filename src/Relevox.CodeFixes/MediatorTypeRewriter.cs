@@ -154,6 +154,12 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             return base.VisitMethodDeclaration(node);
         }
 
+        // Which returned expressions are a ValueTask of the project's own, such as a call to a private helper, asked
+        // of the original: their type resolves, unlike anything of Mediator's, and AsTask() makes them a Task.
+        bool[] ownValueTasks = valueTask && !node.Modifiers.Any(SyntaxKind.AsyncKeyword)
+            ? [.. Returned(node).Select(IsValueTask)]
+            : [];
+
         MethodDeclarationSyntax method = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!;
         string message = method.ParameterList.Parameters.Count > 0 ? method.ParameterList.Parameters[0].Identifier.ValueText : string.Empty;
         List<(string Name, bool Stream)> nexts = [];
@@ -170,7 +176,7 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             method = method.WithReturnType(Retyped(method.ReturnType));
             if (!method.Modifiers.Any(SyntaxKind.AsyncKeyword))
             {
-                method = CompletedReturns(method, Last(method.ReturnType) is GenericNameSyntax task ? task.TypeArgumentList.Arguments[0] : null);
+                method = CompletedReturns(method, Last(method.ReturnType) is GenericNameSyntax task ? task.TypeArgumentList.Arguments[0] : null, ownValueTasks);
             }
         }
 
@@ -260,29 +266,34 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
         return result.WithTriviaFrom(type);
     }
 
+    // The expressions a method that is not async returns, in the same order for the original and the rewritten one.
+    private static IEnumerable<ExpressionSyntax> Returned(MethodDeclarationSyntax method) =>
+        method.ExpressionBody is { } body
+            ? [body.Expression]
+            : method.Body?
+                .DescendantNodes(static node => node is not (LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax))
+                .OfType<ReturnStatementSyntax>()
+                .Where(static statement => statement.Expression is not null)
+                .Select(static statement => statement.Expression!) ?? [];
+
+    private bool IsValueTask(ExpressionSyntax expression) =>
+        model.GetTypeInfo(expression, cancellationToken).Type is INamedTypeSymbol { Name: "ValueTask" } type
+        && type.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks";
+
     // Task is what the handler returns now, so what it hands back already finished has to be a finished Task: the
-    // completed forms Mediator code uses are rewritten; any other expression is left for the compiler, since only its
-    // type tells whether it needs AsTask(), and that type went with the package.
-    private static MethodDeclarationSyntax CompletedReturns(MethodDeclarationSyntax method, TypeSyntax? result)
+    // completed forms Mediator code uses are rewritten, and a ValueTask of the project's own gets AsTask(). Anything
+    // else is left for the compiler: its type is unknown, usually because it was Mediator's and went with the package.
+    private static MethodDeclarationSyntax CompletedReturns(MethodDeclarationSyntax method, TypeSyntax? result, bool[] ownValueTasks)
     {
-        if (method.ExpressionBody is { } body)
+        ExpressionSyntax[] returned = [.. Returned(method)];
+        return method.ReplaceNodes(returned, (original, _) =>
         {
-            return method.WithExpressionBody(body.WithExpression(Completed(body.Expression, result)));
-        }
-
-        if (method.Body is null)
-        {
-            return method;
-        }
-
-        IEnumerable<ReturnStatementSyntax> returns = method.Body
-            .DescendantNodes(static node => node is not (LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax))
-            .OfType<ReturnStatementSyntax>()
-            .Where(static statement => statement.Expression is not null);
-        return method.ReplaceNodes(returns, (original, _) => original.WithExpression(Completed(original.Expression!, result)));
+            int index = System.Array.IndexOf(returned, original);
+            return Completed(original, result, index < ownValueTasks.Length && ownValueTasks[index]);
+        });
     }
 
-    private static ExpressionSyntax Completed(ExpressionSyntax expression, TypeSyntax? result)
+    private static ExpressionSyntax Completed(ExpressionSyntax expression, TypeSyntax? result, bool ownValueTask)
     {
         bool generic = result is not null;
         ExpressionSyntax? task = expression switch
@@ -314,6 +325,8 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             // which compiles without nullable analysis and throws where it is awaited.
             LiteralExpressionSyntax literal when generic && literal.IsKind(SyntaxKind.DefaultLiteralExpression) => DefaultResult(result!),
             DefaultExpressionSyntax { Type: var type } when generic && Last(type) is GenericNameSyntax { Identifier.ValueText: "ValueTask" } => DefaultResult(result!),
+
+            _ when ownValueTask => AsTask(expression),
             _ => null,
         };
 
@@ -335,6 +348,17 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
                 SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(
                     SyntaxFactory.PostfixUnaryExpression(SyntaxKind.SuppressNullableWarningExpression, SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression))))));
 
+        static ExpressionSyntax AsTask(ExpressionSyntax value)
+        {
+            ExpressionSyntax target = value.WithoutTrivia();
+            if (target is not (InvocationExpressionSyntax or MemberAccessExpressionSyntax or IdentifierNameSyntax or ParenthesizedExpressionSyntax))
+            {
+                target = SyntaxFactory.ParenthesizedExpression(target);
+            }
+
+            return SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, target, SyntaxFactory.IdentifierName("AsTask")));
+        }
+
         static ExpressionSyntax CompletedTask() =>
             SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("Task"), SyntaxFactory.IdentifierName("CompletedTask"));
 
@@ -349,19 +373,47 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
     // next(message, cancellationToken) as next(cancellationToken), and a stream's as next(). Only when the message
     // passed on is the one received: Relevox's pipeline carries one request, so a behaviour that hands a different
     // message down cannot be written there, and that call stays as it is for the compiler to point at.
+    // next(message, cancellationToken).AsTask() loses the AsTask() too: it turned Mediator's ValueTask into a Task,
+    // which Relevox's next already returns, and Task has no AsTask().
     private static MethodDeclarationSyntax NextCalls(MethodDeclarationSyntax method, string message, List<(string Name, bool Stream)> nexts)
     {
-        IEnumerable<InvocationExpressionSyntax> calls = method.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(call =>
-            call.Expression is IdentifierNameSyntax callee
-            && nexts.Any(next => next.Name == callee.Identifier.ValueText)
-            && call.ArgumentList.Arguments.Count == 2
-            && call.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax first
-            && first.Identifier.ValueText == message);
-
-        return method.ReplaceNodes(calls, (call, _) =>
+        // Whether a call is one to rewrite, and if so whether its next is a stream's; null when it is not one.
+        bool? Stream(InvocationExpressionSyntax call)
         {
-            bool stream = nexts.First(next => next.Name == ((IdentifierNameSyntax)call.Expression).Identifier.ValueText).Stream;
-            return call.WithArgumentList(stream
+            if (call.Expression is not IdentifierNameSyntax callee
+                || call.ArgumentList.Arguments.Count != 2
+                || call.ArgumentList.Arguments[0].Expression is not IdentifierNameSyntax first
+                || first.Identifier.ValueText != message)
+            {
+                return null;
+            }
+
+            foreach ((string name, bool stream) in nexts)
+            {
+                if (name == callee.Identifier.ValueText)
+                {
+                    return stream;
+                }
+            }
+
+            return null;
+        }
+
+        static InvocationExpressionSyntax? Inner(InvocationExpressionSyntax call) =>
+            call is { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AsTask", Expression: InvocationExpressionSyntax inner }, ArgumentList.Arguments.Count: 0 } ? inner : null;
+
+        IEnumerable<InvocationExpressionSyntax> calls = method.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(call =>
+            Stream(call) is not null || (Inner(call) is { } inner && Stream(inner) is false));
+
+        return method.ReplaceNodes(calls, (original, call) =>
+        {
+            if (Inner(original) is not null)
+            {
+                // The next call inside has been rewritten already; what is left is to take it out of AsTask().
+                return ((MemberAccessExpressionSyntax)call.Expression).Expression.WithTriviaFrom(call);
+            }
+
+            return call.WithArgumentList(Stream(original) is true
                 ? call.ArgumentList.WithArguments(SyntaxFactory.SeparatedList<ArgumentSyntax>())
                 : call.ArgumentList.WithArguments(SyntaxFactory.SingletonSeparatedList(call.ArgumentList.Arguments[1].WithLeadingTrivia(SyntaxFactory.TriviaList()))));
         });
