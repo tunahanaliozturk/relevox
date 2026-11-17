@@ -19,6 +19,15 @@ updates:
       # Newer releases make the generator reference a System.Collections.Immutable that hosts with an older one cannot
       # load; 9.0.0 is what Roslyn needs at least. See ADR 0025.
       - dependency-name: System.Reflection.Metadata
+      # These follow the target framework: 10.0.x for net10.0 and 11.0.x for net11.0, in two groups of
+      # Directory.Packages.props. A major bump would put the next framework's version in the wrong group, so a
+      # new major arrives by hand, with the framework. Patches still come through. See ADR 0025.
+      - dependency-name: Microsoft.Extensions.DependencyInjection
+        update-types: ["version-update:semver-major"]
+      - dependency-name: Microsoft.Extensions.DependencyInjection.Abstractions
+        update-types: ["version-update:semver-major"]
+      - dependency-name: Microsoft.AspNetCore.Mvc.Testing
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
