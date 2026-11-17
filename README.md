@@ -144,6 +144,9 @@ The command rewrites `using MediatR`, `AddMediatR` and the scanning settings. In
 [migration-trial.md](docs/migration-trial.md).
 
 [docs/migration.md](docs/migration.md) has the details and the few deliberate differences.
+Projects on Mediator (martinothamar/Mediator) have their own code fix, **Move from Mediator to Relevox**, and
+their own guide, [docs/migration-from-mediator.md](docs/migration-from-mediator.md), tried on the Blazor Clean
+Architecture template with its tests passing before and after.
 In a solution too large to move in one pull request, `Relevox.MediatRBridge` runs MediatR and Relevox side by
 side, so a team moves one feature at a time ([one feature at a time](docs/migration.md#one-feature-at-a-time)).
 [samples/Migration](samples/Migration) holds the same order service on both libraries; CI runs the two and

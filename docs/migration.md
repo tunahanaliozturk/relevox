@@ -4,6 +4,9 @@ Relevox keeps MediatR 12's handler signatures, so a migration changes package re
 and one registration call. Handlers, behaviours, processors, exception handlers and the code that sends
 requests stay as they are.
 
+Moving from Mediator, the source-generated library (martinothamar/Mediator), is a different job, with a code fix
+of its own: see [migration-from-mediator.md](migration-from-mediator.md).
+
 [`samples/Migration`](../samples/Migration) is a worked example: the same order service on MediatR 12.5
 (`Before`) and on Relevox (`After`). CI runs both and fails if what they print differs. Comparing the two
 folders shows every change this guide describes:
