@@ -12,7 +12,7 @@
 [![CI](https://github.com/tunahanaliozturk/relevox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tunahanaliozturk/relevox/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/tunahanaliozturk/relevox/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/tunahanaliozturk/relevox/actions/workflows/codeql.yml)
 [![Licence: MIT](https://img.shields.io/github/license/tunahanaliozturk/relevox)](LICENSE)
-[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
+[![.NET 10 and 11](https://img.shields.io/badge/.NET-10%20%7C%2011-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet)
 
 A mediator for .NET whose dispatch is written by a source generator at build time, with the same handler
 signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
@@ -207,7 +207,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 
 - [1. Source-generated dispatch](docs/adr/0001-source-generated-dispatch.md)
 - [2. Handlers return Task, not ValueTask](docs/adr/0002-task-not-valuetask.md)
-- [3. Target net10.0 only](docs/adr/0003-net10-only.md)
+- [3. Target net10.0 only](docs/adr/0003-net10-only.md), extended by [25](docs/adr/0025-net11-alongside-net10.md)
 - [4. Resolve handlers per call, by concrete type](docs/adr/0004-resolve-per-call.md)
 - [5. No `namespace MediatR` shim](docs/adr/0005-no-mediatr-namespace-shim.md)
 - [6. Clean-room rule, and MediatR 12.5.0 as the test oracle](docs/adr/0006-clean-room.md)
@@ -228,6 +228,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [21. Projects using another project's mediator write their calls, and a jq recipe combines the maps](docs/adr/0021-solution-call-sites.md)
 - [22. MediatR and Relevox side by side, routed by the message's interface](docs/adr/0022-mediatr-bridge.md)
 - [23. No ValueTask handlers in 1.7](docs/adr/0023-no-valuetask-handlers.md)
+- [25. net11.0 alongside net10.0, and two packages that stay pinned](docs/adr/0025-net11-alongside-net10.md)
 
 ## Roadmap
 
@@ -235,13 +236,14 @@ What comes next, version by version, is in [docs/roadmap.md](docs/roadmap.md).
 
 ## Building
 
-The .NET 10 SDK is all it needs.
+The .NET 11 SDK builds everything, and the .NET 10 runtime is needed to run the `net10.0` half of the tests.
+The packages target `net10.0` and `net11.0`; the test projects do too, so `dotnet run` needs `--framework`.
 
 ```bash
 dotnet build Relevox.slnx
-dotnet run --project tests/Relevox.SourceGenerator.Tests   # generator: output, diagnostics, incrementality
-dotnet run --project tests/Relevox.DifferentialTests       # every scenario on MediatR 12.5.0 and on Relevox
-bash eng/package-smoke.sh                                # pack, install into a new app, run it
+dotnet run --project tests/Relevox.SourceGenerator.Tests -f net11.0   # generator: output, diagnostics, incrementality
+dotnet run --project tests/Relevox.DifferentialTests -f net11.0       # every scenario on MediatR 12.5.0 and on Relevox
+bash eng/package-smoke.sh                                # pack, install into a new app on each framework, run it
 dotnet run --project tools/Relevox.LicenseAudit -- .       # every dependency permissively licensed
 ```
 

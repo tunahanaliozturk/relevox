@@ -21,9 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Both SDKs: 11 builds and is what global.json asks for, and the net10.0 half of every test run needs the 10
+      # runtime.
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore Relevox.slnx
@@ -40,31 +44,51 @@ jobs:
           dotnet format whitespace Relevox.slnx --verify-no-changes --no-restore
           dotnet format style Relevox.slnx --verify-no-changes --no-restore
 
+      # The test steps below run once per framework the packages ship for, net10.0 and net11.0.
+      #
       # Drives the generator through CSharpGeneratorDriver: diagnostics, emitted code that has to compile,
       # determinism, discovery across project references, and whether the incremental cache is really hit.
       - name: Generator tests
-        run: dotnet run --project tests/Relevox.SourceGenerator.Tests --configuration Release --no-build
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.SourceGenerator.Tests --configuration Release --no-build --framework "$tfm"
+          done
 
       # The same scenario source compiled against MediatR 12.5.0 and against Relevox, outcomes compared.
       - name: Differential tests against MediatR 12.5.0
-        run: dotnet run --project tests/Relevox.DifferentialTests --configuration Release --no-build
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.DifferentialTests --configuration Release --no-build --framework "$tfm"
+          done
 
       # An ASP.NET Core minimal API on Relevox, driven over HTTP in process: a scope per request, scoped services in
       # handlers and behaviours, problem details from exceptions, a streamed response, concurrent requests.
       - name: Web sample tests
-        run: dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build --framework "$tfm"
+          done
 
       # Relevox.Testing: the fake mediator on its own, and the recorder in front of a real generated mediator.
       - name: Testing package tests
-        run: dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build --framework "$tfm"
+          done
 
       # Relevox.FluentValidation: the behaviour, closed at build time over the requests with a validator.
       - name: FluentValidation package tests
-        run: dotnet run --project tests/Relevox.FluentValidation.Tests --configuration Release --no-build
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.FluentValidation.Tests --configuration Release --no-build --framework "$tfm"
+          done
 
       # Relevox.MediatRBridge: MediatR 12.5.0 and Relevox in one container, each message routed to its library.
       - name: MediatR bridge tests
-        run: dotnet run --project tests/Relevox.MediatRBridge.Tests --configuration Release --no-build
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.MediatRBridge.Tests --configuration Release --no-build --framework "$tfm"
+          done
 
       # The same order service on MediatR 12.5 and moved to Relevox by following docs/migration.md. Both print
       # what they did; any difference in the transcripts fails the build.
@@ -83,7 +107,9 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore Relevox.slnx
@@ -102,22 +128,31 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Native toolchain
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       # Publishing with NativeAOT runs the trim and AOT analysis over Relevox's runtime and the code the generator
-      # wrote for the sample. Warnings are errors, so any reflection left on a dispatch path fails here.
+      # wrote for the sample. Warnings are errors, so any reflection left on a dispatch path fails here. The sample
+      # is published once per framework.
       - name: Publish
-        run: dotnet publish samples/Relevox.Samples.Aot --configuration Release --runtime linux-x64 --output aot
+        run: |
+          for tfm in net10.0 net11.0; do
+            dotnet publish samples/Relevox.Samples.Aot --configuration Release --framework "$tfm" --runtime linux-x64 --output "aot/$tfm"
+          done
 
       # The binary checks every kind of dispatch and exits non-zero on a wrong answer.
       - name: Run
-        run: ./aot/Relevox.Samples.Aot
+        run: |
+          for tfm in net10.0 net11.0; do
+            "./aot/$tfm/Relevox.Samples.Aot"
+          done
 
       - name: Binary size
-        run: ls -l aot/Relevox.Samples.Aot
+        run: ls -l aot/*/Relevox.Samples.Aot
 
   package:
     name: package smoke test
@@ -127,10 +162,13 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
-      # Packs both packages into a local feed and builds a new application against the .nupkg files, with no
-      # project references. Every other job uses project references, which hide packaging mistakes.
+      # Packs the packages into a local feed and builds a new application against the .nupkg files, with no
+      # project references, once for net10.0 and once for net11.0. Every other job uses project references, which
+      # hide packaging mistakes.
       - name: Pack, install and run
         run: bash eng/package-smoke.sh
 
@@ -172,7 +210,9 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       # Proves every scenario reaches its handler, behaviours and listeners, then runs each benchmark once.
       # Shared runners are far too noisy for nanosecond claims; real numbers come from named hardware and

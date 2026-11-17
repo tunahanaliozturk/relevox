@@ -2,7 +2,11 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- The script builds and runs the application once per framework Relevox ships. -->
+    <SmokeFramework Condition="'$(SmokeFramework)' == ''">net10.0</SmokeFramework>
+    <TargetFramework>$(SmokeFramework)</TargetFramework>
+    <SmokeExtensionsVersion>10.0.0</SmokeExtensionsVersion>
+    <SmokeExtensionsVersion Condition="'$(SmokeFramework)' == 'net11.0'">11.0.0</SmokeExtensionsVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -19,7 +23,7 @@
     <PackageReference Include="Relevox.Testing" Version="$(RelevoxVersion)" />
     <PackageReference Include="Relevox.FluentValidation" Version="$(RelevoxVersion)" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(SmokeExtensionsVersion)" />
   </ItemGroup>
 
   <!-- Its own projects, built separately by the script. -->
