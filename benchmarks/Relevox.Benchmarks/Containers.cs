@@ -10,10 +10,19 @@ namespace Benchmarks;
 /// No library gets a handicap or a tuning trick the other does not. Defaults stay defaults: MediatR registers
 /// handlers as transient, Mediator as singleton, and that difference is part of what is being compared.
 /// Behaviours live in a separate container so the plain send numbers carry no pipeline at all.
+///
+/// Mediator reads its handler lifetime and its notification publisher from the code at compile time, once per
+/// assembly, so this project has exactly one Mediator: singleton handlers, the foreach-await publisher. The
+/// scale project builds it with transient handlers because it is a different assembly.
 /// </remarks>
 internal static class Containers
 {
-    public static ServiceProvider MediatR(bool withPipeline, bool withProcessors = false)
+    /// <summary>
+    /// MediatR with its defaults, which is transient for the mediator and the handlers, and the behaviours with
+    /// <paramref name="behaviorLifetime"/>. MediatR's own Lifetime setting reaches the mediator but not the
+    /// handlers, which stay transient whatever it is, so there is no singleton-handler MediatR to build here.
+    /// </summary>
+    public static ServiceProvider MediatR(bool withPipeline, bool withProcessors = false, ServiceLifetime behaviorLifetime = ServiceLifetime.Transient)
     {
         ServiceCollection services = new();
         services.AddMediatR(configuration =>
@@ -21,9 +30,9 @@ internal static class Containers
             configuration.RegisterServicesFromAssemblyContaining<MediatRPeer.Ping>();
             if (withPipeline)
             {
-                configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.First>();
-                configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Second>();
-                configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Third>();
+                configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.First>(behaviorLifetime);
+                configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Second>(behaviorLifetime);
+                configuration.AddBehavior<global::MediatR.IPipelineBehavior<MediatRPeer.Piped, int>, MediatRPeer.Third>(behaviorLifetime);
             }
 
             if (withProcessors)
@@ -35,19 +44,29 @@ internal static class Containers
         return services.BuildServiceProvider();
     }
 
-    /// <summary>Relevox with its default transient handlers, or with singleton handlers to compare like with like.</summary>
-    public static ServiceProvider Relevox(ServiceLifetime lifetime, bool withPipeline = false, bool withProcessors = false, bool telemetry = false)
+    /// <summary>
+    /// Relevox with its default transient handlers, or with singleton handlers to compare like with like. The
+    /// lifetime goes to the handlers and, unless <paramref name="behaviorLifetime"/> says otherwise, to the
+    /// behaviours; the mediator itself keeps its default, which is transient.
+    /// </summary>
+    public static ServiceProvider Relevox(ServiceLifetime lifetime, bool withPipeline = false, bool withProcessors = false, bool telemetry = false, bool whenAll = false, ServiceLifetime? behaviorLifetime = null)
     {
+        ServiceLifetime behaviors = behaviorLifetime ?? lifetime;
         ServiceCollection services = new();
         services.AddRelevox(options =>
         {
             options.HandlerLifetime = lifetime;
             options.Telemetry.Enabled = telemetry;
+            if (whenAll)
+            {
+                options.NotificationPublisher = new global::Relevox.NotificationPublishers.TaskWhenAllPublisher();
+            }
+
             if (withPipeline)
             {
-                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.First>();
-                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.Second>();
-                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.Third>();
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.First>(behaviors);
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.Second>(behaviors);
+                options.AddBehavior<global::Relevox.IPipelineBehavior<RelevoxPeer.Piped, int>, RelevoxPeer.Third>(behaviors);
             }
 
             if (withProcessors)

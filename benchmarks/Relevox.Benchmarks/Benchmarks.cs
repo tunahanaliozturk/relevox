@@ -90,6 +90,12 @@ public class SendBenchmarks
     [Benchmark(Description = "MediatR 12.5, object")]
     public Task<object?> MediatRObject() => _mediatrSender.Send((object)_mediatrPing);
 
+    // The object overload with singleton handlers, next to the transient row above. Mediator has no row of its
+    // own for it: its handlers are singletons already, so its object row below is the like-for-like one. MediatR
+    // has none either: its handlers are transient whatever its Lifetime setting says, so it has nothing to put here.
+    [Benchmark(Description = "Relevox singletons, object")]
+    public Task<object?> RelevoxSingletonObject() => _relevoxSingletonSender.Send((object)_relevoxPing);
+
     [Benchmark(Description = "Mediator 3.0, typed")]
     public ValueTask<int> MediatorTyped() => _mediatorTyped.Send(_mediatorPing);
 
@@ -193,8 +199,14 @@ public class PipelineBenchmarks
     private global::Mediator.Mediator _mediatorTyped = null!;
     private readonly RelevoxPeer.Piped _relevoxPiped = new(1);
     private ServiceProvider _relevox = null!;
+    private ServiceProvider _mediatrSingleton = null!;
+    private ServiceProvider _relevoxSingleton = null!;
+    private ServiceProvider _relevoxSingletonBehaviors = null!;
     private IServiceScope _relevoxScope = null!;
     private RelevoxMediator _relevoxTyped = null!;
+    private global::MediatR.ISender _mediatrSingletonSender = null!;
+    private RelevoxMediator _relevoxSingletonTyped = null!;
+    private RelevoxMediator _relevoxSingletonBehaviorsTyped = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -202,6 +214,12 @@ public class PipelineBenchmarks
         _mediatr = Containers.MediatR(withPipeline: true);
         _mediator = Containers.Mediator(withPipeline: true);
         _relevox = Containers.Relevox(ServiceLifetime.Transient, withPipeline: true);
+        _mediatrSingleton = Containers.MediatR(withPipeline: true, behaviorLifetime: ServiceLifetime.Singleton);
+        _relevoxSingleton = Containers.Relevox(ServiceLifetime.Singleton, withPipeline: true);
+        _relevoxSingletonBehaviors = Containers.Relevox(ServiceLifetime.Transient, withPipeline: true, behaviorLifetime: ServiceLifetime.Singleton);
+        _mediatrSingletonSender = _mediatrSingleton.GetRequiredService<global::MediatR.ISender>();
+        _relevoxSingletonTyped = _relevoxSingleton.GetRequiredService<RelevoxMediator>();
+        _relevoxSingletonBehaviorsTyped = _relevoxSingletonBehaviors.GetRequiredService<RelevoxMediator>();
         _relevoxScope = _relevox.CreateScope();
         _relevoxTyped = _relevoxScope.ServiceProvider.GetRequiredService<RelevoxMediator>();
         _mediatrScope = _mediatr.CreateScope();
@@ -219,6 +237,9 @@ public class PipelineBenchmarks
         _mediator.Dispose();
         _relevoxScope.Dispose();
         _relevox.Dispose();
+        _mediatrSingleton.Dispose();
+        _relevoxSingleton.Dispose();
+        _relevoxSingletonBehaviors.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "MediatR 12.5")]
@@ -229,6 +250,19 @@ public class PipelineBenchmarks
 
     [Benchmark(Description = "Mediator 3.0, typed")]
     public ValueTask<int> MediatorTyped() => _mediatorTyped.Send(_mediatorPiped);
+
+    // The same three behaviours registered as singletons. Mediator's container registers its behaviours as
+    // singletons already, so its row above is the like-for-like one and has no twin. MediatR's handlers cannot be
+    // made singletons, so its row changes the behaviours only; Relevox has that row too, to compare with it, and
+    // one with singleton handlers as well, to compare with Mediator.
+    [Benchmark(Description = "MediatR 12.5, singleton behaviours")]
+    public Task<int> MediatRSingletonBehaviors() => _mediatrSingletonSender.Send(_mediatrPiped);
+
+    [Benchmark(Description = "Relevox, typed, singleton behaviours")]
+    public Task<int> RelevoxSingletonBehaviorsTyped() => _relevoxSingletonBehaviorsTyped.Send(_relevoxPiped);
+
+    [Benchmark(Description = "Relevox singletons, typed")]
+    public Task<int> RelevoxSingletonTyped() => _relevoxSingletonTyped.Send(_relevoxPiped);
 }
 
 /// <summary>
@@ -341,7 +375,17 @@ public class BuiltInBenchmarks
     public Task<int> RelevoxProcessors() => _relevoxTyped.Send(_relevoxPing);
 }
 
-/// <summary>Notifications to one and to five handlers, with each library's default publisher.</summary>
+/// <summary>
+/// Notifications to one and to five handlers, with each library's default publisher; then Relevox with singleton
+/// handlers, and with singleton handlers and <c>TaskWhenAllPublisher</c>.
+/// </summary>
+/// <remarks>
+/// Mediator's rows are all singleton handlers with its foreach-await publisher, so they are the like-for-like
+/// ones for the singleton rows and have no twins. It has no row for the task-when-all publisher: the publisher
+/// is read from the code at compile time and there is one Mediator per assembly, so this assembly cannot have a
+/// second one with a different publisher. MediatR has no singleton rows: its handlers are transient whatever
+/// its Lifetime setting says.
+/// </remarks>
 [MemoryDiagnoser]
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
 public class PublishBenchmarks
@@ -359,8 +403,12 @@ public class PublishBenchmarks
     private readonly RelevoxPeer.OneListener _relevoxOne = new();
     private readonly RelevoxPeer.FiveListeners _relevoxFive = new();
     private ServiceProvider _relevox = null!;
+    private ServiceProvider _relevoxSingleton = null!;
+    private ServiceProvider _relevoxWhenAll = null!;
     private IServiceScope _relevoxScope = null!;
     private RelevoxMediator _relevoxTyped = null!;
+    private RelevoxMediator _relevoxSingletonTyped = null!;
+    private RelevoxMediator _relevoxWhenAllTyped = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -368,6 +416,10 @@ public class PublishBenchmarks
         _mediatr = Containers.MediatR(withPipeline: false);
         _mediator = Containers.Mediator(withPipeline: false);
         _relevox = Containers.Relevox(ServiceLifetime.Transient);
+        _relevoxSingleton = Containers.Relevox(ServiceLifetime.Singleton);
+        _relevoxWhenAll = Containers.Relevox(ServiceLifetime.Singleton, whenAll: true);
+        _relevoxSingletonTyped = _relevoxSingleton.GetRequiredService<RelevoxMediator>();
+        _relevoxWhenAllTyped = _relevoxWhenAll.GetRequiredService<RelevoxMediator>();
         _relevoxScope = _relevox.CreateScope();
         _relevoxTyped = _relevoxScope.ServiceProvider.GetRequiredService<RelevoxMediator>();
         _mediatrScope = _mediatr.CreateScope();
@@ -385,6 +437,8 @@ public class PublishBenchmarks
         _mediator.Dispose();
         _relevoxScope.Dispose();
         _relevox.Dispose();
+        _relevoxSingleton.Dispose();
+        _relevoxWhenAll.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "MediatR 12.5, 1 handler")]
@@ -404,6 +458,80 @@ public class PublishBenchmarks
 
     [Benchmark(Description = "Mediator 3.0, 5 handlers")]
     public ValueTask MediatorFive() => _mediatorTyped.Publish(_mediatorFive);
+
+    [Benchmark(Description = "Relevox singletons, 1 handler")]
+    public Task RelevoxSingletonOne() => _relevoxSingletonTyped.Publish(_relevoxOne);
+
+    [Benchmark(Description = "Relevox singletons, 5 handlers")]
+    public Task RelevoxSingletonFive() => _relevoxSingletonTyped.Publish(_relevoxFive);
+
+    [Benchmark(Description = "Relevox singletons, TaskWhenAll, 1 handler")]
+    public Task RelevoxWhenAllOne() => _relevoxWhenAllTyped.Publish(_relevoxOne);
+
+    [Benchmark(Description = "Relevox singletons, TaskWhenAll, 5 handlers")]
+    public Task RelevoxWhenAllFive() => _relevoxWhenAllTyped.Publish(_relevoxFive);
+}
+
+/// <summary>
+/// A scope per call: create it from a container built once, resolve <c>ISender</c> from it, send, dispose it. This
+/// is what a web request does, and the one place where the lifetime of the mediator itself shows up in a send.
+/// </summary>
+/// <remarks>
+/// MediatR registers its mediator as transient and Relevox does by default, so each of them builds a mediator per
+/// scope. Mediator registers it as a singleton and this project builds it that way, so for Mediator the scope
+/// hands back the one it already has. That is the comparison asked for, not an oversight: it is the default a
+/// project gets. Relevox's handlers are singletons here, which is Mediator's setting and so like for like;
+/// MediatR's stay at its default, transient. Every row awaits inside an async method because the scope must
+/// outlive the send, and returns a ValueTask so that a send that completes at once allocates nothing for the
+/// wrapper in any row.
+/// </remarks>
+[MemoryDiagnoser]
+[HideColumns("Error", "StdDev", "Median", "RatioSD")]
+public class ScopeBenchmarks
+{
+    private readonly MediatRPeer.Ping _mediatrPing = new(1);
+    private readonly RelevoxPeer.Ping _relevoxPing = new(1);
+    private readonly MediatorPeer.Ping _mediatorPing = new(1);
+    private ServiceProvider _mediatr = null!;
+    private ServiceProvider _relevox = null!;
+    private ServiceProvider _mediator = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _mediatr = Containers.MediatR(withPipeline: false);
+        _relevox = Containers.Relevox(ServiceLifetime.Singleton);
+        _mediator = Containers.Mediator(withPipeline: false);
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _mediatr.Dispose();
+        _relevox.Dispose();
+        _mediator.Dispose();
+    }
+
+    [Benchmark(Baseline = true, Description = "MediatR 12.5")]
+    public async ValueTask<int> MediatR()
+    {
+        using IServiceScope scope = _mediatr.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<global::MediatR.ISender>().Send(_mediatrPing);
+    }
+
+    [Benchmark(Description = "Relevox singletons")]
+    public async ValueTask<int> Relevox()
+    {
+        using IServiceScope scope = _relevox.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<global::Relevox.ISender>().Send(_relevoxPing);
+    }
+
+    [Benchmark(Description = "Mediator 3.0")]
+    public async ValueTask<int> Mediator()
+    {
+        using IServiceScope scope = _mediator.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<global::Mediator.ISender>().Send<int>(_mediatorPing);
+    }
 }
 
 /// <summary>A stream of 100 items, drained. The difference per item is the stream plumbing.</summary>

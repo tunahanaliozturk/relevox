@@ -96,7 +96,11 @@ public sealed record OneListener : INotification;
 
 public sealed class OneListenerHandler : INotificationHandler<OneListener>
 {
-    public Task Handle(OneListener notification, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task Handle(OneListener notification, CancellationToken cancellationToken)
+    {
+        Sanity.Count("Relevox one listener");
+        return Task.CompletedTask;
+    }
 }
 
 public sealed record FiveListeners : INotification;
