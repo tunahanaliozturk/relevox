@@ -38,8 +38,11 @@ NuGet, waits for an approval.
 
    ```bash
    dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --filter '*'
-   dotnet run -c Release --project benchmarks/Relevox.Benchmarks.Scale -- --filter '*'
+   bash eng/scale-benchmarks.sh
    ```
+
+   The second command builds and runs the scale benchmark at each of its sizes, and `python tools/diagrams.py scale`
+   draws its chart from the result files it leaves under `artifacts/scale`.
 2. Move the `Unreleased` section of `CHANGELOG.md` under a heading `## [x.y.z] - yyyy-mm-dd` and merge that.
    The workflow refuses a tag with no matching section, and the section becomes the release notes. In the same
    pull request, move the rules in each `AnalyzerReleases.Unshipped.md` to `AnalyzerReleases.Shipped.md` under
