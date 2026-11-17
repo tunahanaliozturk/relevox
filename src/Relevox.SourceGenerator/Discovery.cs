@@ -787,8 +787,9 @@ internal static partial class Discovery
     }
 
     /// <summary>
-    /// Each syntax tree's position in its compilation, built once per compilation: every handler asks, and walking
-    /// the trees for each one grows with handlers times files.
+    /// Each syntax tree's position in its compilation, kept for as long as the compilation is: every handler asks,
+    /// and walking the trees for each one grows with handlers times files. Two threads asking first at the same
+    /// moment may each build it; both get the same positions and one copy is kept.
     /// </summary>
     private static readonly ConditionalWeakTable<Compilation, Dictionary<SyntaxTree, int>> TreeIndex = new();
 
