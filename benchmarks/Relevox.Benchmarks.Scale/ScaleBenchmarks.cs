@@ -15,6 +15,11 @@ namespace Scale;
 /// transient handlers, so the numbers compare dispatch, not lifetime. The rotating rows send eight different
 /// request types in turn, so a lookup table cannot stay hot on one key. Error is shown so the noise in each
 /// row can be judged.
+/// <para>
+/// The scope rows open a scope, resolve the sender, send once and close the scope, which is what a web request
+/// does. All three libraries build their mediator again for that here, Mediator included, since this project
+/// compiles it as transient. What they show is whether building a mediator costs more as the project grows.
+/// </para>
 /// </remarks>
 [MemoryDiagnoser]
 // The chart in tools/diagrams.py reads this file, which holds the means in nanoseconds as numbers.
@@ -89,6 +94,27 @@ public class ScaleBenchmarks
 
     [Benchmark(Description = "Mediator 3.0 transient, ISender")]
     public ValueTask<int> MediatorInterface() => _mediatorSender.Send<int>(_mediatorRequest);
+
+    [Benchmark(Description = "MediatR 12.5, scope per send")]
+    public async ValueTask<int> MediatRScope()
+    {
+        using IServiceScope scope = _mediatr.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<global::MediatR.ISender>().Send(_mediatrRequest);
+    }
+
+    [Benchmark(Description = "Relevox, ISender, scope per send")]
+    public async ValueTask<int> RelevoxScope()
+    {
+        using IServiceScope scope = _relevox.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<global::Relevox.ISender>().Send(_relevoxRequest);
+    }
+
+    [Benchmark(Description = "Mediator 3.0 transient, ISender, scope per send")]
+    public async ValueTask<int> MediatorScope()
+    {
+        using IServiceScope scope = _mediator.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<global::Mediator.ISender>().Send<int>(_mediatorRequest);
+    }
 
     [Benchmark(Description = "MediatR 12.5, 8 types in turn")]
     public Task<int> MediatRRotating() => _mediatrSender.Send((global::MediatR.IRequest<int>)_mediatrRotation[_turn++ & 7]);
