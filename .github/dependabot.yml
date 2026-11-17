@@ -16,6 +16,9 @@ updates:
       # The generator's Roslyn floor: the oldest .NET 10 SDK has to be able to load it. See ADR 0003.
       - dependency-name: Microsoft.CodeAnalysis.CSharp
       - dependency-name: Microsoft.CodeAnalysis.CSharp.Workspaces
+      # Newer releases make the generator reference a System.Collections.Immutable that hosts with an older one cannot
+      # load; 9.0.0 is what Roslyn needs at least. See ADR 0025.
+      - dependency-name: System.Reflection.Metadata
 
   - package-ecosystem: github-actions
     directory: /
