@@ -14,7 +14,8 @@ diff -ru --exclude=bin --exclude=obj samples/Migration/Before samples/Migration/
 
 ## Before you start
 
-- **.NET 10.** Relevox targets `net10.0` only ([ADR 0003](adr/0003-net10-only.md)).
+- **.NET 10 or .NET 11.** Relevox targets `net10.0` and `net11.0`
+  ([ADR 0025](adr/0025-net11-alongside-net10.md)).
 - **MediatR 12.x.** MediatR 13 and 14 have the same request and handler types as 12.5, so this guide applies
   to them too; also delete the `LicenseKey` line from the registration in step 3.
 - **Know where your handlers are.** Relevox finds them while the application builds: in the application
