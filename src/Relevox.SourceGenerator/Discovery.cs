@@ -780,23 +780,29 @@ internal static partial class Discovery
             : string.Empty;
 
         Location? location = outer.Locations.FirstOrDefault(static candidate => candidate.IsInSource);
-        int tree = int.MaxValue;
-        if (location?.SourceTree is { } declared)
-        {
-            int index = 0;
-            foreach (SyntaxTree candidate in compilation.SyntaxTrees)
-            {
-                if (candidate == declared)
-                {
-                    tree = index;
-                    break;
-                }
-
-                index++;
-            }
-        }
+        int tree = location?.SourceTree is { } declared && TreeIndex.GetValue(compilation, IndexTrees).TryGetValue(declared, out int index)
+            ? index
+            : int.MaxValue;
 
         return new DeclarationOrder(0, ns, tree, location?.SourceSpan.Start ?? 0, nesting.ToEquatableArray());
+    }
+
+    /// <summary>
+    /// Each syntax tree's position in its compilation, built once per compilation: every handler asks, and walking
+    /// the trees for each one grows with handlers times files.
+    /// </summary>
+    private static readonly ConditionalWeakTable<Compilation, Dictionary<SyntaxTree, int>> TreeIndex = new();
+
+    private static Dictionary<SyntaxTree, int> IndexTrees(Compilation compilation)
+    {
+        Dictionary<SyntaxTree, int> index = [];
+        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+        {
+            // A compilation refuses the same tree twice, so the count is the position.
+            index.Add(tree, index.Count);
+        }
+
+        return index;
     }
 
     private static EquatableArray<string> Chain(ITypeSymbol type)
