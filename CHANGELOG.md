@@ -10,6 +10,11 @@ All notable changes to this project are written down here. The format follows
 
 - The repository compiles as C# 14 (`LangVersion` 14.0) instead of `preview`, which under the .NET 11 SDK had
   started to mean C# 15 with its preview features. Nothing in the packages' API or behaviour changes.
+- The generator no longer binds every `Send`, `Publish` and `CreateStream` call on each edit when the message map
+  is off, which is the default. In a project of 2,500 handlers, a file each, sending each request once, an edit
+  went from 854 to 1,366 ms of generator time to 549 to 600 ms. With the map on the cost is unchanged. The
+  generated code is the same byte for byte
+  ([docs/benchmark-results/2026-11-17-edit-cost.md](docs/benchmark-results/2026-11-17-edit-cost.md), #166).
 
 ## [1.7.0] - 2026-11-17
 
