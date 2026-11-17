@@ -13,15 +13,18 @@ namespace Relevox.SourceGenerator;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Two sources feed one plan. Types declared in this project come through the syntax provider, which only
-/// re-examines the declarations in a file that changed. Types in referenced projects come from the
-/// compilation's references, filtered to assemblies that reference Relevox.Contracts. That second step runs
-/// on every compilation, but it produces a value-equal model when nothing in the references changed, so
-/// everything downstream of it stays cached.
+/// Two sources feed one plan. Types declared in this project come through the syntax provider. Its syntactic
+/// filter, a type with a base list, only runs again over a file that changed, but its semantic step runs again
+/// for every declaration that passed the filter, in every file, whenever the compilation changes, which is on
+/// every edit: Roslyn cannot know which symbols an edit elsewhere affected. Most of that step's time is the
+/// compiler binding each type's base list. Types in referenced projects come from the compilation's
+/// references, filtered to assemblies that reference Relevox.Contracts, also on every compilation. Both
+/// produce value-equal models when nothing relevant changed, so everything downstream of them stays cached
+/// and no code is written again.
 /// </para>
 /// <para>
-/// Everything that crosses a stage boundary is strings and value-equal arrays. Models.cs says why that
-/// matters.
+/// Everything that crosses a stage boundary is strings and value-equal arrays, except the message map's call
+/// candidates, which the comment on them explains. Models.cs says why that matters.
 /// </para>
 /// </remarks>
 [Generator(LanguageNames.CSharp)]
@@ -116,7 +119,9 @@ public sealed class RelevoxGenerator : IIncrementalGenerator
 
         // Send, Publish and CreateStream calls, for where each message is sent from. Found from syntax here, which
         // an edit only redoes for the file it changed, and bound below only when the map is asked for: binding
-        // them here would bind every call in the project on every edit, map or no map.
+        // them here would bind every call in the project on every edit, map or no map. These are syntax nodes, not
+        // value-equal models, which is safe only because the step that reads them takes the compilation and runs on
+        // every edit anyway.
         IncrementalValueProvider<ImmutableArray<InvocationExpressionSyntax>> callSites = context.SyntaxProvider
             .CreateSyntaxProvider(static (node, _) => CallSites.IsCandidate(node), static (call, _) => (InvocationExpressionSyntax)call.Node)
             .WithTrackingName(TrackingNames.CallSites)
