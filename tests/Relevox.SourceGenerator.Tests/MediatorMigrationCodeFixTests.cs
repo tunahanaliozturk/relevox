@@ -360,8 +360,10 @@ public sealed class MediatorMigrationCodeFixTests
     }
 
     [Fact]
-    public async Task A_returned_expression_the_ADR_does_not_list_is_left_for_the_compiler_and_the_build_says_so()
+    public async Task A_returned_ValueTask_of_the_projects_own_gets_AsTask()
     {
+        // The second handler is the shape found in the Blazor template: three Handle methods for three events, each
+        // returning a call to one private helper that returns ValueTask.
         string[] fixedSources = await Migrate(Header + """
             public sealed record Ping(int V) : IRequest<int>;
             public sealed class PingHandler : IRequestHandler<Ping, int>
@@ -370,12 +372,34 @@ public sealed class MediatorMigrationCodeFixTests
 
                 private static ValueTask<int> Compute(int value) => new(value);
             }
+
+            public sealed record Created : INotification;
+            public sealed record Deleted : INotification;
+            public sealed class ChangedHandler : INotificationHandler<Created>, INotificationHandler<Deleted>
+            {
+                public ValueTask Handle(Created notification, CancellationToken cancellationToken) => Refresh(cancellationToken);
+
+                public ValueTask Handle(Deleted notification, CancellationToken cancellationToken)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return ValueTask.CompletedTask;
+                    }
+
+                    return true ? Refresh(cancellationToken) : default;
+                }
+
+                private static async ValueTask Refresh(CancellationToken cancellationToken) => await Task.Delay(1, cancellationToken);
+            }
             """);
 
-        fixedSources[0].ShouldContain("public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Compute(request.V);");
-
-        // The call is the only error: it needs .AsTask(), which only its type, gone with the package, could tell.
-        BuildErrors(fixedSources).Select(static error => error.Id).Distinct().ShouldBe(["CS0029"]);
+        string text = fixedSources[0];
+        text.ShouldContain("public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Compute(request.V).AsTask();");
+        text.ShouldContain("public Task Handle(Created notification, CancellationToken cancellationToken) => Refresh(cancellationToken).AsTask();");
+        text.ShouldContain("return Task.CompletedTask;");
+        text.ShouldContain("return (true ? Refresh(cancellationToken) : default).AsTask();");
+        text.ShouldContain("private static async ValueTask Refresh(");
+        ShouldBuildWithTheGenerator(fixedSources);
     }
 
     [Fact]
@@ -491,6 +515,25 @@ public sealed class MediatorMigrationCodeFixTests
 
         fixedSources[0].ShouldContain("StreamHandlerDelegate<TResponse> next");
         fixedSources[0].ShouldContain("await foreach (TResponse item in next())");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
+    public async Task AsTask_on_next_is_dropped_since_Relevox_next_returns_a_Task_already()
+    {
+        // The shape of a caching behaviour handing next to a cache that wants a Task, found in the Blazor template.
+        string[] fixedSources = await Migrate(Header + """
+            public sealed class Caching<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse> where TMessage : IMessage
+            {
+                public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken) =>
+                    await GetOrSet(_ => next(message, cancellationToken).AsTask(), cancellationToken);
+
+                private static Task<TResponse> GetOrSet(System.Func<CancellationToken, Task<TResponse>> factory, CancellationToken cancellationToken) =>
+                    factory(cancellationToken);
+            }
+            """);
+
+        fixedSources[0].ShouldContain("await GetOrSet(_ => next(cancellationToken), cancellationToken);");
         ShouldBuildWithTheGenerator(fixedSources);
     }
 
