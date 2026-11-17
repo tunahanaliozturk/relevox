@@ -1,7 +1,23 @@
-// Written by generate.py. Five hundred requests per library, so every dispatch table is large.
+// Written by generate.py. 500 requests per library, so every dispatch table is that large.
 // Deliberately carries no auto-generated marker: Relevox, like the compiler's analyzers, leaves generated code out,
 // and the marker made every Relevox row fail with no handler found.
 #pragma warning disable CA1050, CS1591
+
+// The one request the typed and ISender rows send: the middle of the range.
+global using MediatRProbe = Scale.MediatRPeer.Request250;
+global using RelevoxProbe = Scale.RelevoxPeer.Request250;
+global using MediatorProbe = Scale.MediatorPeer.Request250;
+
+namespace Scale
+{
+    public static class ScaleSize
+    {
+        public const int Count = 500;
+        public const int Probe = 250;
+        // The rotating rows send requests 0, Stride, 2 * Stride and so on.
+        public const int Stride = 62;
+    }
+}
 
 namespace Scale.MediatRPeer
 {

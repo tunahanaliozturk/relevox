@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Running;
 using Scale;
 
-// `--sanity` sends request 250 through every path once and checks the answer before any number is trusted.
+// `--sanity` sends the middle request through every path once and checks the answer before any number is trusted.
 if (args is ["--sanity"])
 {
     ScaleBenchmarks benchmarks = new();
@@ -17,14 +17,14 @@ if (args is ["--sanity"])
     int[] rotating = [await benchmarks.MediatRRotating(), await benchmarks.RelevoxRotating(), await benchmarks.MediatorRotating()];
     benchmarks.Cleanup();
 
-    // The three rotating rows share one turn counter, so they reach requests 0, 60 and 120.
-    if (answers.Any(answer => answer != 250) || !rotating.SequenceEqual([0, 60, 120]))
+    // The three rotating rows share one turn counter, so they reach requests 0, Stride and 2 * Stride.
+    if (answers.Any(answer => answer != ScaleSize.Probe) || !rotating.SequenceEqual([0, ScaleSize.Stride, 2 * ScaleSize.Stride]))
     {
         Console.Error.WriteLine($"Unexpected answers: {string.Join(", ", answers)}; rotating {string.Join(", ", rotating)}.");
         return 1;
     }
 
-    Console.WriteLine("Every path reached request 250's handler.");
+    Console.WriteLine($"Every path reached request {ScaleSize.Probe}'s handler, out of {ScaleSize.Count}.");
     return 0;
 }
 

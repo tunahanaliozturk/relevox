@@ -1,33 +1,37 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Exporters.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Relevox.Benchmarks.Scale;
 
 namespace Scale;
 
 /// <summary>
-/// Sending one request out of five hundred, through each library's typed and interface paths.
+/// Sending one request out of <see cref="ScaleSize.Count"/>, through each library's typed and interface paths.
 /// </summary>
 /// <remarks>
 /// The question is whether the interface path stays constant-size as a project grows. fastcast's switch over
-/// request types did not: it was twice as slow as MediatR at five hundred. Every library here runs with
+/// request types did not: it was twice as slow as MediatR at five hundred. The size is fixed at build time
+/// (<c>ScaleCount</c>, see the project file). Every library here runs with
 /// transient handlers, so the numbers compare dispatch, not lifetime. The rotating rows send eight different
 /// request types in turn, so a lookup table cannot stay hot on one key. Error is shown so the noise in each
 /// row can be judged.
 /// </remarks>
 [MemoryDiagnoser]
+// The chart in tools/diagrams.py reads this file, which holds the means in nanoseconds as numbers.
+[JsonExporterAttribute.Brief]
 [HideColumns("StdDev", "Median", "RatioSD")]
 public class ScaleBenchmarks
 {
-    private readonly MediatRPeer.Request250 _mediatrRequest = new(1);
-    private readonly RelevoxPeer.Request250 _relevoxRequest = new(1);
-    private readonly MediatorPeer.Request250 _mediatorRequest = new(1);
+    private readonly MediatRProbe _mediatrRequest = new(1);
+    private readonly RelevoxProbe _relevoxRequest = new(1);
+    private readonly MediatorProbe _mediatorRequest = new(1);
     private ServiceProvider _mediatr = null!;
     private ServiceProvider _relevox = null!;
     private ServiceProvider _mediator = null!;
     private IServiceScope[] _scopes = [];
-    private readonly object[] _mediatrRotation = [.. Enumerable.Range(0, 8).Select(index => MediatRRequest(index * 60))];
-    private readonly object[] _relevoxRotation = [.. Enumerable.Range(0, 8).Select(index => RelevoxRequest(index * 60))];
-    private readonly object[] _mediatorRotation = [.. Enumerable.Range(0, 8).Select(index => MediatorRequest(index * 60))];
+    private readonly object[] _mediatrRotation = [.. Enumerable.Range(0, 8).Select(index => MediatRRequest(index * ScaleSize.Stride))];
+    private readonly object[] _relevoxRotation = [.. Enumerable.Range(0, 8).Select(index => RelevoxRequest(index * ScaleSize.Stride))];
+    private readonly object[] _mediatorRotation = [.. Enumerable.Range(0, 8).Select(index => MediatorRequest(index * ScaleSize.Stride))];
     private int _turn;
     private global::MediatR.ISender _mediatrSender = null!;
     private RelevoxMediator _relevoxTyped = null!;
