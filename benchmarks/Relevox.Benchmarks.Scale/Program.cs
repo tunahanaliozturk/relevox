@@ -13,6 +13,9 @@ if (args is ["--sanity"])
         await benchmarks.RelevoxInterface(),
         await benchmarks.MediatorTyped(),
         await benchmarks.MediatorInterface(),
+        await benchmarks.MediatRScope(),
+        await benchmarks.RelevoxScope(),
+        await benchmarks.MediatorScope(),
     ];
     int[] rotating = [await benchmarks.MediatRRotating(), await benchmarks.RelevoxRotating(), await benchmarks.MediatorRotating()];
     benchmarks.Cleanup();
