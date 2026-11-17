@@ -38,3 +38,11 @@ Rule ID | Category | Severity | Notes
 RVX0014 | Relevox    | Info     | Code still on MediatR while the bridge is in place
 RVX0015 | Relevox    | Warning  | A MediatR behaviour does not run for requests moved to Relevox
 RVX0016 | Relevox    | Info     | Nothing is left on MediatR
+
+## Release 1.7.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|--------------------------------------------------------------
+RVX0017 | Relevox    | Info     | Mediator code that the migration code fix can rewrite
