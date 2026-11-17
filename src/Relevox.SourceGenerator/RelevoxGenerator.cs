@@ -19,12 +19,15 @@ namespace Relevox.SourceGenerator;
 /// every edit: Roslyn cannot know which symbols an edit elsewhere affected. Most of that step's time is the
 /// compiler binding each type's base list. Types in referenced projects come from the compilation's
 /// references, filtered to assemblies that reference Relevox.Contracts, also on every compilation. Both
-/// produce value-equal models when nothing relevant changed, so everything downstream of them stays cached
-/// and no code is written again.
+/// produce value-equal models when nothing relevant changed, so the plan and the code written from it stay
+/// cached. The message map's step is the exception: it takes the compilation, so it runs on every edit when
+/// the map is on, and only its result is compared.
 /// </para>
 /// <para>
-/// Everything that crosses a stage boundary is strings and value-equal arrays, except the message map's call
-/// candidates, which the comment on them explains. Models.cs says why that matters.
+/// What the plan is built from crosses its stage boundaries as strings and value-equal arrays; Models.cs says
+/// why that matters. The steps that take the compilation itself run on every edit and are kept cheap or
+/// switched off instead, and the message map's call candidates are syntax nodes, which the comment on them
+/// explains.
 /// </para>
 /// </remarks>
 [Generator(LanguageNames.CSharp)]
