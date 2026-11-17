@@ -687,6 +687,52 @@ public sealed class MediatorMigrationCodeFixTests
         ShouldBuildWithTheGenerator(fixedSources);
     }
 
+    [Fact]
+    public async Task A_publisher_of_the_projects_own_is_kept_and_exception_handlers_leave_the_behaviours()
+    {
+        // The registration of the Blazor template in docs/migration-from-mediator.md, cut down: a publisher of its
+        // own, a scoped lifetime, and exception handlers listed with the behaviours. The publisher and the exception
+        // handler, in the second file, are left for the compiler; the registration in the first builds.
+        string[] fixedSources = await Migrate(
+            Header + """
+            public sealed class Logging<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse> where TMessage : IMessage
+            {
+                public ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken) => next(message, cancellationToken);
+            }
+
+            public static class Startup
+            {
+                public static IServiceCollection Add(IServiceCollection services) =>
+                    services.AddMediator(options =>
+                    {
+                        options.NotificationPublisherType = typeof(NoWaitPublisher);
+                        options.ServiceLifetime = ServiceLifetime.Scoped;
+                        options.PipelineBehaviors = [typeof(Fallback<,>), typeof(Logging<,>)];
+                    });
+            }
+            """,
+            Header + """
+            public sealed class Fallback<TMessage, TResponse> : MessageExceptionHandler<TMessage, TResponse> where TMessage : notnull, IMessage
+            {
+                protected override ValueTask<ExceptionHandlingResult<TResponse>> Handle(TMessage message, System.Exception exception, CancellationToken cancellationToken) => NotHandled;
+            }
+
+            public sealed class NoWaitPublisher : INotificationPublisher
+            {
+                public ValueTask Publish<TNotification>(NotificationHandlers<TNotification> handlers, TNotification notification, CancellationToken cancellationToken)
+                    where TNotification : INotification => default;
+            }
+            """);
+
+        string text = fixedSources[0];
+        text.ShouldContain("options.NotificationPublisherType = typeof(NoWaitPublisher);");
+        text.ShouldContain("options.AddOpenBehavior(typeof(Logging<,>), ServiceLifetime.Scoped);");
+        text.ShouldNotContain("Fallback");
+        ImmutableArray<Diagnostic> errors = BuildErrors(fixedSources);
+        errors.ShouldNotBeEmpty();
+        errors.Select(static error => error.Location.SourceTree?.FilePath).Distinct().ShouldBe(["File1.cs"]);
+    }
+
     [Theory]
     [InlineData("typeof(Mediator.ForeachAwaitPublisher)", "ForeachAwaitPublisher")]
     [InlineData("typeof(global::Mediator.TaskWhenAllPublisher)", "TaskWhenAllPublisher")]
@@ -745,7 +791,7 @@ public sealed class MediatorMigrationCodeFixTests
     [Theory]
     [InlineData("services.AddMediator(options)", "System.Action<MediatorOptions> options")]
     [InlineData("services.AddMediator(Configure)", "")]
-    [InlineData("services.AddMediator(options => options.NotificationPublisherType = typeof(MyPublisher))", "")]
+    [InlineData("services.AddMediator(options => options.NotificationPublisherType = Other)", "")]
     [InlineData("services.AddMediator(options => options.Surprise = 1)", "")]
     [InlineData("services.AddMediator(options => options.PipelineBehaviors = Behaviors)", "")]
     [InlineData("services.AddMediator(options => options.PipelineBehaviors = [typeof(Logging<,>), Other])", "")]

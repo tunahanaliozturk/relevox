@@ -60,6 +60,9 @@ internal static class MediatorRegistrationRewriter
             return null;
         }
 
+        // Mediator's exception handlers are behaviours, listed with the others; Relevox's are found at build time
+        // once they implement IRequestExceptionHandler, and registering one as a behaviour would throw.
+        settings.Behaviors.RemoveAll(behavior => IsExceptionHandler(behavior, model));
         string lifetime = settings.Lifetime ?? DefaultLifetime(model, call);
         ArgumentSyntax lambda = SyntaxFactory.Argument(Build(call, parameter, lifetime, settings));
         if (configuration is not null)
@@ -187,14 +190,18 @@ internal static class MediatorRegistrationRewriter
 
                 return true;
             case "NotificationPublisherType":
-                // Only Mediator's own two; a publisher of the project's has to be written against Relevox's.
-                if (value is TypeOfExpressionSyntax { Type: { } type } && LastName(type) is "ForeachAwaitPublisher" or "TaskWhenAllPublisher")
+                if (value is not TypeOfExpressionSyntax { Type: { } type } publisher)
                 {
-                    settings.Publisher = LastName(type);
-                    return true;
+                    return false;
                 }
 
-                return false;
+                // Mediator's own two become Relevox's of the same name. A publisher of the project's is kept as it
+                // is named: it still has to be rewritten against Relevox's INotificationPublisher, and the compiler
+                // points at it, but the rest of the registration need not wait for that.
+                settings.Publisher = LastName(type) is "ForeachAwaitPublisher" or "TaskWhenAllPublisher"
+                    ? $"typeof(Relevox.NotificationPublishers.{LastName(type)})"
+                    : publisher.WithoutTrivia().ToString();
+                return true;
             case "Namespace" or "GenerateTypesAsInternal" or "Assemblies":
                 // Relevox finds handlers across the project and its references, and generates nothing named by the
                 // application, so there is nothing to carry over.
@@ -230,6 +237,21 @@ internal static class MediatorRegistrationRewriter
             : null;
     }
 
+    // A class of the project's derived from Mediator's MessageExceptionHandler, which no longer resolves.
+    private static bool IsExceptionHandler(TypeOfExpressionSyntax behavior, SemanticModel model)
+    {
+        // From the definition: typeof(Fallback<,>) names the unbound type, which has no base type of its own.
+        for (ITypeSymbol? type = (model.GetSymbolInfo(behavior.Type).Symbol as ITypeSymbol)?.OriginalDefinition; type is not null; type = type.BaseType)
+        {
+            if (type.TypeKind == TypeKind.Error && type.Name == "MessageExceptionHandler")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // An unbound generic such as typeof(Logging<,>), the open form Relevox's AddOpenBehavior wants.
     private static bool IsOpen(TypeOfExpressionSyntax type) =>
         (type.Type is QualifiedNameSyntax qualified ? qualified.Right : type.Type) is GenericNameSyntax { TypeArgumentList.Arguments: var arguments }
@@ -248,7 +270,7 @@ internal static class MediatorRegistrationRewriter
         lines.AddRange(settings.StreamBehaviors.Select(behavior => $"{parameter}.{(IsOpen(behavior) ? "AddOpenStreamBehavior" : "AddStreamBehavior")}({behavior.WithoutTrivia()}, {lifetime});"));
         if (settings.Publisher is { } publisher)
         {
-            lines.Add($"{parameter}.NotificationPublisherType = typeof(Relevox.NotificationPublishers.{publisher});");
+            lines.Add($"{parameter}.NotificationPublisherType = {publisher};");
         }
 
         StringBuilder builder = new();
