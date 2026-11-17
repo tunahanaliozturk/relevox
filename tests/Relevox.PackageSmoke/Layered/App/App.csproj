@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="Relevox" Version="$(RelevoxVersion)" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(SmokeExtensionsVersion)" />
     <ProjectReference Include="../Contracts/Contracts.csproj" />
   </ItemGroup>
 

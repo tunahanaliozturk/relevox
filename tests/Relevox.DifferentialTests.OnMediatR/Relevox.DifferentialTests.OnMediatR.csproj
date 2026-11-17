@@ -3,7 +3,7 @@
   <!-- The shared scenarios, compiled against MediatR 12.5.0, the behaviour Relevox is held to. -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>

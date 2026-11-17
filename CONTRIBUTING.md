@@ -2,12 +2,13 @@
 
 ## Getting set up
 
-You need the .NET 10 SDK. Nothing else.
+You need the .NET 11 SDK, and the .NET 10 runtime to run the `net10.0` half of the tests. The packages and the test
+projects target `net10.0` and `net11.0`, so `dotnet run` on a test project takes `-f net10.0` or `-f net11.0`.
 
 ```bash
 dotnet build Relevox.slnx
-dotnet run --project tests/Relevox.SourceGenerator.Tests
-dotnet run --project tests/Relevox.DifferentialTests
+dotnet run --project tests/Relevox.SourceGenerator.Tests -f net11.0
+dotnet run --project tests/Relevox.DifferentialTests -f net11.0
 dotnet run -c Release --project benchmarks/Relevox.Benchmarks -- --sanity
 dotnet run --project tools/Relevox.LicenseAudit -- .
 bash eng/package-smoke.sh

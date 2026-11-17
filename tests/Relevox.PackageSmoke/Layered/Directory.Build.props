@@ -4,7 +4,10 @@
     calls AddRelevox, and a host below it. Built from the packages only, like the project one folder up.
   -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <SmokeFramework Condition="'$(SmokeFramework)' == ''">net10.0</SmokeFramework>
+    <TargetFramework>$(SmokeFramework)</TargetFramework>
+    <SmokeExtensionsVersion>10.0.0</SmokeExtensionsVersion>
+    <SmokeExtensionsVersion Condition="'$(SmokeFramework)' == 'net11.0'">11.0.0</SmokeExtensionsVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

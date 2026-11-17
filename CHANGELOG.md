@@ -8,6 +8,10 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- `net11.0` as a second target framework of `Relevox`, `Relevox.Contracts`, `Relevox.Testing`,
+  `Relevox.FluentValidation` and `Relevox.MediatRBridge`. `net10.0` stays. The tests, the web sample and the
+  NativeAOT sample build and run on both, and the package smoke test installs the packages into an application
+  on each ([ADR 0025](docs/adr/0025-net11-alongside-net10.md)).
 - RVX0017, an Info diagnostic for Mediator code left once the Mediator package (martinothamar/Mediator 3.0.2) is
   removed, and the code fix **Move from Mediator to Relevox**, so one *Fix all in: Solution* moves a project that
   uses it, as RVX0007 does for MediatR (#145). It renames the namespace, rewrites each command, query, handler and
@@ -15,6 +19,16 @@ All notable changes to this project are written down here. The format follows
   to `next(cancellationToken)`) and turns `AddMediator(...)` into `AddRelevox(...)` with Mediator's lifetime
   written out. What it leaves for a person is listed with the diagnostic and in
   [ADR 0024](docs/adr/0024-moving-from-mediator.md).
+
+### Changed
+
+- Dependency versions in the repository, none of which changes what a package asks of an application:
+  FluentValidation 12.2.0, OpenTelemetry 1.21.0 (the web sample), Microsoft.Extensions 10.0.15 for `net10.0` and
+  11.0.0 for `net11.0`, NJsonSchema 11.6.2, xunit.v3 4.0.3, Microsoft.Build.Utilities.Core 18.12.2 and
+  Microsoft.CodeAnalysis.Analyzers 5.12.0. Roslyn stays at 5.0.0 and System.Reflection.Metadata at 9.0.0 on
+  purpose, and Dependabot is told to leave them ([ADR 0025](docs/adr/0025-net11-alongside-net10.md)).
+- The repository builds with the .NET 11 SDK (`global.json`). The packages' own minimum versions of
+  Microsoft.Extensions.DependencyInjection.Abstractions, FluentValidation and MediatR are unchanged.
 
 ## [1.6.0] - 2026-10-30
 

@@ -41,8 +41,8 @@ Relevox comes before the plan. Shipped versions are in [CHANGELOG.md](../CHANGEL
 Moving off MediatR is what Relevox is for, so the work that makes that easier comes first: endpoint
 generation moved from 1.6 to 2.6 for it. Outbox, retries and other distributed messaging are not planned;
 MassTransit, Wolverine and NServiceBus do that, and Relevox stays in-process. Everything up to 4.0 is
-planned for mid-2027. Major versions follow breaking changes, not .NET releases: they stay on `net10.0`, and a
-new .NET target comes in a minor version.
+planned for mid-2027. Major versions follow breaking changes, not .NET releases: they keep the frameworks
+already supported, and a new .NET target comes in a minor version ([ADR 0025](adr/0025-net11-alongside-net10.md)).
 
 Within 1.x there are no breaking changes: package validation checks every build against the released API
 ([ADR 0011](adr/0011-internal-api-is-a-contract.md)), and new behaviour is opt-in.

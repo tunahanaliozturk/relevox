@@ -1,6 +1,6 @@
 # 3. Target net10.0 only
 
-Status: accepted
+Status: accepted, extended by [ADR 0025](0025-net11-alongside-net10.md), which adds `net11.0`
 Date: 2026-10-16
 
 ## Context

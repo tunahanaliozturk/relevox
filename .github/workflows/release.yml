@@ -27,7 +27,9 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       # v1.2.3 or v1.2.3-rc.1 becomes the package version; anything else stops the release here.
       - name: Version from the tag
@@ -41,12 +43,14 @@ jobs:
       - name: Build and test
         run: |
           dotnet build Relevox.slnx --configuration Release
-          dotnet run --project tests/Relevox.SourceGenerator.Tests --configuration Release --no-build
-          dotnet run --project tests/Relevox.DifferentialTests --configuration Release --no-build
-          dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build
-          dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build
+          for tfm in net10.0 net11.0; do
+            dotnet run --project tests/Relevox.SourceGenerator.Tests --configuration Release --no-build --framework "$tfm"
+            dotnet run --project tests/Relevox.DifferentialTests --configuration Release --no-build --framework "$tfm"
+            dotnet run --project tests/Relevox.Samples.Web.Tests --configuration Release --no-build --framework "$tfm"
+            dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build --framework "$tfm"
+          done
 
-      # Packs with the release version, installs the packages into a new application and runs it.
+      # Packs with the release version, installs the packages into a new application and runs it on each framework.
       - name: Pack and smoke test
         run: RELEVOX_VERSION="${{ steps.version.outputs.version }}" bash eng/package-smoke.sh
 
