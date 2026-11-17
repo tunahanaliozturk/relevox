@@ -6,6 +6,14 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-17
+
+Moving from Mediator, and .NET 11. RVX0017 and its code fix move a project off martinothamar/Mediator 3.x the way
+RVX0007 does for MediatR, and `docs/migration-from-mediator.md` has the steps, what the fix leaves and what
+behaves differently, from moving a real Blazor application with its 53 tests passing before and after. The
+packages now ship `net11.0` next to `net10.0`. `ValueTask` handlers were measured and left out
+([ADR 0023](docs/adr/0023-no-valuetask-handlers.md)).
+
 ### Added
 
 - `net11.0` as a second target framework of `Relevox`, `Relevox.Contracts`, `Relevox.Testing`,

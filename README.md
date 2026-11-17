@@ -76,6 +76,7 @@ ratios rather than the times. 1.3.0 did not change the dispatch code; its run, o
 1.5.0 works out a pipeline's `[PipelineOrder]` on its first send and leaves the rest of each send as it was; its
 numbers wait for the quiet-machine run in [#85](https://github.com/tunahanaliozturk/relevox/issues/85).
 1.6.0 adds the bridge in a package of its own and changes none of the paths below.
+1.7.0 adds a `net11.0` build of each package and the move from Mediator, and changes none of them either.
 With allocations:
 
 | | MediatR 12.5 | Relevox | Relevox as a share of MediatR |
