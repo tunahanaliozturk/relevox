@@ -1,14 +1,21 @@
 """Render the README diagrams to docs/images/<name>-{light,dark}.png with headless Chrome.
 
 usage: CHROME=<path to chrome or edge> python tools/diagrams.py
+       CHROME=<path to chrome or edge> python tools/diagrams.py scale [results folder]
+
+The second form draws only the scale chart, from the files eng/scale-benchmarks.sh leaves under artifacts/scale.
+It is not part of the first form: a chart of numbers nobody has measured yet would be a made-up one.
 
 Each diagram is a list of shapes laid out by hand on a fixed canvas, drawn as SVG in the brand colours and
 screenshotted at twice its size on a transparent background, so it sits on GitHub's light and dark pages alike.
 """
 
+import json
+import math
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 
 OUT = pathlib.Path(__file__).resolve().parents[1] / "docs" / "images"
@@ -212,6 +219,96 @@ def benchmarks(t):
     return parts
 
 
+# The scale chart: mean time against the number of message types, one line per library, read from the JSON that
+# BenchmarkDotNet writes for each size (artifacts/scale/<size>/results/*-report-brief.json). Rows are matched by
+# the benchmark method names in benchmarks/Relevox.Benchmarks.Scale/ScaleBenchmarks.cs. MediatR has no typed
+# overload, so its ISender row is the one drawn in the typed panel.
+SCALE_ROOT = pathlib.Path(__file__).resolve().parents[1] / "artifacts" / "scale"
+SCALE_PANELS = [
+    ("Send, typed", {"MediatR 12.5": "MediatR", "Mediator 3.0": "MediatorTyped", "Relevox": "RelevoxTyped"}),
+    ("Send, 8 types in turn", {"MediatR 12.5": "MediatRRotating", "Mediator 3.0": "MediatorRotating", "Relevox": "RelevoxRotating"}),
+]
+
+
+def read_scale(root):
+    """Returns {size: {method: mean in ns}} from every <root>/<size>/results/*-report-brief.json."""
+    sizes = {}
+    for folder in sorted(pathlib.Path(root).glob("[0-9]*")):
+        reports = list((folder / "results").glob("*-report-brief.json"))
+        if len(reports) != 1:
+            raise SystemExit(f"expected one *-report-brief.json under {folder / 'results'}, found {len(reports)}")
+        benchmarks = json.loads(reports[0].read_text(encoding="utf-8"))["Benchmarks"]
+        sizes[int(folder.name)] = {b["Method"]: b["Statistics"]["Mean"] for b in benchmarks if b["Statistics"]}
+    if len(sizes) < 2:
+        raise SystemExit(f"need results for at least two sizes under {root}, found {len(sizes)}")
+    return sizes
+
+
+def nice_ceiling(value):
+    """The smallest 1, 2, 5 or 10 times a power of ten that is not below value."""
+    power = 10 ** math.floor(math.log10(value))
+    return next(step * power for step in (1, 2, 5, 10) if step * power >= value)
+
+
+def scale_chart(sizes):
+    def shapes(t):
+        # Each library keeps its colour and line style in both panels; Relevox is the thick accent line.
+        style = {
+            "MediatR 12.5": (t["lane"], 2.2, ""),
+            "Mediator 3.0": (t["ink"], 2.2, "6 4"),
+            "Relevox": (t["accent"], 3.4, ""),
+        }
+        xs = sorted(sizes)
+        low, high = math.log(xs[0]), math.log(xs[-1])
+        parts = [
+            f'<text x="20" y="32" font-family="{SANS}" font-size="15" font-weight="600" fill="{t["ink"]}">'
+            "Mean time to send one request, by number of request types per library</text>"
+        ]
+        for index, name in enumerate(style):
+            x = 20 + index * 150
+            colour, stroke, dash = style[name]
+            parts.append(
+                f'<line x1="{x}" y1="54" x2="{x + 26}" y2="54" stroke="{colour}" stroke-width="{stroke}" '
+                f'stroke-linecap="round" stroke-dasharray="{dash}"/>'
+                f'<text x="{x + 34}" y="59" font-family="{SANS}" font-size="13" fill="{t["muted"]}">{esc(name)}</text>'
+            )
+        for panel, (title, methods) in enumerate(SCALE_PANELS):
+            left, right, top, bottom = 80 + panel * 480, 440 + panel * 480, 120, 340
+            ceiling = nice_ceiling(max(sizes[x][m] for x in xs for m in methods.values()))
+            parts.append(
+                f'<text x="{left - 60}" y="96" font-family="{SANS}" font-size="14" font-weight="600" fill="{t["ink"]}">{esc(title)}</text>'
+            )
+            for tick in range(6):
+                value = ceiling * tick / 5
+                y = bottom - (bottom - top) * tick / 5
+                parts.append(
+                    f'<line x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}" stroke="{t["line"]}" stroke-width="1"/>'
+                    f'<text x="{left - 8}" y="{y + 4:.1f}" text-anchor="end" font-family="{MONO}" font-size="11.5" '
+                    f'fill="{t["muted"]}">{value:,.10g}</text>'
+                )
+            parts.append(
+                f'<text x="{left - 60}" y="{top - 8}" font-family="{SANS}" font-size="11.5" fill="{t["muted"]}">ns</text>'
+            )
+            position = {x: left + (right - left) * (math.log(x) - low) / (high - low) for x in xs}
+            for x in xs:
+                parts.append(
+                    f'<text x="{position[x]:.1f}" y="{bottom + 20}" text-anchor="middle" font-family="{MONO}" '
+                    f'font-size="11.5" fill="{t["muted"]}">{x:,}</text>'
+                )
+            for name, method in methods.items():
+                colour, stroke, dash = style[name]
+                points = [(position[x], bottom - (bottom - top) * sizes[x][method] / ceiling) for x in xs]
+                path = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+                parts.append(
+                    f'<polyline points="{path}" fill="none" stroke="{colour}" stroke-width="{stroke}" '
+                    f'stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="{dash}"/>'
+                )
+                parts += [f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{stroke + 1.2:.1f}" fill="{colour}"/>' for x, y in points]
+        return parts
+
+    return shapes
+
+
 DIAGRAMS = {
     "how-it-works": (860, 428, how_it_works),
     "project-layout": (1000, 172, project_layout),
@@ -233,31 +330,38 @@ def svg(t, width, height, shapes):
     )
 
 
-OUT.mkdir(parents=True, exist_ok=True)
-work = pathlib.Path(tempfile.mkdtemp())
-for name, (width, height, shapes) in DIAGRAMS.items():
-    for theme, colours in THEMES.items():
-        page = work / f"{name}-{theme}.html"
-        page.write_text(
-            '<!doctype html><html><head><meta charset="utf-8">'
-            "<style>html,body{margin:0;background:transparent}svg{display:block}</style>"
-            f"</head><body>{svg(colours, width, height, shapes)}</body></html>",
-            encoding="utf-8",
-        )
-        # CHROME comes from the person running this script, not from untrusted input.
-        subprocess.run(
-            [
-                CHROME,
-                "--headless=new",
-                "--disable-gpu",
-                "--hide-scrollbars",
-                "--force-device-scale-factor=2",
-                f"--window-size={width},{height}",
-                "--default-background-color=00000000",
-                f"--screenshot={OUT / f'{name}-{theme}.png'}",
-                page.resolve().as_uri(),
-            ],
-            check=True,
-            capture_output=True,
-        )
-        print(f"{name}-{theme}.png")
+def render(charts):
+    OUT.mkdir(parents=True, exist_ok=True)
+    work = pathlib.Path(tempfile.mkdtemp())
+    for name, (width, height, shapes) in charts.items():
+        for theme, colours in THEMES.items():
+            page = work / f"{name}-{theme}.html"
+            page.write_text(
+                '<!doctype html><html><head><meta charset="utf-8">'
+                "<style>html,body{margin:0;background:transparent}svg{display:block}</style>"
+                f"</head><body>{svg(colours, width, height, shapes)}</body></html>",
+                encoding="utf-8",
+            )
+            # CHROME comes from the person running this script, not from untrusted input.
+            subprocess.run(
+                [
+                    CHROME,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--hide-scrollbars",
+                    "--force-device-scale-factor=2",
+                    f"--window-size={width},{height}",
+                    "--default-background-color=00000000",
+                    f"--screenshot={OUT / f'{name}-{theme}.png'}",
+                    page.resolve().as_uri(),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            print(f"{name}-{theme}.png")
+
+
+if sys.argv[1:2] == ["scale"]:
+    render({"scale": (960, 380, scale_chart(read_scale(sys.argv[2] if len(sys.argv) > 2 else SCALE_ROOT)))})
+else:
+    render(DIAGRAMS)
