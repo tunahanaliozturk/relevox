@@ -63,8 +63,9 @@ internal static class MediatorRegistrationRewriter
         // Mediator's exception handlers are behaviours, listed with the others; Relevox's are found at build time
         // once they implement IRequestExceptionHandler, and registering one as a behaviour would throw.
         settings.Behaviors.RemoveAll(behavior => IsExceptionHandler(behavior, model));
+        string? publisher = settings.Publisher is { } publisherType ? Publisher(publisherType, model) : null;
         string lifetime = settings.Lifetime ?? DefaultLifetime(model, call);
-        ArgumentSyntax lambda = SyntaxFactory.Argument(Build(call, parameter, lifetime, settings));
+        ArgumentSyntax lambda = SyntaxFactory.Argument(Build(call, parameter, lifetime, publisher, settings));
         if (configuration is not null)
         {
             lambda = lambda.WithTriviaFrom(configuration);
@@ -99,7 +100,7 @@ internal static class MediatorRegistrationRewriter
 
         public List<TypeOfExpressionSyntax> StreamBehaviors { get; set; } = [];
 
-        public string? Publisher { get; set; }
+        public TypeOfExpressionSyntax? Publisher { get; set; }
     }
 
     // False when the lambda is not one the ADR carries over.
@@ -190,17 +191,12 @@ internal static class MediatorRegistrationRewriter
 
                 return true;
             case "NotificationPublisherType":
-                if (value is not TypeOfExpressionSyntax { Type: { } type } publisher)
+                if (value is not TypeOfExpressionSyntax publisher)
                 {
                     return false;
                 }
 
-                // Mediator's own two become Relevox's of the same name. A publisher of the project's is kept as it
-                // is named: it still has to be rewritten against Relevox's INotificationPublisher, and the compiler
-                // points at it, but the rest of the registration need not wait for that.
-                settings.Publisher = LastName(type) is "ForeachAwaitPublisher" or "TaskWhenAllPublisher"
-                    ? $"typeof(Relevox.NotificationPublishers.{LastName(type)})"
-                    : publisher.WithoutTrivia().ToString();
+                settings.Publisher = publisher;
                 return true;
             case "Namespace" or "GenerateTypesAsInternal" or "Assemblies":
                 // Relevox finds handlers across the project and its references, and generates nothing named by the
@@ -237,6 +233,15 @@ internal static class MediatorRegistrationRewriter
             : null;
     }
 
+    // Mediator's own two, which no longer resolve, become Relevox's of the same name. A publisher of the project's,
+    // whatever it is called, is kept as it is named: it still has to be rewritten against Relevox's
+    // INotificationPublisher, and the compiler points at it, but the rest of the registration need not wait for that.
+    private static string Publisher(TypeOfExpressionSyntax publisher, SemanticModel model) =>
+        model.GetSymbolInfo(publisher.Type).Symbol is not ITypeSymbol { TypeKind: not TypeKind.Error }
+            && LastName(publisher.Type) is "ForeachAwaitPublisher" or "TaskWhenAllPublisher"
+                ? $"typeof(Relevox.NotificationPublishers.{LastName(publisher.Type)})"
+                : publisher.WithoutTrivia().ToString();
+
     // A class of the project's derived from Mediator's MessageExceptionHandler, which no longer resolves.
     private static bool IsExceptionHandler(TypeOfExpressionSyntax behavior, SemanticModel model)
     {
@@ -257,7 +262,7 @@ internal static class MediatorRegistrationRewriter
         (type.Type is QualifiedNameSyntax qualified ? qualified.Right : type.Type) is GenericNameSyntax { TypeArgumentList.Arguments: var arguments }
         && arguments.All(static argument => argument is OmittedTypeArgumentSyntax);
 
-    private static LambdaExpressionSyntax Build(InvocationExpressionSyntax call, string parameter, string lifetime, Settings settings)
+    private static LambdaExpressionSyntax Build(InvocationExpressionSyntax call, string parameter, string lifetime, string? publisher, Settings settings)
     {
         Layout text = new(call);
         List<string> lines =
@@ -268,7 +273,7 @@ internal static class MediatorRegistrationRewriter
 
         lines.AddRange(settings.Behaviors.Select(behavior => $"{parameter}.{(IsOpen(behavior) ? "AddOpenBehavior" : "AddBehavior")}({behavior.WithoutTrivia()}, {lifetime});"));
         lines.AddRange(settings.StreamBehaviors.Select(behavior => $"{parameter}.{(IsOpen(behavior) ? "AddOpenStreamBehavior" : "AddStreamBehavior")}({behavior.WithoutTrivia()}, {lifetime});"));
-        if (settings.Publisher is { } publisher)
+        if (publisher is not null)
         {
             lines.Add($"{parameter}.NotificationPublisherType = {publisher};");
         }

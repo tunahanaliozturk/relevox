@@ -782,6 +782,23 @@ public sealed class MediatorMigrationCodeFixTests
         errors.Select(static error => error.Location.SourceTree?.FilePath).Distinct().ShouldBe(["File1.cs"]);
     }
 
+    [Fact]
+    public async Task A_publisher_of_the_projects_own_named_like_Mediators_is_kept()
+    {
+        string[] fixedSources = await Migrate(Header + """
+            public sealed class TaskWhenAllPublisher;
+
+            public static class Startup
+            {
+                public static IServiceCollection Add(IServiceCollection services) =>
+                    services.AddMediator(options => options.NotificationPublisherType = typeof(TaskWhenAllPublisher));
+            }
+            """);
+
+        fixedSources[0].ShouldContain("options.NotificationPublisherType = typeof(TaskWhenAllPublisher);");
+        fixedSources[0].ShouldNotContain("Relevox.NotificationPublishers");
+    }
+
     [Theory]
     [InlineData("typeof(Mediator.ForeachAwaitPublisher)", "ForeachAwaitPublisher")]
     [InlineData("typeof(global::Mediator.TaskWhenAllPublisher)", "TaskWhenAllPublisher")]
