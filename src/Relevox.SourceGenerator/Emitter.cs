@@ -61,8 +61,18 @@ internal static class Emitter
         code.Line(Plumbing);
         code.Open("internal sealed partial class RelevoxMediator : global::Relevox.IMediator");
 
+        bool anyHandler = handlerIndex.Count > 0;
+
+        // Nothing here grows with the number of handlers: singletons are held once per container, in HeldHandlers,
+        // and scoped handlers in storage this mediator creates the first time it needs one (ADR 0026).
         code.Line("private readonly global::System.IServiceProvider _services;");
         code.Line("private readonly global::Relevox.Internal.PipelineState<RelevoxMediator> _pipelines;");
+        if (anyHandler)
+        {
+            code.Line("private readonly HeldHandlers _held;");
+            code.Line("private object?[]?[]? _scoped;");
+        }
+
         code.Line("private global::Relevox.INotificationPublisher? _publisher;");
         code.Line("private readonly bool _telemetry;");
         code.Line("private readonly bool _handlerSpans;");
@@ -71,37 +81,29 @@ internal static class Emitter
             code.Line($"private static readonly global::Relevox.Internal.OpenNotificationHandlers OpenNotificationHandlers = new({string.Join(", ", plan.OpenNotificationHandlers.Select(static definition => $"typeof({definition})"))});");
         }
 
-        foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
-        {
-            code.Line($"private readonly bool _keep{handler.Value};");
-            code.Line($"private {handler.Key}? _handler{handler.Value};");
-        }
-
         code.Line();
         code.Line("/// <summary>Creates the mediator over the container it resolves handlers from.</summary>");
         code.Line("/// <param name=\"services\">The container, or the scope, handlers come from.</param>");
-        code.Line("/// <param name=\"keep\">");
-        code.Line("/// One flag per handler, in the order <c>AddRelevox</c> registers them: true when the handler is registered");
-        code.Line("/// as scoped or singleton, so the container would hand this mediator the same instance every time anyway");
-        code.Line("/// and the first one can be kept.");
+        code.Line("/// <param name=\"held\">");
+        code.Line("/// What the container holds for every mediator it builds: its pipeline state, each handler's registered");
+        code.Line("/// lifetime, and the singleton handlers resolved so far.");
         code.Line("/// </param>");
-        code.Line("/// <param name=\"pipelines\">Which requests this container has no behaviours for, learned on first use.</param>");
         code.Line("/// <param name=\"telemetry\">Whether sends, publishes and streams get spans, from <c>options.Telemetry.Enabled</c>.</param>");
         code.Line("/// <param name=\"handlerSpans\">");
         code.Line("/// Whether each notification handler gets a span of its own as well, from");
         code.Line("/// <c>options.Telemetry.NotificationHandlerSpans</c>. Ignored while telemetry is off.");
         code.Line("/// </param>");
-        code.Open("public RelevoxMediator(global::System.IServiceProvider services, bool[] keep, global::Relevox.Internal.PipelineState<RelevoxMediator> pipelines, bool telemetry = false, bool handlerSpans = false)");
-        code.Line("global::System.ArgumentNullException.ThrowIfNull(keep);");
+        code.Open("public RelevoxMediator(global::System.IServiceProvider services, HeldHandlers held, bool telemetry = false, bool handlerSpans = false)");
+        code.Line("global::System.ArgumentNullException.ThrowIfNull(held);");
         code.Line("_services = services;");
-        code.Line("_pipelines = pipelines;");
-        code.Line("_telemetry = telemetry;");
-        code.Line("_handlerSpans = telemetry && handlerSpans;");
-        foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
+        code.Line("_pipelines = held.Pipelines;");
+        if (anyHandler)
         {
-            code.Line($"_keep{handler.Value} = keep[{handler.Value}];");
+            code.Line("_held = held;");
         }
 
+        code.Line("_telemetry = telemetry;");
+        code.Line("_handlerSpans = telemetry && handlerSpans;");
         code.Close();
 
         EmitRequests(code, plan, handlerIndex);
@@ -109,6 +111,7 @@ internal static class Emitter
         EmitNotifications(code, plan, handlerIndex);
         EmitInterfaceMembers(code, plan);
         EmitHandlerAccessors(code, handlerIndex);
+        EmitHeldHandlers(code, handlerIndex);
         EmitDispatchers(code, plan);
 
         code.Close();
@@ -347,10 +350,10 @@ internal static class Emitter
         code.Line("bool builtInsForEveryRequest = exceptionHandlers || exceptionActions || preProcessors || postProcessors;");
         code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof(global::Relevox.Internal.PipelineState<{mediator}>), _ => new global::Relevox.Internal.PipelineState<{mediator}>({requestCount}, {streamCount}, builtInsForEveryRequest), {DependencyInjection}.ServiceLifetime.Singleton));");
         code.Line();
-        code.Line("// Whether each handler can be kept is read from the registration in force when the first mediator is built,");
-        code.Line("// not when this runs: a handler the application registers again afterwards, as transient, is never kept.");
-        code.Line("bool[]? keep = null;");
-        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, keep ??= Keep(services), {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider), telemetry, handlerSpans), lifetime));");
+        code.Line("// Each handler's lifetime is read from the registration in force when a container builds its first mediator,");
+        code.Line("// not when this runs: a handler the application registers again afterwards, as transient, is never held.");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}.HeldHandlers), provider => new {mediator}.HeldHandlers({DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<global::Relevox.Internal.PipelineState<{mediator}>>(provider), HandlerLifetimes(services)), {DependencyInjection}.ServiceLifetime.Singleton));");
+        code.Line($"services.Add(new {DependencyInjection}.ServiceDescriptor(typeof({mediator}), provider => new {mediator}(provider, {DependencyInjection}.ServiceProviderServiceExtensions.GetRequiredService<{mediator}.HeldHandlers>(provider), telemetry, handlerSpans), lifetime));");
         foreach (string contract in new[] { "global::Relevox.IMediator", "global::Relevox.ISender", "global::Relevox.IPublisher" })
         {
             code.Line($"if (registered.Add(typeof({contract})))");
@@ -376,17 +379,21 @@ internal static class Emitter
         code.Line("return lifetimes;");
         code.Close();
         code.Line();
-        code.Line("/// <summary>Which handlers the mediator may hold on to: those whose registration in force is not transient.</summary>");
-        code.Open($"private static bool[] Keep({DependencyInjection}.IServiceCollection services)");
+        code.Line("/// <summary>");
+        code.Line("/// Each handler's lifetime in the registration in force, which decides whether it is held for the container,");
+        code.Line("/// held by each mediator, or resolved every time. A handler with no registration counts as transient, so it is");
+        code.Line("/// asked for, and the container reports it missing.");
+        code.Line("/// </summary>");
+        code.Open($"private static {DependencyInjection}.ServiceLifetime[] HandlerLifetimes({DependencyInjection}.IServiceCollection services)");
         code.Line($"global::System.Collections.Generic.Dictionary<global::System.Type, {DependencyInjection}.ServiceLifetime> lifetimes = Lifetimes(services);");
-        code.Line($"bool[] keep = new bool[{plan.HandlerTypes.Length}];");
+        code.Line($"{DependencyInjection}.ServiceLifetime[] held = new {DependencyInjection}.ServiceLifetime[{plan.HandlerTypes.Length}];");
         for (int index = 0; index < plan.HandlerTypes.Length; index++)
         {
-            code.Line($"keep[{index}] = lifetimes.TryGetValue(typeof({plan.HandlerTypes[index]}), out {DependencyInjection}.ServiceLifetime lifetime{index}) && lifetime{index} != {DependencyInjection}.ServiceLifetime.Transient;");
+            code.Line($"held[{index}] = lifetimes.TryGetValue(typeof({plan.HandlerTypes[index]}), out {DependencyInjection}.ServiceLifetime lifetime{index}) ? lifetime{index} : {DependencyInjection}.ServiceLifetime.Transient;");
         }
 
         code.Line();
-        code.Line("return keep;");
+        code.Line("return held;");
         code.Close();
         code.Line();
         code.Open($"private static bool Has({DependencyInjection}.IServiceCollection services, {Type} openContract)");
@@ -950,12 +957,48 @@ internal static class Emitter
 
     private static void EmitHandlerAccessors(CodeWriter code, Dictionary<string, int> handlerIndex)
     {
+        // A singleton already held is a field read; everything else goes through Hold, which knows the lifetime.
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line();
             code.Line("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             code.Line($"private {handler.Key} Handler{handler.Value}() =>");
-            code.Line($"    _keep{handler.Value} ? (_handler{handler.Value} ??= Resolve<{handler.Key}>()) : Resolve<{handler.Key}>();");
+            code.Line($"    _held.Singleton{handler.Value} ?? Hold({handler.Value}, ref _held.Singleton{handler.Value});");
+        }
+
+        if (handlerIndex.Count > 0)
+        {
+            // Scoped handlers are kept in pages, created as they are needed, so the storage a mediator takes on its
+            // first scoped handler grows with the square root of the handler count rather than with the count.
+            int shift = 0;
+            while (1 << (shift * 2) < handlerIndex.Count)
+            {
+                shift++;
+            }
+
+            int pageSize = 1 << shift;
+            int pages = (handlerIndex.Count + pageSize - 1) >> shift;
+
+            code.Line();
+            code.Line("// Called while a handler is not held for the whole container: a singleton the first time it is asked for, a");
+            code.Line("// scoped handler, which this mediator keeps because it never outlives its scope, and a transient one, which");
+            code.Line("// is resolved every time. Two threads may both resolve a singleton or a scoped handler the first time; the");
+            code.Line("// container hands both the same instance, so whichever is stored last is the one there already was.");
+            code.Line("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
+            code.Open("private T Hold<T>(int index, ref T? singleton) where T : class");
+            code.Line($"{DependencyInjection}.ServiceLifetime lifetime = _held.Lifetimes[index];");
+            code.Open($"if (lifetime == {DependencyInjection}.ServiceLifetime.Singleton)");
+            code.Line("return singleton = Resolve<T>();");
+            code.Close();
+            code.Line();
+            code.Open($"if (lifetime != {DependencyInjection}.ServiceLifetime.Scoped)");
+            code.Line("return Resolve<T>();");
+            code.Close();
+            code.Line();
+            code.Line($"object?[]?[] pages = _scoped ??= new object?[{pages}][];");
+            code.Line($"object?[] page = pages[index >> {shift}] ??= new object?[{pageSize}];");
+            code.Line($"return (T)(page[index & {pageSize - 1}] ??= Resolve<T>());");
+            code.Close();
         }
 
         code.Line();
@@ -980,6 +1023,37 @@ internal static class Emitter
         code.Line();
         code.Line("private static global::System.InvalidOperationException NoHandler(global::System.Type type) =>");
         code.Line("    new($\"No handler for '{type}' was found when this assembly was built, or more than one was. Relevox finds handlers at compile time, so the handler has to be in this project or in a project it references; the build reports which with RVX0001 or RVX0002, unless analyzers are turned off.\");");
+    }
+
+    private static void EmitHeldHandlers(CodeWriter code, Dictionary<string, int> handlerIndex)
+    {
+        code.Line();
+        code.Line("/// <summary>");
+        code.Line("/// What one container holds for every mediator it builds: its pipeline state, the lifetime each handler is");
+        code.Line("/// registered with, and each singleton handler once it has been resolved. A singleton in the container, so two");
+        code.Line("/// containers never share one, and a scope gets its root's.");
+        code.Line("/// </summary>");
+        code.Line("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        code.Line(Plumbing);
+        code.Open("internal sealed class HeldHandlers");
+        code.Line("internal readonly global::Relevox.Internal.PipelineState<RelevoxMediator> Pipelines;");
+        code.Line($"internal readonly {DependencyInjection}.ServiceLifetime[] Lifetimes;");
+        foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
+        {
+            code.Line($"internal {handler.Key}? Singleton{handler.Value};");
+        }
+
+        code.Line();
+        code.Line("/// <summary>Creates what a container holds, before any handler is resolved.</summary>");
+        code.Line("/// <param name=\"pipelines\">Which requests this container has no behaviours for, learned on first use.</param>");
+        code.Line("/// <param name=\"lifetimes\">Each handler's lifetime in the registration in force, in the order <c>AddRelevox</c> registers them.</param>");
+        code.Open($"public HeldHandlers(global::Relevox.Internal.PipelineState<RelevoxMediator> pipelines, {DependencyInjection}.ServiceLifetime[] lifetimes)");
+        code.Line("global::System.ArgumentNullException.ThrowIfNull(pipelines);");
+        code.Line("global::System.ArgumentNullException.ThrowIfNull(lifetimes);");
+        code.Line("Pipelines = pipelines;");
+        code.Line("Lifetimes = lifetimes;");
+        code.Close();
+        code.Close();
     }
 
     private static void EmitDispatchers(CodeWriter code, EmitPlan plan)
