@@ -1,0 +1,32 @@
+name: bylaw
+
+# bylaw reviews each pull request against this repository's own rules (.editorconfig, CONTRIBUTING.md, the ADRs
+# under docs/adr) and against the acceptance criteria of the issue it closes. It only comments; the main ruleset
+# does not require this check. Settings are in .bylaw.toml, read from the base branch.
+#
+# pull_request, not pull_request_target: a fork's pull request gets no secrets, so bylaw runs only its
+# deterministic checks there and the model key never meets code from outside.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: bylaw-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      # Pinned to a commit: this step receives the model key. Dependabot proposes updates.
+      - uses: tunahanaliozturk/bylaw@221b247dae5ed951da2538870c44c1a0628c0848 # v0.6.0
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          fail-on: none
