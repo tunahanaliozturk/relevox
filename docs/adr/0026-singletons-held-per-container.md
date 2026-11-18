@@ -67,8 +67,18 @@ from running them. That does not pay.
   lifetime from an array where it read a flag, and is resolved in place with its type known. Sending transient
   handlers through the shared generic method that holds the others was tried first and made a five-handler publish
   about a fifth slower.
-- Two containers never share a handler instance, including two built from one collection: `HeldHandlers` is a
-  singleton of each.
+- Two containers never share what is held, including two built from one collection: `HeldHandlers` is a
+  singleton of each. They share a handler instance only where the registration itself does, as with an instance
+  the application registered or a factory that returns one object.
+- Only handlers the generator knew at build time are held. Open generic notification handlers that are closed at
+  run time are asked for on every publish, as before.
+- The lifetimes come from the collection, not from the container. A collection changed after a container was
+  built from it, and before that container builds its first mediator, can say singleton for a handler the
+  container has as transient, and that instance is then held for the whole container, where before it was held
+  by one mediator. Do not change a collection a container has been built from.
+- A mediator that has never used a singleton another mediator already resolved now reaches it without asking the
+  container, so after the container is disposed it gets the disposed handler where it got the container's
+  `ObjectDisposedException`. A mediator that had used the handler already behaved this way.
 - A container whose scopes can register a singleton handler again, as some third-party containers allow, now gets
   the instance the first mediator resolved in every scope. Under MS.DI, and under any container whose scopes share
   the root's singletons, that is the instance the container would have returned anyway. A handler that has to
