@@ -41,6 +41,16 @@ public static partial class Library
         ServiceCollection services = new();
         Trace trace = new();
         services.AddSingleton(trace);
+        if (profile == Profile.ScopedStamp)
+        {
+            services.AddScoped<StampHandler>();
+            // By the interface it implements, which is MediatR's or Relevox's depending on the assembly.
+            foreach (Type contract in typeof(StampHandler).GetInterfaces())
+            {
+                services.AddScoped(contract, provider => provider.GetRequiredService<StampHandler>());
+            }
+        }
+
         Register(services, lifetime, profile, trace);
         Bridge(services, lifetime);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
@@ -98,6 +108,12 @@ public enum Profile
     /// post-processor for Ping only, so an idle built-in sits inside them for every other request.
     /// </summary>
     EarlySyncBehavior,
+
+    /// <summary>
+    /// Handlers, with StampHandler registered as scoped before the library's call, under its class and under the
+    /// interface each library resolves, the interface handing out the class's instance.
+    /// </summary>
+    ScopedStamp,
 }
 
 /// <summary>Runs one scenario in a fresh container and scope and describes everything observable.</summary>
