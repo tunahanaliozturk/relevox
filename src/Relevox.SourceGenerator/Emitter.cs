@@ -957,13 +957,16 @@ internal static class Emitter
 
     private static void EmitHandlerAccessors(CodeWriter code, Dictionary<string, int> handlerIndex)
     {
-        // A singleton already held is a field read; everything else goes through Hold, which knows the lifetime.
+        // A singleton already held is a field read. A transient handler is resolved right here, with its type known:
+        // sent through the shared generic Hold, which looks its type up at run time, five of them in one publish
+        // measured about a fifth slower (docs/benchmark-results/2026-11-18-held-handlers.md). Everything else goes
+        // through Hold.
         foreach (KeyValuePair<string, int> handler in handlerIndex.OrderBy(static pair => pair.Value))
         {
             code.Line();
             code.Line("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             code.Line($"private {handler.Key} Handler{handler.Value}() =>");
-            code.Line($"    _held.Singleton{handler.Value} ?? Hold({handler.Value}, ref _held.Singleton{handler.Value});");
+            code.Line($"    _held.Singleton{handler.Value} ?? (_held.Lifetimes[{handler.Value}] == {DependencyInjection}.ServiceLifetime.Transient ? Resolve<{handler.Key}>() : Hold({handler.Value}, ref _held.Singleton{handler.Value}));");
         }
 
         if (handlerIndex.Count > 0)
@@ -980,19 +983,13 @@ internal static class Emitter
             int pages = (handlerIndex.Count + pageSize - 1) >> shift;
 
             code.Line();
-            code.Line("// Called while a handler is not held for the whole container: a singleton the first time it is asked for, a");
-            code.Line("// scoped handler, which this mediator keeps because it never outlives its scope, and a transient one, which");
-            code.Line("// is resolved every time. Two threads may both resolve a singleton or a scoped handler the first time; the");
+            code.Line("// A singleton the first time it is asked for, held for the container, or a scoped handler, which this");
+            code.Line("// mediator keeps because it never outlives its scope. Two threads may both resolve one the first time; the");
             code.Line("// container hands both the same instance, so whichever is stored last is the one there already was.");
             code.Line("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
             code.Open("private T Hold<T>(int index, ref T? singleton) where T : class");
-            code.Line($"{DependencyInjection}.ServiceLifetime lifetime = _held.Lifetimes[index];");
-            code.Open($"if (lifetime == {DependencyInjection}.ServiceLifetime.Singleton)");
+            code.Open($"if (_held.Lifetimes[index] == {DependencyInjection}.ServiceLifetime.Singleton)");
             code.Line("return singleton = Resolve<T>();");
-            code.Close();
-            code.Line();
-            code.Open($"if (lifetime != {DependencyInjection}.ServiceLifetime.Scoped)");
-            code.Line("return Resolve<T>();");
             code.Close();
             code.Line();
             code.Line($"object?[]?[] pages = _scoped ??= new object?[{pages}][];");
