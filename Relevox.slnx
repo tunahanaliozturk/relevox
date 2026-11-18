@@ -20,6 +20,7 @@
     <Project Path="tests/Relevox.Testing.Tests/Relevox.Testing.Tests.csproj" />
     <Project Path="tests/Relevox.FluentValidation.Tests/Relevox.FluentValidation.Tests.csproj" />
     <Project Path="tests/Relevox.MediatRBridge.Tests/Relevox.MediatRBridge.Tests.csproj" />
+    <Project Path="tests/Relevox.Unions.Tests/Relevox.Unions.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Relevox.Samples.Aot/Relevox.Samples.Aot.csproj" />

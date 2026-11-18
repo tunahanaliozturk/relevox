@@ -90,6 +90,11 @@ jobs:
             dotnet run --project tests/Relevox.MediatRBridge.Tests --configuration Release --no-build --framework "$tfm"
           done
 
+      # C# 15 unions as responses, requests and notifications. net11.0 only: unions need .NET 11's IUnion, and the
+      # project is the one place compiled as C# 15.
+      - name: Union type tests
+        run: dotnet run --project tests/Relevox.Unions.Tests --configuration Release --no-build --framework net11.0
+
       # The same order service on MediatR 12.5 and moved to Relevox by following docs/migration.md. Both print
       # what they did; any difference in the transcripts fails the build.
       - name: Migration sample prints the same before and after
