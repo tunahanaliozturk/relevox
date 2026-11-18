@@ -177,8 +177,8 @@ The generator emits, per compilation that calls `AddRelevox`:
 Handlers are registered and resolved by their concrete type, from `IServiceProvider` on each call, as
 in MediatR, so lifetimes behave the same.
 Caching every handler instance would be faster and would also be a bug for every scoped handler, so only
-handlers and behaviours registered as singletons are resolved once and held (ADR 0004, amended after the
-baseline).
+handlers registered as singletons or scoped are resolved once and held: singletons per container, scoped ones
+per mediator (ADR 0004, amended, and ADR 0026). Behaviours are resolved on every send whatever their lifetime.
 
 ### 4.3 Publish
 

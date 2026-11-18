@@ -315,8 +315,8 @@ warning in the test project.
 - **Handler lifetime.** Mediator's `ServiceLifetime` is `Singleton` unless set, and applies to the mediator, the
   handlers, the behaviours and the notification publisher. Relevox's settings are transient unless set. The fix
   writes Mediator's lifetime out everywhere it applied, so nothing changes until you change it. A handler that
-  is scoped or singleton is resolved once per mediator instance and kept, as `RelevoxOptions.HandlerLifetime`
-  describes.
+  is singleton is resolved once per container and a scoped one once per mediator, and kept, as
+  `RelevoxOptions.HandlerLifetime` describes.
 - **`ValueTask` becomes `Task`.** Handlers, behaviours, `Send` and `Publish` all return `Task`. A handler that
   finishes synchronously now allocates its task ([ADR 0023](adr/0023-no-valuetask-handlers.md)).
 - **Commands and queries are requests.** Relevox dispatches by type, so nothing depended on the distinction; it

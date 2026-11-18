@@ -28,11 +28,11 @@ public sealed class RelevoxOptions
     /// Transient by default, as in MediatR.
     /// </summary>
     /// <remarks>
-    /// A handler registered as scoped or singleton, whether through this setting or by the application before
-    /// calling <c>AddRelevox</c>, is resolved once per mediator instance and kept, because the container would
-    /// return that same instance on every call anyway. That removes the container lookup from every call after
-    /// the first, and is the main reason to choose <see cref="ServiceLifetime.Singleton"/> here for handlers
-    /// that hold no per-request state.
+    /// A handler registered as scoped or singleton, whether through this setting or by the application, is resolved
+    /// once and kept, because the container would return that same instance on every call anyway: a singleton once
+    /// per container, for every mediator it builds, and a scoped handler once per mediator, which lives no longer
+    /// than its scope. That removes the container lookup from every call after the first, and is the main reason to
+    /// choose <see cref="ServiceLifetime.Singleton"/> here for handlers that hold no per-request state.
     /// </remarks>
     public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Transient;
 

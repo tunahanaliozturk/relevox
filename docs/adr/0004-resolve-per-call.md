@@ -56,6 +56,18 @@ send path is unchanged: the mediator still asks for the class and the container 
 work on a send. What changed is the sentence "never as `IRequestHandler<,>`": it now holds for resolving, not
 for registering.
 
+## Fourth amendment, 1.8.0: where kept handlers live, and behaviours
+
+[ADR 0026](0026-singletons-held-per-container.md) moves what is kept. A singleton handler is now held once per
+container instead of once per mediator, and a scoped one in storage the mediator creates on first use, so a
+mediator no longer has a field per handler.
+
+It also corrects the first amendment, which said singleton behaviours are resolved once and held. They never
+were: every send that has behaviours asks the container for them, whatever their lifetime, as MediatR does, and
+this stays. For behaviours that are all singletons the container hands back the same array each time, so the
+call allocates nothing; what holding them would save is the lookup itself, and it would stop a container
+whose scopes add behaviours of their own, which `PipelineState` checks for on every send, from running them. ADR 0026 has the measurement.
+
 ## Alternatives considered
 
 - **Singleton by default, as Mediator does.** Fastest out of the box, and it turns every handler with a
