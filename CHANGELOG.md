@@ -6,6 +6,13 @@ All notable changes to this project are written down here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- C# 15 union types on `net11.0`, as responses, stream items, requests and notifications, are tested and
+  documented in `docs/unions.md` (#159). They already worked, as any other type does; now a change that broke
+  them would fail CI. A published union runs the union's handlers, not those of its case. The NativeAOT sample
+  checks a union response and a union notification on `net11.0`. Nothing in the packages changes.
+
 ### Changed
 
 - The repository compiles as C# 14 (`LangVersion` 14.0) instead of `preview`, which under the .NET 11 SDK had

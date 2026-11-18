@@ -168,6 +168,12 @@ in an integration test. [docs/testing.md](docs/testing.md) shows both, next to t
 FluentValidation validator, so the others pay nothing for it. An application with its own validation exception
 derives from the behaviour. [docs/validation.md](docs/validation.md) shows both.
 
+## Union types
+
+On `net11.0` with C# 15, a handler can return a union, `public union FindResult(Order, NotFound);`, where it
+would otherwise return a result library's type, and a union can be a request or a notification. A published union
+runs the union's handlers, not those of the case it holds. [docs/unions.md](docs/unions.md) has what is tested.
+
 ## Telemetry
 
 `options.Telemetry.Enabled = true` gives every send, publish and stream a span on the `Relevox` activity
