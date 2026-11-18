@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    C# 15 union types as messages and responses (#159). The rest of the repository is C# 14 (Directory.Build.props)
+    and the generator tests compile their sources with Roslyn 5.0.0, which cannot parse `union`. A union also needs
+    System.Runtime.CompilerServices.IUnion, which only .NET 11's runtime library has. So this project alone is
+    net11.0 and C# 15, and it is compiled by the SDK's own compiler with the generator as an analyzer, the way an
+    application is.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>15.0</LangVersion>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <!-- The map is compiled into the assembly as RelevoxMessageMap.Json, which a test reads. -->
+    <RelevoxMessageMap>true</RelevoxMessageMap>
+  </PropertyGroup>
+
+  <!-- What the Relevox package's buildTransitive props would add; project references do not import it. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="RelevoxMessageMap" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Relevox/Relevox.csproj" />
+    <ProjectReference Include="../../src/Relevox.SourceGenerator/Relevox.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../src/Relevox.Testing/Relevox.Testing.csproj" />
+    <ProjectReference Include="../../src/Relevox.FluentValidation/Relevox.FluentValidation.csproj" />
+  </ItemGroup>
+
+</Project>
