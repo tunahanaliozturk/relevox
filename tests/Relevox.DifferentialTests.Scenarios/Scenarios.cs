@@ -92,6 +92,12 @@ public static partial class Scenarios
             },
             lifetime: ServiceLifetime.Scoped);
 
+    public static Task<string> HandlerRegisteredScopedFollowsItsScope() =>
+        Run.Scenario(StampInTwoScopes, profile: Profile.ScopedStamp);
+
+    public static Task<string> HandlerRegisteredScopedFollowsTheScopeOfAScopedMediator() =>
+        Run.Scenario(StampInTwoScopes, lifetime: ServiceLifetime.Scoped, profile: Profile.ScopedStamp);
+
     public static Task<string> SingletonHandlerIsShared() =>
         Run.Scenario(
             async services =>
@@ -231,4 +237,15 @@ public static partial class Scenarios
 
     public static Task<string> StreamNull() =>
         Run.Scenario(services => Run.StreamTiming(() => services.GetRequiredService<ISender>().CreateStream((IStreamRequest<int>)null!)));
+
+    // Two sends through one scope's sender, then one through the sender of another scope.
+    private static async Task<object?> StampInTwoScopes(IServiceProvider services)
+    {
+        ISender sender = services.GetRequiredService<ISender>();
+        int first = await sender.Send(new Stamp());
+        int again = await sender.Send(new Stamp());
+        using IServiceScope next = services.GetRequiredService<IServiceScopeFactory>().CreateScope();
+        int elsewhere = await next.ServiceProvider.GetRequiredService<ISender>().Send(new Stamp());
+        return $"{(again == first ? "the same" : "another")} instance within the scope, {(elsewhere == first ? "the same" : "another")} in the next scope";
+    }
 }
