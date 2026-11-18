@@ -82,6 +82,18 @@ await foreach (int item in sender.CreateStream(new Countdown(3)))
 
 Check("stream", string.Join(",", items), "3,2,1");
 
+#if NET11_0_OR_GREATER
+// C# 15 unions (Unions.cs), on net11.0 only.
+Check("union response", OrderPage.Show(await sender.Send(new FindOrder(1))), "order 1");
+Check("union response, other case", OrderPage.Show(await sender.Send(new FindOrder(0))), "not found");
+Check("union response through Send(object)", (await sender.Send((object)new FindOrder(2)))?.GetType().Name, "FindResult");
+
+OrderEvent cancelled = new Cancelled(4);
+await publisher.Publish((object)cancelled);
+Check("union notification", journal.Contains("cancelled 4"), true);
+Check("generic handler closed over a union", journal.Contains("audited OrderEvent"), true);
+#endif
+
 Check("span for a send", spans.Contains("send Greet"), true);
 Check("span for a publish", spans.Contains("publish Shipped"), true);
 Check("span for a notification type the build never saw", spans.Contains("publish Created<Customer>"), true);

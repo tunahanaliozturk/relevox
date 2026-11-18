@@ -14,6 +14,18 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <!--
+    Unions.cs is C# 15 and needs .NET 11's IUnion, so it is compiled for net11.0 alone, with the language turned up
+    for that framework only. The net10.0 binary stays C# 14 like the rest of the repository.
+  -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <LangVersion>15.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net11.0'">
+    <Compile Remove="Unions.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
