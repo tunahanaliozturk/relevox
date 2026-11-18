@@ -218,7 +218,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [1. Source-generated dispatch](docs/adr/0001-source-generated-dispatch.md)
 - [2. Handlers return Task, not ValueTask](docs/adr/0002-task-not-valuetask.md)
 - [3. Target net10.0 only](docs/adr/0003-net10-only.md), extended by [25](docs/adr/0025-net11-alongside-net10.md)
-- [4. Resolve handlers per call, by concrete type](docs/adr/0004-resolve-per-call.md)
+- [4. Resolve handlers per call, by concrete type](docs/adr/0004-resolve-per-call.md), amended by [26](docs/adr/0026-singletons-held-per-container.md)
 - [5. No `namespace MediatR` shim](docs/adr/0005-no-mediatr-namespace-shim.md)
 - [6. Clean-room rule, and MediatR 12.5.0 as the test oracle](docs/adr/0006-clean-room.md)
 - [7. `AddRelevox` lives in `Microsoft.Extensions.DependencyInjection`](docs/adr/0007-addrelevox-namespace.md)
@@ -240,6 +240,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [23. No ValueTask handlers in 1.7](docs/adr/0023-no-valuetask-handlers.md)
 - [24. Moving from the Mediator library](docs/adr/0024-moving-from-mediator.md)
 - [25. net11.0 alongside net10.0, and two packages that stay pinned](docs/adr/0025-net11-alongside-net10.md)
+- [26. Singleton handlers are held per container, scoped ones per mediator on first use](docs/adr/0026-singletons-held-per-container.md)
 
 ## Roadmap
 

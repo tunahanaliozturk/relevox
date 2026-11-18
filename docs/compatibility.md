@@ -61,9 +61,10 @@ mediator included. A `DerivedQuery` held in a `BaseQuery` variable is a `Derived
 **`Lifetime` applies to the mediator, not the handlers.** Handlers stay transient unless
 `HandlerLifetime` says otherwise, as with MediatR's own `Lifetime` setting.
 
-A handler registered as a singleton or scoped is resolved once and held by the mediator. Which ones those are is
-read from the service collection when the container first builds a mediator, so a handler registered again after
-`AddRelevox` counts with its last registration, as the container resolves it. Adding registrations to a
+A handler registered as a singleton or scoped is resolved once and held: a singleton by the container, for every
+mediator it builds, and a scoped handler by the mediator of its scope ([ADR 0026](adr/0026-singletons-held-per-container.md)).
+Which ones those are is read from the service collection when each container builds its first mediator, so a
+handler registered again after `AddRelevox` counts with its last registration, as the container resolves it. Adding registrations to a
 collection after a container has been built from it, and building a second container, is not followed: the
 Generic Host makes the collection read-only at that point, and Relevox reads it as it stands on first use.
 

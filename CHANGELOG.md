@@ -22,6 +22,23 @@ All notable changes to this project are written down here. The format follows
   went from 854 to 1,366 ms of generator time to 549 to 600 ms. With the map on the cost is unchanged. The
   generated code is the same byte for byte
   ([docs/benchmark-results/2026-11-17-edit-cost.md](docs/benchmark-results/2026-11-17-edit-cost.md), #166).
+- A singleton handler is held once per container instead of once per mediator, and a scoped one by its mediator
+  in storage created on first use, so the generated mediator no longer has a field per handler in the assembly
+  ([ADR 0026](docs/adr/0026-singletons-held-per-container.md), #165). Resolving `ISender` from a new scope and
+  sending once allocated 1,096, 4,696 and 22,696 bytes at 100, 500 and 2,500 request types, and now allocates 216
+  at each, and at 2,500 the send took 105 to 125 ns where it took 1,781 to 2,536. With singleton handlers in the
+  main benchmarks, 264 bytes became 192, and a new mediator sending to a singleton the container already holds
+  asks it for one thing, the held handlers, where it asked for the pipeline state and the handler. Rows that hold
+  one mediator allocate what they did
+  ([docs/benchmark-results/2026-11-18-held-handlers.md](docs/benchmark-results/2026-11-18-held-handlers.md)).
+  Lifetimes are now read once per container, when it builds its first mediator, rather than once per
+  `AddRelevox` call.
+
+### Fixed
+
+- ADR 0004 said singleton behaviours were resolved once and held. They are resolved on every send, as in MediatR,
+  and that stays: for all-singleton behaviours the container returns one cached array, so holding them would save
+  a lookup of about 8 ns and no bytes. The ADR now says so.
 
 ## [1.7.0] - 2026-11-17
 
