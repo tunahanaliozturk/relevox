@@ -43,6 +43,43 @@ dependencies.
 
 Remove `MediatR.Contracts` and `MediatR.Extensions.Microsoft.DependencyInjection` too, if they are referenced.
 
+If the versions live in a `Directory.Packages.props`, see [central package management](#central-package-management)
+below.
+
+### Central package management
+
+The code fix rewrites C# files only. It does not edit `.props`, `.targets` or `.csproj` files, so the package
+swap in a solution with central package management is yours to do. Take the `MediatR` `PackageVersion` out
+of `Directory.Packages.props`, with any comment that went with it, and add one for each Relevox package:
+
+```diff
+ <ItemGroup>
+-  <!-- Before license change -->
+-  <PackageVersion Include="MediatR" Version="12.5.0" />
++  <PackageVersion Include="Relevox" Version="..." />
++  <PackageVersion Include="Relevox.Contracts" Version="..." />
+ </ItemGroup>
+```
+
+The references stay versionless. If one project lists `MediatR`, change it the way the diff above shows. If a
+`Directory.Build.props` adds `MediatR` to every project, replace it with `Relevox.Contracts`, which every project
+can have, and give the host a `PackageReference` to `Relevox` as well:
+
+```diff
+ <ItemGroup>
+-  <PackageReference Include="MediatR" />
++  <PackageReference Include="Relevox.Contracts" />
+ </ItemGroup>
+```
+
+Removing the `PackageVersion` while a reference to it is left fails the restore with NU1010 and names the
+projects, which finds the ones you missed in project files. Nothing finds a comment, or a reference in a file
+the build does not read. Once the swap builds, search for what is left:
+
+```bash
+grep -rIn MediatR --include=*.props --include=*.targets --include=*.csproj .
+```
+
 Getting this split wrong is reported: a library that references `Relevox` instead of `Relevox.Contracts` gets a
 mediator of its own, and the host's build warns with [RVX0005](diagnostics.md#rvx0005) when the library has
 public handlers. If that library also gives the host `InternalsVisibleTo`, the host's `AddRelevox()` call can
