@@ -259,6 +259,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [25. net11.0 alongside net10.0, and two packages that stay pinned](docs/adr/0025-net11-alongside-net10.md)
 - [26. Singleton handlers are held per container, scoped ones per mediator on first use](docs/adr/0026-singletons-held-per-container.md)
 - [27. The documentation site is built by a script with one markdown library](docs/adr/0027-documentation-site-script.md)
+- [28. Writing a missing handler or request](docs/adr/0028-writing-handlers-and-requests.md)
 - [30. The dotnet new templates](docs/adr/0030-dotnet-new-templates.md)
 
 ## Roadmap

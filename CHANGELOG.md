@@ -8,6 +8,12 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- `Relevox.Templates`, a `dotnet new` template package released with the other packages
+  ([ADR 0030](docs/adr/0030-dotnet-new-templates.md), #174). `relevox-webapi` writes a minimal API with Relevox
+  registered, one endpoint that sends a request, and an xUnit test project, for `net10.0` (default) or `net11.0`.
+  `relevox-feature` adds a request, its handler and a test to that layout:
+  `dotnet new relevox-feature -n PlaceOrder --app Shop --response int`. The generated projects reference the
+  Relevox version the templates were released with.
 - RVX0001 has a code fix, **Add handler 'PingHandler'**, that writes the missing handler in a new file next to the
   request: the matching interface and `Handle` signature, the request's namespace, only the usings the project
   lacks (global usings count), and a body that throws `NotImplementedException`. It has no *Fix all* on purpose
