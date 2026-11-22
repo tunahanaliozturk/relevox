@@ -22,8 +22,8 @@ namespace Relevox.SourceGenerator.Tests;
 /// </remarks>
 public sealed class MediatorMigrationCodeFixTests
 {
-    // A cref the compiler cannot resolve, or whose parameters or syntax it cannot.
-    private static readonly string[] UnresolvedCref = ["CS1574", "CS1580", "CS1581", "CS1584"];
+    // A cref the compiler cannot resolve, finds ambiguous, or whose parameters or syntax it cannot read.
+    private static readonly string[] UnresolvedCref = ["CS0419", "CS1574", "CS1580", "CS1581", "CS1584"];
 
     // Sorted the way the IDE sorts, so every test also shows the usings staying in order.
     private const string Header = """
@@ -1119,7 +1119,8 @@ public sealed class MediatorMigrationCodeFixTests
 
             /// <summary>
             /// Not <see cref="Mediator.MessagePreProcessor{TMessage, TResponse}"/>, nor <see cref="Mediator.IMediator.Missing"/>,
-            /// nor <see cref="MessageHandlerDelegate{TMessage, TResponse}"/>, nor <see cref="IStreamQuery{TResponse}"/>.
+            /// nor <see cref="MessageHandlerDelegate{TMessage, TResponse}"/>, nor <see cref="IStreamQuery{TResponse}"/>,
+            /// nor <see cref="Mediator.ISender.Send{TResponse}(Mediator.IQuery{TResponse}, int)"/>, whose parameters are wrong.
             /// </summary>
             public static class Sender;
             """,
@@ -1138,8 +1139,154 @@ public sealed class MediatorMigrationCodeFixTests
         fixedSources[0].ShouldContain("""<see cref="Mediator.IMediator.Missing"/>""");
         fixedSources[0].ShouldContain("""<see cref="MessageHandlerDelegate{TMessage, TResponse}"/>""");
         fixedSources[0].ShouldContain("""<see cref="IStreamQuery{TResponse}"/>""");
+        fixedSources[0].ShouldContain("""<see cref="Mediator.ISender.Send{TResponse}(Mediator.IQuery{TResponse}, int)"/>""");
         fixedSources[1].ShouldContain("""<see cref="ICommand{TResponse}"/>""");
-        BuildErrors(fixedSources).Select(static diagnostic => diagnostic.Id).ShouldBe(["CS1574", "CS1574", "CS1574", "CS1574", "CS1574"]);
+        BuildErrors(fixedSources).Select(static diagnostic => diagnostic.Id).ShouldBe(["CS1574", "CS1574", "CS1574", "CS1574", "CS1574", "CS1574"]);
+        NothingLeftToMove(fixedSources);
+    }
+
+    public static TheoryData<string, string> CrefRows => new()
+    {
+        { "IRequest{T}", "IRequest{T}" },
+        { "ICommand{T}", "IRequest{T}" },
+        { "IQuery{T}", "IRequest{T}" },
+        { "IRequest", "IRequest{Unit}" },
+        { "ICommand", "IRequest{Unit}" },
+        { "IRequestHandler{TRequest, T}", "IRequestHandler{TRequest, T}" },
+        { "ICommandHandler{TRequest, T}", "IRequestHandler{TRequest, T}" },
+        { "IQueryHandler{TRequest, T}", "IRequestHandler{TRequest, T}" },
+        { "IRequestHandler{TRequest}", "IRequestHandler{TRequest, Unit}" },
+        { "ICommandHandler{TRequest}", "IRequestHandler{TRequest, Unit}" },
+        { "IStreamRequest{T}", "IStreamRequest{T}" },
+        { "IStreamCommand{T}", "IStreamRequest{T}" },
+        { "IStreamQuery{T}", "IStreamRequest{T}" },
+        { "IStreamRequestHandler{TRequest, T}", "IStreamRequestHandler{TRequest, T}" },
+        { "IStreamCommandHandler{TRequest, T}", "IStreamRequestHandler{TRequest, T}" },
+        { "IStreamQueryHandler{TRequest, T}", "IStreamRequestHandler{TRequest, T}" },
+        { "INotification", "INotification" },
+        { "INotificationHandler{T}", "INotificationHandler{T}" },
+        { "IPipelineBehavior{TMessage, T}", "IPipelineBehavior{TMessage, T}" },
+        { "IStreamPipelineBehavior{TMessage, T}", "IStreamPipelineBehavior{TMessage, T}" },
+    };
+
+    [Theory]
+    [MemberData(nameof(CrefRows))]
+    public async Task Each_row_of_the_mapping_table_moves_as_a_cref_qualified_or_short(string mediator, string relevox)
+    {
+        string[] fixedSources = await Migrate(Header + $$"""
+            /// <summary>A <see cref="Mediator.{{mediator}}"/>, or a <see cref="{{mediator}}"/>.</summary>
+            public static class Sender;
+            """);
+
+        fixedSources[0].ShouldContain($"""<see cref="Relevox.{relevox}"/>""");
+        fixedSources[0].ShouldContain($"""<see cref="{relevox}"/>""");
+        ShouldBuildWithTheGenerator(fixedSources);
+        NothingLeftToMove(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_short_cref_moves_under_a_global_using_a_using_in_its_namespace_or_one_of_Relevox()
+    {
+        string[] fixedSources = await Migrate(
+            "global using Mediator;\n",
+            """
+            namespace Shop.Global;
+
+            /// <summary>A <see cref="ICommand{TResponse}"/>.</summary>
+            public static class Sender;
+            """,
+            """
+            namespace Shop.Inner
+            {
+                using Mediator;
+
+                /// <summary>A <see cref="IQuery{TResponse}"/>.</summary>
+                public static class Sender;
+            }
+            """,
+            """
+            using Relevox;
+
+            namespace Shop.Moved;
+
+            /// <summary>A <see cref="ICommandHandler{TCommand}"/> or a <see cref="Mediator.IStreamQuery{TResponse}"/>.</summary>
+            public static class Sender;
+            """);
+
+        fixedSources[0].ShouldContain("global using Relevox;");
+        fixedSources[1].ShouldContain("""<see cref="IRequest{TResponse}"/>""");
+        fixedSources[2].ShouldContain("using Relevox;");
+        fixedSources[2].ShouldContain("""<see cref="IRequest{TResponse}"/>""");
+        fixedSources[3].ShouldContain("""<see cref="IRequestHandler{TCommand, Unit}"/> or a <see cref="Relevox.IStreamRequest{TResponse}"/>""");
+        ShouldBuildWithTheGenerator(fixedSources);
+        NothingLeftToMove(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_cref_through_an_alias_of_Mediator_keeps_the_alias_and_moves_the_name()
+    {
+        string[] fixedSources = await Migrate("""
+            using M = Mediator;
+
+            namespace Shop;
+
+            /// <summary>A <see cref="M.ICommand{TResponse}"/>, through <see cref="M.IMediator"/>.</summary>
+            public static class Sender;
+            """);
+
+        fixedSources[0].ShouldContain("using M = Relevox;");
+        fixedSources[0].ShouldContain("""<see cref="M.IRequest{TResponse}"/>, through <see cref="M.IMediator"/>""");
+        ShouldBuildWithTheGenerator(fixedSources);
+        NothingLeftToMove(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_cref_that_does_not_parse_is_neither_reported_nor_moved()
+    {
+        string[] sources =
+        [
+            Header + """
+            /// <summary>A <see cref="Mediator.ICommand{T} garbage"/>.</summary>
+            public static class Sender;
+            """,
+        ];
+
+        (await Kinds(sources)).ShouldBe(["Name"]);
+        (await Migrate(sources))[0].ShouldContain("""<see cref="Mediator.ICommand{T} garbage"/>""");
+    }
+
+    [Fact]
+    public async Task A_cref_in_a_misplaced_comment_inside_a_moved_type_moves_with_it()
+    {
+        // The compiler warns that the comment is misplaced (CS1587), but its cref is reported, so the rewrite of the
+        // type has to move it.
+        string[] fixedSources = await Migrate(Header + """
+            public sealed record Place(int Value) :
+                /// <see cref="Mediator.IQuery{TResponse}"/>
+                ICommand<int>;
+            """);
+
+        fixedSources[0].ShouldContain("""/// <see cref="Relevox.IRequest{TResponse}"/>""");
+        fixedSources[0].ShouldContain("IRequest<int>;");
+        NothingLeftToMove(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_cref_on_a_delegate_beside_a_moved_type_is_moved_in_the_same_fix_all()
+    {
+        // The delegate is in no type, so its cref takes the cref's own fix, next to the rewrite of the record.
+        string[] fixedSources = await Migrate(Header + """
+            /// <summary>Called with a <see cref="Mediator.ICommand{TResponse}"/>.</summary>
+            public delegate void Placed(Place place);
+
+            /// <summary>An <see cref="ICommand{TResponse}"/>.</summary>
+            public sealed record Place(int Value) : ICommand<int>;
+            """);
+
+        fixedSources[0].ShouldContain("""<summary>Called with a <see cref="Relevox.IRequest{TResponse}"/>.</summary>""");
+        fixedSources[0].ShouldContain("""<summary>An <see cref="IRequest{TResponse}"/>.</summary>""");
+        fixedSources[0].ShouldContain("record Place(int Value) : IRequest<int>;");
+        ShouldBuildWithTheGenerator(fixedSources);
         NothingLeftToMove(fixedSources);
     }
 
