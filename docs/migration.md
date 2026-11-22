@@ -41,6 +41,26 @@ dependencies.
 +<PackageReference Include="Relevox.Contracts" Version="..." />
 ```
 
+For solutions using central package management, update `Directory.Packages.props` as well.
+The project files should reference the new packages without versions:
+
+```diff
+ <!-- Directory.Packages.props -->
+-<PackageVersion Include="MediatR" Version="12.5.0" />
++<PackageVersion Include="Relevox" Version="..." />
++<PackageVersion Include="Relevox.Contracts" Version="..." />
+```
+
+Use `<PackageReference Include="Relevox" />` in the host and
+`<PackageReference Include="Relevox.Contracts" />` in projects that declare handlers or requests.
+
+The RVX0007 code fix only changes C# files. It does not edit `.csproj`, `.props` or `.targets` files.
+After swapping packages, check for leftover `MediatR` references, including central version entries and comments:
+
+```bash
+git grep -n 'MediatR' -- '*.csproj' '*.props' '*.targets'
+```
+
 Remove `MediatR.Contracts` and `MediatR.Extensions.Microsoft.DependencyInjection` too, if they are referenced.
 
 Getting this split wrong is reported: a library that references `Relevox` instead of `Relevox.Contracts` gets a
