@@ -260,9 +260,9 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     /// </para>
     /// <para>
     /// Those statements then run when <c>AddRelevox</c> calls the lambda, after the statements between them and the
-    /// call. So none of those may change a variable the moved code reads, the moved code may declare none, and no
-    /// preprocessor directive may stand between the declaration and the call, where it could hide another use of
-    /// the local.
+    /// call. A statement may stand in between only when neither side can affect the other (ADR 0029 states the
+    /// rule); the moved code may declare no variable and contain no <c>await</c>; and no preprocessor directive may
+    /// stand between the declaration and the call, where it could hide another use of the local.
     /// </para>
     /// </remarks>
     /// <param name="argument">An argument of an <c>AddMediatR</c> call.</param>
@@ -276,7 +276,7 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
             return [];
         }
 
-        if (Creation(argument.Expression) is ObjectCreationExpressionSyntax)
+        if (Creation(argument.Expression) is ObjectCreationExpressionSyntax && !Awaits(argument.Expression))
         {
             // The code fix calls the lambda's parameter options, which must not hide a variable the code uses.
             return model.LookupSymbols(argument.SpanStart, name: "options").IsEmpty ? [argument.Expression] : [];
@@ -327,22 +327,64 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
             return [];
         }
 
-        HashSet<ISymbol> read = new(SymbolEqualityComparer.Default);
-        foreach (SyntaxNode part in parts)
+        // The moved code, which runs later, when AddRelevox calls the lambda: the declaration's value and the statements.
+        SyntaxNode[] moving = [value, .. parts.Skip(1)];
+        foreach (SyntaxNode part in moving)
         {
-            DataFlowAnalysis? flow = part == declaration ? model.AnalyzeDataFlow(value) : model.AnalyzeDataFlow((StatementSyntax)part);
-            if (flow is not { Succeeded: true, VariablesDeclared.IsEmpty: true })
+            DataFlowAnalysis? flow = part is ExpressionSyntax expression ? model.AnalyzeDataFlow(expression) : model.AnalyzeDataFlow((StatementSyntax)part);
+            if (flow is not { Succeeded: true, VariablesDeclared.IsEmpty: true } || Awaits(part))
             {
                 return [];
             }
-
-            read.UnionWith(flow.ReadInside);
         }
 
-        return passed.Any(between => model.AnalyzeDataFlow(between) is not { Succeeded: true } flow || flow.WrittenInside.Any(read.Contains))
-            ? []
-            : [.. parts];
+        // Statements in between stay where they are, so the moved code runs after them. That is allowed only when
+        // neither side can affect the other: the moved code takes nothing but plain values, and the statements in
+        // between mention no variable, field, property or event it mentions.
+        if (passed.Count > 0)
+        {
+            HashSet<ISymbol> mentioned = new(moving.SelectMany(part => State(part, model, cancellationToken)), SymbolEqualityComparer.Default);
+            if (!moving.All(part => Plain(part, model, cancellationToken))
+                || passed.Any(between => State(between, model, cancellationToken).Any(mentioned.Contains)))
+            {
+                return [];
+            }
+        }
+
+        return [.. parts];
     }
+
+    // An await cannot move into the lambda, which is not async; one inside a lambda already in the code can.
+    private static bool Awaits(SyntaxNode node) =>
+        node.DescendantNodesAndSelf(static child => child is not AnonymousFunctionExpressionSyntax).OfType<AwaitExpressionSyntax>().Any();
+
+    // The variables, fields, properties and events the code names: what a statement could change or read.
+    private static IEnumerable<ISymbol> State(SyntaxNode node, SemanticModel model, CancellationToken cancellationToken) =>
+        node.DescendantNodesAndSelf().OfType<SimpleNameSyntax>()
+            .Select(name => model.GetSymbolInfo(name, cancellationToken).Symbol)
+            .Where(static symbol => symbol is ILocalSymbol or IParameterSymbol or IPropertySymbol or IEventSymbol or IFieldSymbol { IsConst: false })
+            .Select(static symbol => symbol!);
+
+    /// <summary>
+    /// Whether every argument and assigned value in the code, outside lambdas, is a plain value: a literal,
+    /// <c>default</c>, a <c>typeof</c> or a member of one, a constant or enum member, a lambda, or a read of a
+    /// local or parameter. Evaluating such code later than written cannot change what it evaluates to on its own.
+    /// </summary>
+    private static bool Plain(SyntaxNode node, SemanticModel model, CancellationToken cancellationToken) =>
+        node.DescendantNodesAndSelf(static child => child is not AnonymousFunctionExpressionSyntax)
+            .Select(static child => child switch
+            {
+                ArgumentSyntax argument => argument.Expression,
+                AssignmentExpressionSyntax assignment => assignment.Right,
+                _ => null,
+            })
+            .All(value => value is null || value switch
+            {
+                LiteralExpressionSyntax or DefaultExpressionSyntax or TypeOfExpressionSyntax or AnonymousFunctionExpressionSyntax => true,
+                MemberAccessExpressionSyntax { Expression: TypeOfExpressionSyntax } => true,
+                IdentifierNameSyntax or MemberAccessExpressionSyntax => model.GetSymbolInfo(value, cancellationToken).Symbol is ILocalSymbol or IParameterSymbol or IFieldSymbol { IsConst: true },
+                _ => false,
+            });
 
     /// <summary>The object creation at the start of <c>new MediatRServiceConfiguration { ... }.Call(...)</c>, or null.</summary>
     private static BaseObjectCreationExpressionSyntax? Creation(ExpressionSyntax expression)
