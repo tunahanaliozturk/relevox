@@ -29,7 +29,7 @@ public sealed class BlockingCallAnalyzer : DiagnosticAnalyzer
         category: "Relevox",
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0010",
+        helpLinkUri: HelpLink.To("rvx0010"),
         description: "Handlers, behaviours and processors all return tasks, so the task can be awaited. Blocking on it holds a thread for as long as the work takes and can deadlock under a synchronisation context.");
 
     /// <inheritdoc />

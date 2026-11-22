@@ -34,7 +34,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         category: "Relevox",
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0008",
+        helpLinkUri: HelpLink.To("rvx0008"),
         description: "A request sent from a handler goes through its own pipeline, behaviours and processors included, inside the pipeline of the request being handled. Calling the code the other handler would run, as a service, is usually what was meant.");
 
     /// <summary>A send that leads, through handlers in this project, back to the request being handled.</summary>
@@ -46,7 +46,7 @@ public sealed class HandlerSendAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0009",
+        helpLinkUri: HelpLink.To("rvx0009"),
         description: "Unless something along the way stops it, a request whose handler ends up sending the same request again recurses until the stack overflows. Only handlers in this project are followed.");
 
     /// <inheritdoc />

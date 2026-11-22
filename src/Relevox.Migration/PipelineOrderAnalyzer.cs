@@ -38,7 +38,7 @@ public sealed class PipelineOrderAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0013",
+        helpLinkUri: HelpLink.To("rvx0013"),
         description: "Behaviours with the same PipelineOrder keep registration order. Give each its own number, or none if registration order is what you want.");
 
     /// <inheritdoc />
