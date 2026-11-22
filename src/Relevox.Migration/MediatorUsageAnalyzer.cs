@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,9 +16,9 @@ namespace Relevox.Migration;
 /// removed package under several ids, an IDE's "Fix all" covers one id, so RVX0017 is one id for all of it.
 /// </para>
 /// <para>
-/// Mediator is further from Relevox than MediatR is, so there is a kind more than there: besides the names and
-/// the <c>AddMediator</c> call, a type is reported as a whole when its base list or its <c>Handle</c> method is in
-/// Mediator's shape, so that it is moved completely or not at all (ADR 0024).
+/// Mediator is further from Relevox than MediatR is, so there is a kind more than there: besides the names, the
+/// documentation <c>cref</c>s and the <c>AddMediator</c> call, a type is reported as a whole when its base list or
+/// its <c>Handle</c> method is in Mediator's shape, so that it is moved completely or not at all (ADR 0024).
 /// </para>
 /// <para>
 /// Nothing is reported while the Mediator package is still referenced: a project half way through a move keeps
@@ -38,6 +39,12 @@ public sealed class MediatorUsageAnalyzer : DiagnosticAnalyzer
 
     /// <summary>An <c>AddMediator</c> call.</summary>
     public const string RegistrationKind = "Registration";
+
+    /// <summary>
+    /// A <c>cref</c> in a documentation comment naming Mediator code, reported once for the whole <c>cref</c> and
+    /// only when <see cref="MediatorSyntax.MovedCref"/> moves it.
+    /// </summary>
+    public const string CrefKind = "Cref";
 
     /// <summary>
     /// Info, not a warning, for the reason RVX0007 is: the compiler already reports this code as an error once the
@@ -76,13 +83,28 @@ public sealed class MediatorUsageAnalyzer : DiagnosticAnalyzer
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeName), SyntaxKind.IdentifierName);
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeType), SyntaxKind.ClassDeclaration, SyntaxKind.RecordDeclaration, SyntaxKind.StructDeclaration, SyntaxKind.RecordStructDeclaration, SyntaxKind.InterfaceDeclaration);
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeInvocation), SyntaxKind.InvocationExpression);
+            HashSet<IAssemblySymbol> relevox = RelevoxAssemblies.Of(start.Compilation);
+            start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(context => AnalyzeCref(context, relevox)), SyntaxKind.XmlCrefAttribute);
         });
+    }
+
+    // Inside a type that is moved, the fix for this is the type's rewrite, which moves the cref the same way.
+    private static void AnalyzeCref(SyntaxNodeAnalysisContext context, HashSet<IAssemblySymbol> relevox)
+    {
+        CrefSyntax cref = ((XmlCrefAttributeSyntax)context.Node).Cref;
+        if (MediatorSyntax.MovedCref(cref, context.SemanticModel, relevox, context.CancellationToken) is not null)
+        {
+            Report(context, cref.GetLocation(), CrefKind, cref.ToString());
+        }
     }
 
     private static void AnalyzeName(SyntaxNodeAnalysisContext context)
     {
         IdentifierNameSyntax name = (IdentifierNameSyntax)context.Node;
+
+        // A name in a cref is moved with the whole cref, or not at all.
         if (name.Identifier.ValueText != "Mediator"
+            || name.FirstAncestorOrSelf<CrefSyntax>() is not null
             || !MediatorSyntax.IsMovable(name)
             || MediatorSyntax.Resolves(context.SemanticModel, name, context.CancellationToken))
         {

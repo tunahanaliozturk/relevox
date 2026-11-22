@@ -15,8 +15,9 @@ namespace Relevox.CodeFixes;
 /// </summary>
 /// <remarks>
 /// <para>
-/// RVX0017 points at three kinds of leftover, and this rewrites each. A name rooted at <c>Mediator</c> becomes
-/// one rooted at <c>Relevox</c>. A type in Mediator's shape, one whose base list names a command or a query or
+/// RVX0017 points at four kinds of leftover, and this rewrites each. A name rooted at <c>Mediator</c> becomes
+/// one rooted at <c>Relevox</c>, and a documentation <c>cref</c> is moved as a whole
+/// (<see cref="MediatorSyntax.MovedCref"/>). A type in Mediator's shape, one whose base list names a command or a query or
 /// whose <c>Handle</c> returns <c>ValueTask</c>, is rewritten as a whole: base list, return types, completed
 /// returns, <c>next</c> calls and constraints. An <c>AddMediator</c> call becomes <c>AddRelevox</c> with the
 /// lifetime written out. Because every kind shares the one id, "Fix all in solution" does the whole move in one
@@ -29,7 +30,8 @@ namespace Relevox.CodeFixes;
 /// </para>
 /// <para>
 /// A diagnostic inside a type that is moved is fixed by rewriting that whole type, whatever its kind, so that the
-/// fixes the batch fixer merges are the same change instead of overlapping ones.
+/// fixes the batch fixer merges are the same change instead of overlapping ones. That includes a documentation
+/// <c>cref</c> on the type or its members: the rewrite moves it as the fix for a <c>cref</c> elsewhere does.
 /// </para>
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(MigrateFromMediator))]
@@ -56,13 +58,16 @@ public sealed class MigrateFromMediator : CodeFixProvider
 
         foreach (Diagnostic diagnostic in context.Diagnostics)
         {
-            SyntaxNode node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+            // Inside trivia too: a cref lives in a documentation comment.
+            SyntaxNode node = root.FindNode(diagnostic.Location.SourceSpan, findInsideTrivia: true, getInnermostNodeForTie: true);
             diagnostic.Properties.TryGetValue(MediatorUsageAnalyzer.KindProperty, out string? kind);
 
             (SyntaxNode Target, SyntaxNode Replacement)? edit = (kind, node) switch
             {
-                (MediatorUsageAnalyzer.NameKind or MediatorUsageAnalyzer.TypeKind, _) when MediatorTypeRewriter.Outermost(node, model, context.CancellationToken) is { } type =>
+                (MediatorUsageAnalyzer.NameKind or MediatorUsageAnalyzer.TypeKind or MediatorUsageAnalyzer.CrefKind, _) when MediatorTypeRewriter.Outermost(node, model, context.CancellationToken) is { } type =>
                     (type, new MediatorTypeRewriter(model, context.CancellationToken).Rewrite(type)),
+                (MediatorUsageAnalyzer.CrefKind, _) when node.FirstAncestorOrSelf<XmlCrefAttributeSyntax>() is { } attribute
+                    && MediatorSyntax.MovedCref(attribute.Cref, model, context.CancellationToken) is { } moved => (attribute.Cref, moved),
                 (MediatorUsageAnalyzer.NameKind, IdentifierNameSyntax name) when name.FirstAncestorOrSelf<UsingDirectiveSyntax>() is { Parent: { } block } =>
                     (block, UsingsMover.Moved(block, candidate => candidate.Identifier.ValueText == "Mediator"
                         && MediatorSyntax.IsMovable(candidate)

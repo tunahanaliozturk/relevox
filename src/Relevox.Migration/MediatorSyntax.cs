@@ -4,6 +4,7 @@ using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Relevox.Migration;
 
@@ -129,12 +130,20 @@ public static class MediatorSyntax
     /// <param name="model">The semantic model of the file.</param>
     /// <param name="cancellationToken">The token to observe.</param>
     /// <returns>The name, or null.</returns>
-    public static Name? Read(TypeSyntax type, SemanticModel model, CancellationToken cancellationToken)
+    public static Name? Read(TypeSyntax type, SemanticModel model, CancellationToken cancellationToken) =>
+        type switch
+        {
+            QualifiedNameSyntax { Left: var left, Right: var right } => Read(right, left, model, cancellationToken),
+            SimpleNameSyntax simple => Read(simple, null, model, cancellationToken),
+            _ => null,
+        };
+
+    private static Name? Read(SimpleNameSyntax simple, NameSyntax? qualifier, SemanticModel model, CancellationToken cancellationToken)
     {
-        if (type is QualifiedNameSyntax { Left: var left, Right: var right })
+        if (qualifier is not null)
         {
             // Mediator.X and global::Mediator.X, with a root that is not the project's own namespace.
-            SimpleNameSyntax? root = left switch
+            SimpleNameSyntax? root = qualifier switch
             {
                 IdentifierNameSyntax identifier => identifier,
                 AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global", Name: var identifier } => identifier,
@@ -143,13 +152,8 @@ public static class MediatorSyntax
 
             return root is IdentifierNameSyntax rootName
                 && ((rootName.Identifier.ValueText == "Mediator" && !Resolves(model, rootName, cancellationToken)) || IsMediatorAlias(rootName))
-                ? new Name(right, left, resolved: false)
+                ? new Name(simple, qualifier, resolved: false)
                 : null;
-        }
-
-        if (type is not SimpleNameSyntax simple)
-        {
-            return null;
         }
 
         SymbolInfo info = model.GetSymbolInfo(simple, cancellationToken);
@@ -167,16 +171,163 @@ public static class MediatorSyntax
     private static bool IsMediatorAlias(IdentifierNameSyntax root)
     {
         string alias = root.Identifier.ValueText;
-        return root.Ancestors()
-            .SelectMany(static node => node switch
+        return Usings(root).Any(directive => directive.Alias?.Name.Identifier.ValueText == alias && NamesMediator(directive));
+    }
+
+    // The using directives of the file and the namespaces around the node.
+    private static IEnumerable<UsingDirectiveSyntax> Usings(SyntaxNode node) =>
+        node.Ancestors().SelectMany(static ancestor => ancestor switch
+        {
+            CompilationUnitSyntax unit => unit.Usings,
+            BaseNamespaceDeclarationSyntax space => space.Usings,
+            _ => default(SyntaxList<UsingDirectiveSyntax>),
+        });
+
+    // using ... Mediator; or using ... global::Mediator;
+    private static bool NamesMediator(UsingDirectiveSyntax directive) =>
+        directive.NamespaceOrType is IdentifierNameSyntax { Identifier.ValueText: "Mediator" }
+            or AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global", Name.Identifier.ValueText: "Mediator" };
+
+    /// <summary>
+    /// A documentation <c>cref</c> with its Mediator names moved as the code around it is moved, or null when it is
+    /// left as it is. Shared by the analyzer, which reports it, and the code fix, which writes it inside a type it
+    /// moves as well as on its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Mediator</c> at the root of a name Relevox has becomes <c>Relevox</c>, and a name in ADR 0024's table
+    /// becomes its row's, as a generic type definition: <c>ICommand{TResponse}</c> becomes
+    /// <c>IRequest{TResponse}</c>, and a void request or handler gains a type parameter called <c>Unit</c>, so
+    /// <c>ICommandHandler{TCommand}</c> becomes <c>IRequestHandler{TCommand, Unit}</c>. Type arguments in a
+    /// <c>cref</c> name type parameters, not types, so that is the definition the code now implements.
+    /// </para>
+    /// <para>
+    /// The <c>cref</c> is moved as a whole, and only when the result resolves into Relevox's own assemblies. A
+    /// simple name such as <c>IRequest{TResponse}</c> resolves only after the fix turns <c>using Mediator;</c> into
+    /// <c>using Relevox;</c>, so it is checked as <c>global::Relevox.IRequest{TResponse}</c>, and only where such a
+    /// using is in scope and nothing else of that name is. Anything else is left for the compiler's CS1574: a
+    /// <c>cref</c> to a Mediator type Relevox lacks, to a member Relevox's type does not have, or one that would
+    /// resolve to a type of the application's own.
+    /// </para>
+    /// </remarks>
+    /// <param name="cref">A <c>cref</c> from a documentation comment, in the tree the model is for.</param>
+    /// <param name="model">The semantic model of the file.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The moved <c>cref</c>, or null.</returns>
+    public static CrefSyntax? MovedCref(CrefSyntax cref, SemanticModel model, CancellationToken cancellationToken) =>
+        MovedCref(cref, model, RelevoxAssemblies.Of(model.Compilation), cancellationToken);
+
+    internal static CrefSyntax? MovedCref(CrefSyntax cref, SemanticModel model, HashSet<IAssemblySymbol> relevox, CancellationToken cancellationToken)
+    {
+        if (Resolves(model, cref, cancellationToken))
+        {
+            return null;
+        }
+
+        // Edits by span: what the cref becomes, and the probe that checks it with simple names qualified.
+        Dictionary<TextSpan, string> moved = new();
+        Dictionary<TextSpan, string> probe = new();
+        foreach (SimpleNameSyntax simple in cref.DescendantNodes().OfType<SimpleNameSyntax>())
+        {
+            // Type arguments in a cref declare type parameters; they are not names to move.
+            if (simple.Ancestors().TakeWhile(node => node != cref).Any(static node => node is TypeArgumentListSyntax)
+                || (simple.Parent is NameMemberCrefSyntax { Parent: QualifiedCrefSyntax { Container: not NameSyntax } })
+                || Read(simple, Qualifier(simple), model, cancellationToken) is not { } name)
             {
-                CompilationUnitSyntax unit => unit.Usings,
-                BaseNamespaceDeclarationSyntax space => space.Usings,
-                _ => default(SyntaxList<UsingDirectiveSyntax>),
-            })
-            .Any(directive => directive.Alias?.Name.Identifier.ValueText == alias
-                && directive.NamespaceOrType is IdentifierNameSyntax { Identifier.ValueText: "Mediator" }
-                    or AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global", Name.Identifier.ValueText: "Mediator" });
+                continue;
+            }
+
+            string written;
+            if (IsMapped(name))
+            {
+                (string target, bool unit) = Counterpart(name);
+                IEnumerable<string> parameters = name.Simple is GenericNameSyntax generic ? generic.TypeArgumentList.Arguments.Select(static argument => argument.ToString()) : [];
+                parameters = unit ? parameters.Append("Unit") : parameters;
+                written = parameters.Any() ? $"{target}{{{string.Join(", ", parameters)}}}" : target;
+                moved[simple.Span] = written;
+            }
+            else if (!name.Resolved && Mapped.Contains(name.Text))
+            {
+                written = simple.ToString();
+            }
+            else
+            {
+                continue;
+            }
+
+            if (name.Qualifier is { } qualifier)
+            {
+                foreach (IdentifierNameSyntax root in qualifier.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Where(static root => root.Identifier.ValueText == "Mediator"))
+                {
+                    moved[root.Span] = "Relevox";
+                }
+            }
+            else if (model.LookupNamespacesAndTypes(cref.SpanStart, name: Identifier(written)).IsEmpty)
+            {
+                probe[simple.Span] = "global::Relevox." + written;
+            }
+        }
+
+        if (moved.Count == 0 || (probe.Count > 0 && !ImportsMediator(cref, model.Compilation, cancellationToken)))
+        {
+            return null;
+        }
+
+        foreach (KeyValuePair<TextSpan, string> edit in moved)
+        {
+            if (!probe.ContainsKey(edit.Key))
+            {
+                probe[edit.Key] = edit.Value;
+            }
+        }
+
+        return model.GetSpeculativeSymbolInfo(cref.SpanStart, Edited(cref, probe), SpeculativeBindingOption.BindAsTypeOrNamespace).Symbol is { } symbol
+            && RelevoxAssemblies.Hold(relevox, symbol)
+                ? Edited(cref, moved)
+                : null;
+
+        static string Identifier(string written) => written.Split('{')[0];
+    }
+
+    // What a simple name in a cref is qualified with: Mediator in Mediator.IRequest{T}, which the parser reads as a
+    // member IRequest{T} of a container Mediator, as well as in a parameter's Mediator.IRequest{T}.
+    private static NameSyntax? Qualifier(SimpleNameSyntax simple) => simple.Parent switch
+    {
+        QualifiedNameSyntax qualified when qualified.Right == simple => qualified.Left,
+        NameMemberCrefSyntax { Parent: QualifiedCrefSyntax { Container: NameSyntax container } } => container,
+        _ => null,
+    };
+
+    // The cref's text with the edits made, parsed again as a cref.
+    private static CrefSyntax Edited(CrefSyntax cref, Dictionary<TextSpan, string> edits)
+    {
+        string text = SourceText.From(cref.ToString())
+            .WithChanges(edits.Select(edit => new TextChange(new TextSpan(edit.Key.Start - cref.SpanStart, edit.Key.Length), edit.Value)))
+            .ToString();
+        return SyntaxFactory.ParseCompilationUnit($"/// <see cref=\"{text}\"/>\nclass C {{ }}", options: CSharpParseOptions.Default.WithDocumentationMode(DocumentationMode.Parse))
+            .DescendantNodes(descendIntoTrivia: true)
+            .OfType<XmlCrefAttributeSyntax>()
+            .Single()
+            .Cref;
+    }
+
+    // Whether a plain using of Mediator, which the fix turns into one of Relevox, covers the node: in its file or a
+    // namespace around it, or as a global using anywhere in the project.
+    private static bool ImportsMediator(SyntaxNode node, Compilation compilation, CancellationToken cancellationToken) =>
+        Usings(node)
+            .Concat(compilation.SyntaxTrees.SelectMany(tree => tree.GetCompilationUnitRoot(cancellationToken).Usings.Where(static directive => directive.GlobalKeyword.RawKind != 0)))
+            .Any(static directive => directive is { Alias: null, StaticKeyword.RawKind: 0 } && NamesMediator(directive));
+
+    /// <summary>The row of ADR 0024's table for a name in it.</summary>
+    /// <param name="name">A name for which <see cref="IsMapped"/> is true.</param>
+    /// <returns>Relevox's name, and whether <c>Unit</c> is added as its last type argument.</returns>
+    public static (string Name, bool AddsUnit) Counterpart(Name name)
+    {
+        bool handler = name.Text.EndsWith("Handler", System.StringComparison.Ordinal);
+        string target = name.Text.StartsWith("IStream", System.StringComparison.Ordinal)
+            ? (handler ? "IStreamRequestHandler" : "IStreamRequest")
+            : (handler ? "IRequestHandler" : "IRequest");
+        return (target, name.Arity == 0 || (handler && name.Arity == 1));
     }
 
     /// <summary>Whether the table in ADR 0024 rewrites this name, which is when it is not already Relevox's.</summary>

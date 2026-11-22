@@ -99,13 +99,7 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
 
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeName), SyntaxKind.IdentifierName);
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeInvocation), SyntaxKind.InvocationExpression);
-            // Relevox's own assemblies: the contracts, and the runtime that declares RelevoxOptions.
-            HashSet<IAssemblySymbol> relevox = new(SymbolEqualityComparer.Default) { start.Compilation.GetTypeByMetadataName("Relevox.IBaseRequest")!.ContainingAssembly };
-            if (start.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.RelevoxOptions") is { } options)
-            {
-                relevox.Add(options.ContainingAssembly);
-            }
-
+            HashSet<IAssemblySymbol> relevox = RelevoxAssemblies.Of(start.Compilation);
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(context => AnalyzeCref(context, relevox)), SyntaxKind.XmlCrefAttribute);
         });
     }
@@ -136,9 +130,7 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
         if (moved == cref
             || context.SemanticModel.GetSymbolInfo(cref, context.CancellationToken) is { Symbol: not null } or { CandidateSymbols.Length: > 0 }
             || context.SemanticModel.GetSpeculativeSymbolInfo(cref.SpanStart, moved, SpeculativeBindingOption.BindAsTypeOrNamespace).Symbol is not { } symbol
-            || !(symbol is INamespaceSymbol space
-                ? space.ConstituentNamespaces.Any(part => part.ContainingAssembly is { } assembly && relevox.Contains(assembly))
-                : symbol.ContainingAssembly is { } owner && relevox.Contains(owner)))
+            || !RelevoxAssemblies.Hold(relevox, symbol))
         {
             return;
         }

@@ -22,8 +22,13 @@ namespace Relevox.CodeFixes;
 /// A nested type that is not itself in Mediator's shape is left as it is, apart from the roots renamed
 /// everywhere, which is what RVX0017's name diagnostic would have done to it.
 /// </para>
+/// <para>
+/// Documentation comments are visited too, for their <c>cref</c>s, which move everywhere in the declaration as
+/// <see cref="MediatorSyntax.MovedCref"/> says: RVX0017 reports a <c>cref</c> inside a type that is moved, and
+/// its fix is this rewrite, so the rewrite has to carry it.
+/// </para>
 /// </remarks>
-internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToken cancellationToken) : CSharpSyntaxRewriter
+internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToken cancellationToken) : CSharpSyntaxRewriter(visitIntoStructuredTrivia: true)
 {
     // Marks a next(message, cancellationToken) call found by symbol on the original tree, for NextCalls to rewrite.
     private static readonly SyntaxAnnotation NextCall = new("Relevox.NextCall");
@@ -78,6 +83,11 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             active = outer;
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>Not the names inside: a cref moves as a whole or not at all.</remarks>
+    public override SyntaxNode? VisitXmlCrefAttribute(XmlCrefAttributeSyntax node) =>
+        MediatorSyntax.MovedCref(node.Cref, model, cancellationToken) is { } moved ? node.WithCref(moved) : node;
 
     /// <inheritdoc />
     public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node) =>
@@ -282,17 +292,10 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             return spaced ? unit.WithLeadingTrivia(SyntaxFactory.Space) : unit;
         }
 
-        bool handler = name.Text.EndsWith("Handler", System.StringComparison.Ordinal);
-        string target = name.Text.StartsWith("IStream", System.StringComparison.Ordinal)
-            ? (handler ? "IStreamRequestHandler" : "IStreamRequest")
-            : (handler ? "IRequestHandler" : "IRequest");
-        if (name.Arity == 0)
+        (string target, bool unit) = MediatorSyntax.Counterpart(name);
+        if (unit)
         {
-            arguments.Add(Unit(spaced: false));
-        }
-        else if (handler && name.Arity == 1)
-        {
-            arguments.Add(Unit(spaced: true));
+            arguments.Add(Unit(spaced: name.Arity > 0));
         }
 
         GenericNameSyntax relevox = SyntaxFactory.GenericName(
