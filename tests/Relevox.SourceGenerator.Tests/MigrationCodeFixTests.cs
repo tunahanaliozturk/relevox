@@ -736,10 +736,15 @@ public sealed class MigrationCodeFixTests
             /// <see cref="MediatR.Pipeline.IRequestPreProcessor{TRequest}"/> and <see cref="global::MediatR.IMediator"/>,
             /// set up with <see cref="MediatRServiceConfiguration"/>. <see cref="IMediator"/> resolves again once the using moves.
             /// </summary>
+            /// <seealso cref="MediatR.IPublisher"/>
             public static class Sender
             {
                 /// <returns><see cref="MediatR.Unit.Value"/>.</returns>
+                /// <exception cref="MediatR.IMediator">Never.</exception>
                 public static MediatR.Unit Done() => MediatR.Unit.Value;
+
+                /// <inheritdoc cref="MediatR.ISender.Send{TResponse}(MediatR.IRequest{TResponse}, System.Threading.CancellationToken)"/>
+                public static void Inherited() { }
             }
             """);
 
@@ -753,7 +758,28 @@ public sealed class MigrationCodeFixTests
         sender.ShouldContain("""<see cref="IMediator"/>""");
         sender.ShouldContain("""<returns><see cref="Relevox.Unit.Value"/>.</returns>""");
         sender.ShouldContain("public static Relevox.Unit Done() => Relevox.Unit.Value;");
+        sender.ShouldContain("""<seealso cref="Relevox.IPublisher"/>""");
+        sender.ShouldContain("""<exception cref="Relevox.IMediator">""");
+        sender.ShouldContain("""<inheritdoc cref="Relevox.ISender.Send{TResponse}(Relevox.IRequest{TResponse}, System.Threading.CancellationToken)"/>""");
         ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_cref_is_moved_only_onto_Relevox_and_not_onto_a_type_of_your_own_with_the_same_name()
+    {
+        // Shop.RelevoxOptions hides Relevox's own inside namespace Shop; moving the cref there would point it at the
+        // wrong type, so it is left for the compiler.
+        ImmutableArray<Diagnostic> diagnostics = await Reported("""
+            namespace Shop
+            {
+                public sealed class RelevoxOptions;
+
+                /// <summary>Set up with <see cref="MediatRServiceConfiguration"/>.</summary>
+                public static class Sender;
+            }
+            """);
+
+        diagnostics.ShouldBeEmpty();
     }
 
     [Fact]
