@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Tunahan Ali Ozturk",
+  "classifications": ["Web", "WebAPI", "Relevox"],
+  "identity": "Relevox.Templates.WebApi",
+  "name": "Relevox minimal API",
+  "description": "An ASP.NET Core minimal API with Relevox registered, one request sent from an endpoint, and an xUnit test project that calls the endpoint over HTTP.",
+  "shortName": "relevox-webapi",
+  "sourceName": "RelevoxWebApi",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "Framework": {
+      "type": "parameter",
+      "description": "The target framework.",
+      "datatype": "choice",
+      "choices": [
+        { "choice": "net10.0", "description": ".NET 10" },
+        { "choice": "net11.0", "description": ".NET 11" }
+      ],
+      "defaultValue": "net10.0",
+      "replaces": "net10.0"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "RelevoxWebApi/RelevoxWebApi.csproj" },
+    { "path": "RelevoxWebApi.Tests/RelevoxWebApi.Tests.csproj" }
+  ]
+}

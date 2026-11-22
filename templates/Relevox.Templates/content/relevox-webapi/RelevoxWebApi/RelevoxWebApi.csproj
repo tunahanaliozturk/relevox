@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Brings the source generator, which finds the handlers while the project builds. -->
+    <PackageReference Include="Relevox" Version="RELEVOX_VERSION" />
+  </ItemGroup>
+
+</Project>
