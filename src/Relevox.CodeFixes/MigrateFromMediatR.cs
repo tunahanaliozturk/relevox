@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Formatting;
 using Relevox.Migration;
 
 namespace Relevox.CodeFixes;
@@ -25,9 +26,11 @@ namespace Relevox.CodeFixes;
 /// kind shares the one id, "Fix all in solution" does the whole migration in one go.
 /// </para>
 /// <para>
-/// Where the configuration cannot be carried over without guessing, as when it is built as an object and
-/// passed in, no fix is offered and the compiler error stays. Removing code is done so that comments and
-/// preprocessor directives around it survive.
+/// An options object passed to <c>AddMediatR</c> becomes the lambda <c>AddRelevox</c> takes when it is made in
+/// the call, or in a local filled in by plain statements and used nowhere else
+/// (<see cref="MediatRUsageAnalyzer.OptionsObject"/>). Where the configuration cannot be carried over without
+/// guessing, as when the object is passed to a method or built in another one, no fix is offered and the compiler
+/// error stays. Removing code is done so that comments and preprocessor directives around it survive.
 /// </para>
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(MigrateFromMediatR))]
@@ -80,11 +83,9 @@ public sealed class MigrateFromMediatR : CodeFixProvider
             {
                 ("Cref", _) when node.FirstAncestorOrSelf<XmlCrefAttributeSyntax>() is { } attribute => (attribute.Cref, MediatRUsageAnalyzer.Moved(attribute.Cref)),
                 ("Name", IdentifierNameSyntax name) when name.FirstAncestorOrSelf<UsingDirectiveSyntax>() is { Parent: { } block } => (block, UsingsMover.Moved(block, static candidate => candidate.Identifier.ValueText == "MediatR" && MediatRUsageAnalyzer.IsMovable(candidate))),
-                ("Name", IdentifierNameSyntax name) => (name, UsingsMover.Renamed(name, "Relevox")),
-                ("Configuration", IdentifierNameSyntax name) => (name, UsingsMover.Renamed(name, "RelevoxOptions")),
-                ("Strategy", IdentifierNameSyntax name) => (name, Qualified(name)),
+                ("Name" or "Configuration" or "Strategy", IdentifierNameSyntax name) => (name, Renamed(name, kind)),
                 ("Registration", SimpleNameSyntax method) when Registration(method) is { } call
-                    && Rewrite(call, method, model, context.CancellationToken) is { } rewritten => (call, rewritten),
+                    && Rewrite(call, method, model, context.CancellationToken) is { } rewritten => rewritten,
                 _ => null,
             };
 
@@ -102,6 +103,14 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         }
     }
 
+    private static SyntaxNode Renamed(IdentifierNameSyntax name, string kind) =>
+        kind switch
+        {
+            "Name" => UsingsMover.Renamed(name, "Relevox"),
+            "Configuration" => UsingsMover.Renamed(name, "RelevoxOptions"),
+            _ => Qualified(name),
+        };
+
     // RequestExceptionActionProcessorStrategy, which code that configured MediatR found through
     // Microsoft.Extensions.DependencyInjection, written with the namespace Relevox declares it in.
     private static SyntaxNode Qualified(IdentifierNameSyntax name)
@@ -110,6 +119,7 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         SyntaxNode qualified = SyntaxFacts.IsInTypeOnlyContext(name) ? SyntaxFactory.ParseTypeName(Full) : SyntaxFactory.ParseExpression(Full);
         return qualified.WithTriviaFrom(name);
     }
+
     private static InvocationExpressionSyntax? Registration(SimpleNameSyntax method) =>
         method.Parent switch
         {
@@ -119,9 +129,10 @@ public sealed class MigrateFromMediatR : CodeFixProvider
         };
 
     /// <summary>
-    /// <c>AddMediatR(...)</c> as <c>AddRelevox(...)</c>, or null when the configuration cannot be carried over.
+    /// <c>AddMediatR(...)</c> as <c>AddRelevox(...)</c>, or null when the configuration cannot be carried over. The
+    /// edit is the call, or the block holding it when a local options object goes.
     /// </summary>
-    private static InvocationExpressionSyntax? Rewrite(InvocationExpressionSyntax call, SimpleNameSyntax method, SemanticModel model, CancellationToken cancellationToken)
+    private static (SyntaxNode Target, SyntaxNode Replacement)? Rewrite(InvocationExpressionSyntax call, SimpleNameSyntax method, SemanticModel model, CancellationToken cancellationToken)
     {
         IdentifierNameSyntax addRelevox = SyntaxFactory.IdentifierName("AddRelevox").WithTriviaFrom(method);
         ExpressionSyntax expression = call.Expression switch
@@ -136,12 +147,24 @@ public sealed class MigrateFromMediatR : CodeFixProvider
 
         bool staticForm = call.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "MediatRServiceCollectionExtensions" } };
         List<ArgumentSyntax> kept = [];
+        ImmutableArray<SyntaxNode> options = [];
         for (int index = 0; index < call.ArgumentList.Arguments.Count; index++)
         {
             ArgumentSyntax argument = call.ArgumentList.Arguments[index];
             if (staticForm && index == 0)
             {
                 kept.Add(argument);
+                continue;
+            }
+
+            if (options.IsEmpty && MediatRUsageAnalyzer.OptionsObject(argument, model, cancellationToken) is { IsEmpty: false } parts)
+            {
+                options = parts;
+                if (Trim(Lambda(parts, model, cancellationToken)) is { } lambda)
+                {
+                    kept.Add(argument.WithNameColon(null).WithExpression(lambda));
+                }
+
                 continue;
             }
 
@@ -170,9 +193,72 @@ public sealed class MigrateFromMediatR : CodeFixProvider
             return null;
         }
 
-        return call
+        InvocationExpressionSyntax rewritten = call
             .WithExpression(expression)
             .WithArgumentList(call.ArgumentList.WithArguments(SyntaxFactory.SeparatedList(kept)));
+        if (options.IsEmpty || options[0] is not LocalDeclarationStatementSyntax { Parent: BlockSyntax block } declaration)
+        {
+            return (call, rewritten);
+        }
+
+        // The local and the statements that filled it in go: the lambda has them now. Comments and directives above
+        // the declaration stay where they were; those on a moved statement went with it.
+        BlockSyntax edited = block.TrackNodes([call, .. options]);
+        edited = edited.ReplaceNode(edited.GetCurrentNode(call)!, rewritten);
+        for (int index = options.Length - 1; index >= 0; index--)
+        {
+            edited = Remove(edited, (StatementSyntax)edited.GetCurrentNode(options[index])!, keepComments: options[index] == declaration);
+        }
+
+        return (block, edited);
+    }
+
+    /// <summary>
+    /// The lambda an options object becomes: its initializer's assignments, the calls chained after its creation and
+    /// the statements that filled it in, each made on the lambda's parameter, which takes the local's name.
+    /// </summary>
+    private static SimpleLambdaExpressionSyntax Lambda(ImmutableArray<SyntaxNode> parts, SemanticModel model, CancellationToken cancellationToken)
+    {
+        // The MediatR names inside are this fix's to move: the analyzer leaves them alone, so its edits cannot
+        // overlap this one.
+        SyntaxNode[] moved =
+        [
+            .. parts.Select(part => part.ReplaceNodes(
+                part.DescendantNodes().OfType<IdentifierNameSyntax>().Where(name => MediatRUsageAnalyzer.KindOf(name, model, cancellationToken) is not null),
+                (name, _) => Renamed(name, MediatRUsageAnalyzer.KindOf(name, model, cancellationToken)!))),
+        ];
+
+        (string parameter, ExpressionSyntax value) = moved[0] is LocalDeclarationStatementSyntax declaration
+            ? (declaration.Declaration.Variables[0].Identifier.ValueText, declaration.Declaration.Variables[0].Initializer!.Value)
+            : ("options", (ExpressionSyntax)moved[0]);
+
+        ExpressionSyntax creation = value;
+        while (creation is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: { } receiver } })
+        {
+            creation = receiver;
+        }
+
+        IdentifierNameSyntax self = SyntaxFactory.IdentifierName(parameter);
+        List<StatementSyntax> statements =
+        [
+            .. ((BaseObjectCreationExpressionSyntax)creation).Initializer?.Expressions.Cast<AssignmentExpressionSyntax>().Select(assignment =>
+                Statement(assignment.WithLeft(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, self, (SimpleNameSyntax)assignment.Left)))) ?? [],
+        ];
+        if (value != creation)
+        {
+            statements.Add(Statement(value.ReplaceNode(creation, self)));
+        }
+
+        statements.AddRange(moved.Skip(1).Cast<StatementSyntax>());
+        SimpleLambdaExpressionSyntax lambda = SyntaxFactory.SimpleLambdaExpression(SyntaxFactory.Parameter(SyntaxFactory.Identifier(parameter)));
+        return statements.Count == 1 && statements[0] is ExpressionStatementSyntax { Expression: var only } && moved.Length == 1
+            ? lambda.WithExpressionBody(only)
+            : lambda.WithBlock(SyntaxFactory.Block(statements)).WithAdditionalAnnotations(Formatter.Annotation);
+
+        // A statement on a line of its own, laid out by the formatter. Elastic trivia leaves the layout to it, and
+        // the line break keeps it from treating the block as one written on a single line, which it would keep.
+        static ExpressionStatementSyntax Statement(ExpressionSyntax expression) =>
+            SyntaxFactory.ExpressionStatement(expression.WithoutTrivia()).WithLeadingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed);
     }
 
     private enum Argument
@@ -252,12 +338,14 @@ public sealed class MigrateFromMediatR : CodeFixProvider
     /// Removes a statement from its block, keeping the comments and directives above it on the next line. Its
     /// indentation goes with it: carried over, it would indent the next line twice. When it opened the block,
     /// the blank lines that separated it from the next statement go too, so the block does not start with one.
+    /// A statement moved elsewhere has taken its comments with it, so they are not kept.
     /// </summary>
-    private static AnonymousFunctionExpressionSyntax Remove(AnonymousFunctionExpressionSyntax function, StatementSyntax statement)
+    private static T Remove<T>(T root, StatementSyntax statement, bool keepComments = true)
+        where T : SyntaxNode
     {
         SyntaxTriviaList leading = statement.GetLeadingTrivia();
         List<SyntaxTrivia> kept = [];
-        if (leading.Any(static trivia => !trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia)))
+        if (keepComments && leading.Any(static trivia => !trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia)))
         {
             int last = leading.Count - 1;
             while (last >= 0 && leading[last].IsKind(SyntaxKind.WhitespaceTrivia))
@@ -270,9 +358,9 @@ public sealed class MigrateFromMediatR : CodeFixProvider
 
         SyntaxAnnotation next = new();
         SyntaxToken following = statement.GetLastToken().GetNextToken();
-        AnonymousFunctionExpressionSyntax marked = function.ReplaceToken(following, following.WithAdditionalAnnotations(next));
+        T marked = root.ReplaceToken(following, following.WithAdditionalAnnotations(next));
         StatementSyntax target = marked.DescendantNodes().OfType<StatementSyntax>().First(candidate => candidate.SpanStart == statement.SpanStart && candidate.IsKind(statement.Kind()));
-        AnonymousFunctionExpressionSyntax removed = marked.RemoveNode(target, SyntaxRemoveOptions.KeepNoTrivia)!;
+        T removed = marked.RemoveNode(target, SyntaxRemoveOptions.KeepNoTrivia)!;
         SyntaxToken landing = removed.GetAnnotatedTokens(next).Single();
         SyntaxTriviaList rest = landing.LeadingTrivia;
         if (kept.Count == 0 && statement.Parent is BlockSyntax block && block.Statements[0] == statement)

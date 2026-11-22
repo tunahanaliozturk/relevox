@@ -260,6 +260,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [26. Singleton handlers are held per container, scoped ones per mediator on first use](docs/adr/0026-singletons-held-per-container.md)
 - [27. The documentation site is built by a script with one markdown library](docs/adr/0027-documentation-site-script.md)
 - [28. Writing a missing handler or request](docs/adr/0028-writing-handlers-and-requests.md)
+- [28. An options object passed to AddMediatR becomes a lambda](docs/adr/0028-options-object-to-lambda.md)
 - [30. The dotnet new templates](docs/adr/0030-dotnet-new-templates.md)
 
 ## Roadmap

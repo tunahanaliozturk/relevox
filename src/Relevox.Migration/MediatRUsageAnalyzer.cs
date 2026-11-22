@@ -1,10 +1,12 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Relevox.Migration;
 
@@ -136,45 +138,51 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeName(SyntaxNodeAnalysisContext context)
     {
         IdentifierNameSyntax name = (IdentifierNameSyntax)context.Node;
+
+        // Inside an options object the fix turns into a lambda, the names are moved with it, by the AddMediatR
+        // fix: an edit of their own would overlap that one, and "Fix all" would drop one of the two.
+        if (KindOf(name, context.SemanticModel, context.CancellationToken) is not { } kind
+            || InOptionsObject(name, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        string text = name.Identifier.ValueText;
+        string? second = kind == NameKind ? SecondPart(name) : null;
+        Report(context, name, kind, second is null ? text : $"{text}.{second}");
+    }
+
+    /// <summary>
+    /// What RVX0007 reports this name as, or null when it is not reported. Shared with the code fix, which moves
+    /// the names inside an options object itself.
+    /// </summary>
+    /// <param name="name">An identifier in code.</param>
+    /// <param name="model">The semantic model of its tree.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns><see cref="NameKind"/>, <see cref="ConfigurationKind"/>, <see cref="StrategyKind"/> or null.</returns>
+    public static string? KindOf(IdentifierNameSyntax name, SemanticModel model, CancellationToken cancellationToken)
+    {
         string text = name.Identifier.ValueText;
         if (text is not ("MediatR" or "MediatRServiceConfiguration" or "RequestExceptionActionProcessorStrategy")
             || name.FirstAncestorOrSelf<CrefSyntax>() is not null
-            || Resolves(context.SemanticModel, name, context))
+            || model.GetSymbolInfo(name, cancellationToken) is { Symbol: not null } or { CandidateSymbols.Length: > 0 })
         {
-            return;
+            return null;
         }
 
-        if (text == "MediatRServiceConfiguration")
+        return text switch
         {
-            Report(context, name, ConfigurationKind, text);
-            return;
-        }
+            "MediatRServiceConfiguration" => ConfigurationKind,
 
-        if (text == "RequestExceptionActionProcessorStrategy")
-        {
             // Only the simple name: Company.RequestExceptionActionProcessorStrategy is somebody else's type.
-            bool qualified = name.Parent switch
+            "RequestExceptionActionProcessorStrategy" => name.Parent switch
             {
-                QualifiedNameSyntax parent => parent.Right == name,
-                MemberAccessExpressionSyntax parent => parent.Name == name,
-                _ => false,
-            };
-
-            if (!qualified)
-            {
-                Report(context, name, StrategyKind, text);
-            }
-
-            return;
-        }
-
-        if (!IsMovable(name))
-        {
-            return;
-        }
-
-        string? second = SecondPart(name);
-        Report(context, name, NameKind, second is null ? text : $"{text}.{second}");
+                QualifiedNameSyntax parent when parent.Right == name => null,
+                MemberAccessExpressionSyntax parent when parent.Name == name => null,
+                _ => StrategyKind,
+            },
+            _ => IsMovable(name) ? NameKind : null,
+        };
     }
 
     /// <summary>
@@ -212,24 +220,190 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         InvocationExpressionSyntax invocation = (InvocationExpressionSyntax)context.Node;
-        SimpleNameSyntax? method = invocation.Expression switch
-        {
-            MemberAccessExpressionSyntax access => access.Name,
-            IdentifierNameSyntax identifier => identifier,
-            _ => null,
-        };
-
-        if (method is { Identifier.ValueText: "AddMediatR" }
+        if (Registered(invocation) is { } method
             && context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol is null)
         {
             Report(context, method, RegistrationKind, "AddMediatR");
         }
     }
 
-    private static bool Resolves(SemanticModel model, IdentifierNameSyntax name, SyntaxNodeAnalysisContext context)
+    // The method name of an AddMediatR call, or null for any other call.
+    private static SimpleNameSyntax? Registered(InvocationExpressionSyntax invocation) =>
+        invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax { Name.Identifier.ValueText: "AddMediatR" } access => access.Name,
+            IdentifierNameSyntax { Identifier.ValueText: "AddMediatR" } identifier => identifier,
+            _ => null,
+        };
+
+    /// <summary>
+    /// The code an options object passed to <c>AddMediatR</c> is built from, when the code fix can turn it into
+    /// the lambda <c>AddRelevox</c> takes; empty for any other argument. Shared with the code fix.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two shapes qualify. The object made in the call itself, <c>new MediatRServiceConfiguration { ... }</c> with
+    /// or without a chain of calls after it, comes back as that expression. A local made the same way in the block
+    /// that holds the call comes back as its declaration followed by the statements that fill it in: plain ones,
+    /// <c>config.Member(...);</c> or <c>config.Member = value;</c>, with the local used nowhere else.
+    /// </para>
+    /// <para>
+    /// Those statements then run when <c>AddRelevox</c> calls the lambda, after the statements between them and the
+    /// call. So none of those may change a variable the moved code reads, the moved code may declare none, and no
+    /// preprocessor directive may stand between the declaration and the call, where it could hide another use of
+    /// the local.
+    /// </para>
+    /// </remarks>
+    /// <param name="argument">An argument of an <c>AddMediatR</c> call.</param>
+    /// <param name="model">The semantic model of its tree.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns>The expression, or the declaration and the statements in order; empty when nothing can be moved.</returns>
+    public static ImmutableArray<SyntaxNode> OptionsObject(ArgumentSyntax argument, SemanticModel model, CancellationToken cancellationToken)
     {
-        SymbolInfo info = model.GetSymbolInfo(name, context.CancellationToken);
-        return info.Symbol is not null || info.CandidateSymbols.Length > 0;
+        if (argument.Parent?.Parent is not InvocationExpressionSyntax call || Registered(call) is null)
+        {
+            return [];
+        }
+
+        if (Creation(argument.Expression) is ObjectCreationExpressionSyntax)
+        {
+            // The code fix calls the lambda's parameter options, which must not hide a variable the code uses.
+            return model.LookupSymbols(argument.SpanStart, name: "options").IsEmpty ? [argument.Expression] : [];
+        }
+
+        if (argument.Expression is not IdentifierNameSyntax reference
+            || model.GetSymbolInfo(reference, cancellationToken).Symbol is not ILocalSymbol local
+            || call.FirstAncestorOrSelf<StatementSyntax>() is not { Parent: BlockSyntax block } statement
+            || call.Ancestors().TakeWhile(node => node != statement).Any(static node => node is AnonymousFunctionExpressionSyntax)
+            || local.DeclaringSyntaxReferences.Length != 1
+            || local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax
+            {
+                Initializer.Value: { } value,
+                Parent: VariableDeclarationSyntax { Variables.Count: 1, Parent: LocalDeclarationStatementSyntax { UsingKeyword.RawKind: 0, Modifiers.Count: 0 } declaration } variables,
+            }
+            || declaration.Parent != block
+            || Creation(value) is not { } creation
+            || (creation is ImplicitObjectCreationExpressionSyntax && !IsConfiguration(variables.Type)))
+        {
+            return [];
+        }
+
+        int first = block.Statements.IndexOf(declaration);
+        int last = block.Statements.IndexOf(statement);
+        List<SyntaxNode> parts = [declaration];
+        List<StatementSyntax> passed = [];
+        for (int index = first + 1; index < last; index++)
+        {
+            StatementSyntax between = block.Statements[index];
+            switch (Uses(between, local, model, cancellationToken))
+            {
+                case 0:
+                    passed.Add(between);
+                    break;
+                case 1 when Fills(between, local.Name):
+                    parts.Add(between);
+                    break;
+                default:
+                    return [];
+            }
+        }
+
+        if (first > last
+            || Uses(statement, local, model, cancellationToken) != 1
+            || block.Statements.Skip(last + 1).Any(later => Uses(later, local, model, cancellationToken) > 0)
+            || block.DescendantTrivia(TextSpan.FromBounds(declaration.SpanStart, statement.SpanStart)).Any(static trivia => trivia.IsDirective || trivia.IsKind(SyntaxKind.DisabledTextTrivia)))
+        {
+            return [];
+        }
+
+        HashSet<ISymbol> read = new(SymbolEqualityComparer.Default);
+        foreach (SyntaxNode part in parts)
+        {
+            DataFlowAnalysis? flow = part == declaration ? model.AnalyzeDataFlow(value) : model.AnalyzeDataFlow((StatementSyntax)part);
+            if (flow is not { Succeeded: true, VariablesDeclared.IsEmpty: true })
+            {
+                return [];
+            }
+
+            read.UnionWith(flow.ReadInside);
+        }
+
+        return passed.Any(between => model.AnalyzeDataFlow(between) is not { Succeeded: true } flow || flow.WrittenInside.Any(read.Contains))
+            ? []
+            : [.. parts];
+    }
+
+    /// <summary>The object creation at the start of <c>new MediatRServiceConfiguration { ... }.Call(...)</c>, or null.</summary>
+    private static BaseObjectCreationExpressionSyntax? Creation(ExpressionSyntax expression)
+    {
+        while (expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: { } receiver } })
+        {
+            expression = receiver;
+        }
+
+        // MediatR's configuration takes no constructor arguments, and only plain assignments can move into a lambda.
+        return expression is BaseObjectCreationExpressionSyntax creation
+            && creation.ArgumentList is null or { Arguments.Count: 0 }
+            && (creation is ImplicitObjectCreationExpressionSyntax || IsConfiguration(((ObjectCreationExpressionSyntax)creation).Type))
+            && (creation.Initializer is null
+                || (creation.Initializer.IsKind(SyntaxKind.ObjectInitializerExpression)
+                    && creation.Initializer.Expressions.All(static member => member is AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression, Left: IdentifierNameSyntax })))
+            ? creation
+            : null;
+    }
+
+    private static bool IsConfiguration(TypeSyntax type) =>
+        type switch
+        {
+            QualifiedNameSyntax qualified => qualified.Right,
+            AliasQualifiedNameSyntax alias => alias.Name,
+            SimpleNameSyntax simple => simple,
+            _ => null,
+        } is IdentifierNameSyntax { Identifier.ValueText: "MediatRServiceConfiguration" };
+
+    // config.Member(...); or config.Member = value;
+    private static bool Fills(StatementSyntax statement, string local)
+    {
+        ExpressionSyntax? node = statement switch
+        {
+            ExpressionStatementSyntax { Expression: InvocationExpressionSyntax invocation } => invocation,
+            ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression, Left: MemberAccessExpressionSyntax member } } => member,
+            _ => null,
+        };
+
+        while (node is InvocationExpressionSyntax or MemberAccessExpressionSyntax)
+        {
+            node = node is InvocationExpressionSyntax invocation ? invocation.Expression : ((MemberAccessExpressionSyntax)node).Expression;
+        }
+
+        return node is IdentifierNameSyntax root && root.Identifier.ValueText == local;
+    }
+
+    private static int Uses(SyntaxNode node, ILocalSymbol local, SemanticModel model, CancellationToken cancellationToken) =>
+        node.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Count(name =>
+            name.Identifier.ValueText == local.Name && SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(name, cancellationToken).Symbol, local));
+
+    /// <summary>Whether the node is part of an options object the code fix turns into a lambda.</summary>
+    private static bool InOptionsObject(SyntaxNode node, SemanticModel model, CancellationToken cancellationToken)
+    {
+        foreach (SyntaxNode ancestor in node.Ancestors())
+        {
+            if (ancestor is ArgumentSyntax argument && !OptionsObject(argument, model, cancellationToken).IsEmpty)
+            {
+                return true;
+            }
+
+            // A local declared, or filled in, by this statement and passed to AddMediatR further down the block.
+            if (ancestor is StatementSyntax { Parent: BlockSyntax block } statement
+                && block.Statements.SkipWhile(candidate => candidate != statement).Skip(1)
+                    .SelectMany(static candidate => candidate.DescendantNodes().OfType<ArgumentSyntax>())
+                    .Any(candidate => candidate.Expression is IdentifierNameSyntax && OptionsObject(candidate, model, cancellationToken).Contains(statement)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The part after <c>MediatR</c> in <c>MediatR.Pipeline</c> or <c>MediatR.Unit.Value</c>.</summary>
