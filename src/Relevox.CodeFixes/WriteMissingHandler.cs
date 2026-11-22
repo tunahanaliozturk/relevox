@@ -19,7 +19,7 @@ namespace Relevox.CodeFixes;
 /// the request, with a body that throws <see cref="System.NotImplementedException"/>.
 /// </para>
 /// <para>
-/// There is no fix-all, on purpose (ADR 0027). Applied to a whole project, or by <c>dotnet format</c>, it would
+/// There is no fix-all, on purpose (ADR 0028). Applied to a whole project, or by <c>dotnet format</c>, it would
 /// silence every RVX0001 with handlers that throw, turning a build warning back into the run-time failure the
 /// rule exists to prevent.
 /// </para>
@@ -39,14 +39,17 @@ public sealed class WriteMissingHandler : CodeFixProvider
     {
         SyntaxNode? root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
         SemanticModel? model = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
-        if (root is null || model is null)
+        if (root is null || model is null || !MessageFiles.Editable(context.Document, root.SyntaxTree, model.Compilation, context.CancellationToken))
         {
             return;
         }
 
         foreach (Diagnostic diagnostic in context.Diagnostics)
         {
-            if (root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<BaseTypeDeclarationSyntax>() is { } declaration
+            // A diagnostic about another file says nothing about this one, whatever its span happens to cover here.
+            if (diagnostic.Location.SourceTree == root.SyntaxTree
+                && root.FullSpan.Contains(diagnostic.Location.SourceSpan)
+                && root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<BaseTypeDeclarationSyntax>() is { } declaration
                 && model.GetDeclaredSymbol(declaration, context.CancellationToken) is { } request
                 && MessageFiles.AddHandler(context.Document, request, model.Compilation) is { } action)
             {

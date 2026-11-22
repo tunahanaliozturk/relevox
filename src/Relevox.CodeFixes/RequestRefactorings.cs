@@ -24,7 +24,7 @@ namespace Relevox.CodeFixes;
 /// <para>
 /// The second repeats the RVX0001 fix because that rule is reported once the whole compilation has been
 /// analysed, which the IDE does not do as you type in a file unless analysis covers the whole solution. The
-/// refactoring needs only the file that is open. ADR 0027 has the reasons.
+/// refactoring needs only the file that is open. ADR 0028 has the reasons.
 /// </para>
 /// </remarks>
 [ExportCodeRefactoringProvider(LanguageNames.CSharp, Name = nameof(RequestRefactorings))]
@@ -40,6 +40,7 @@ public sealed class RequestRefactorings : CodeRefactoringProvider
         SemanticModel? model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
         if (root is null
             || model is null
+            || !MessageFiles.Editable(document, root.SyntaxTree, model.Compilation, cancellationToken)
             || MessageFiles.HeaderAt(root, context.Span) is not { } declaration
             || model.GetDeclaredSymbol(declaration, cancellationToken) is not { } type
             || MessageFiles.Contracts(model.Compilation) is not { } contracts)
@@ -87,24 +88,32 @@ public sealed class RequestRefactorings : CodeRefactoringProvider
     /// </summary>
     private static async Task<Solution> MakeRequestAsync(Document document, TypeDeclarationSyntax declaration, string? handler, CancellationToken cancellationToken)
     {
-        SyntaxNode root = (await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!;
+        Solution unchanged = document.Project.Solution;
+        if (await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false) is not { } root)
+        {
+            return unchanged;
+        }
+
         SyntaxAnnotation marker = new();
         TypeSyntax request = SyntaxFactory.ParseTypeName("global::Relevox.IRequest")
             .WithAdditionalAnnotations(Simplifier.Annotation, Simplifier.AddImportsAnnotation);
 
         document = document.WithSyntaxRoot(root.ReplaceNode(declaration, WithInterface(declaration, request).WithAdditionalAnnotations(marker)));
-        document = await ImportAdder.AddImportsAsync(document, Simplifier.AddImportsAnnotation, cancellationToken: cancellationToken).ConfigureAwait(false);
-        document = await Simplifier.ReduceAsync(document, Simplifier.Annotation, cancellationToken: cancellationToken).ConfigureAwait(false);
+        document = await MessageFiles.ImportAndSimplifyAsync(document, cancellationToken).ConfigureAwait(false);
         if (handler is null)
         {
             return document.Project.Solution;
         }
 
-        SyntaxNode changed = (await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!.GetAnnotatedNodes(marker).Single();
-        SemanticModel model = (await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false))!;
-        INamedTypeSymbol type = (INamedTypeSymbol)model.GetDeclaredSymbol(changed, cancellationToken)!;
-        INamedTypeSymbol contract = MessageFiles.RequestInterface(type, MessageFiles.Contracts(model.Compilation)!)!;
-        return await MessageFiles.AddHandlerAsync(document, type, contract, handler, cancellationToken).ConfigureAwait(false);
+        // Found again in the changed document, as the request it now is. Anything unexpected writes no handler.
+        SyntaxNode? changedRoot = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        SemanticModel? model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+        return changedRoot?.GetAnnotatedNodes(marker).FirstOrDefault() is { } changed
+            && model?.GetDeclaredSymbol(changed, cancellationToken) is INamedTypeSymbol type
+            && MessageFiles.Contracts(model.Compilation) is { } contracts
+            && MessageFiles.RequestInterface(type, contracts) is { } contract
+                ? await MessageFiles.AddHandlerAsync(document, type, contract, handler, cancellationToken).ConfigureAwait(false)
+                : document.Project.Solution;
     }
 
     /// <summary>Appends <paramref name="added"/> to the base list, moving what followed the header after it.</summary>
@@ -131,12 +140,14 @@ public sealed class RequestRefactorings : CodeRefactoringProvider
     }
 
     /// <summary>
-    /// Whether a type in this project handles <paramref name="request"/>. A handler in a project that references
-    /// this one is not seen, which only means the refactoring is offered where RVX0001 would not be.
+    /// Whether a type in this project handles <paramref name="request"/> in a way the generator dispatches to: a
+    /// class that is not abstract and that generated code can call. A handler in a project that references this one
+    /// is not seen, which only means the refactoring is offered where RVX0001 would not be.
     /// </summary>
     private static bool HasHandler(Compilation compilation, INamedTypeSymbol request, IAssemblySymbol contracts, CancellationToken cancellationToken) =>
         compilation.GetSymbolsWithName(static _ => true, SymbolFilter.Type, cancellationToken)
             .OfType<INamedTypeSymbol>()
+            .Where(type => type is { TypeKind: TypeKind.Class, IsAbstract: false } && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
             .Any(type => type.AllInterfaces.Any(contract => MessageFiles.IsContract(contract, contracts)
                 && contract.MetadataName is "IRequestHandler`1" or "IRequestHandler`2" or "IStreamRequestHandler`2"
                 && SymbolEqualityComparer.Default.Equals(contract.TypeArguments[0], request)));
@@ -144,7 +155,8 @@ public sealed class RequestRefactorings : CodeRefactoringProvider
     /// <summary>
     /// For a handler whose base list names a request or notification that does not exist, an action that writes
     /// it. Only a plain name is written: a generic or qualified one says more about where the type should go
-    /// than a template can honour.
+    /// than a template can honour. A response that names one of the handler's type parameters is refused too, since
+    /// the new type would not have them.
     /// </summary>
     private static CodeAction? MissingMessage(Document document, TypeDeclarationSyntax declaration, INamedTypeSymbol handler, SemanticModel model, IAssemblySymbol contracts, CancellationToken cancellationToken)
     {
@@ -160,8 +172,11 @@ public sealed class RequestRefactorings : CodeRefactoringProvider
             if (generic is null
                 || model.GetTypeInfo(baseType.Type, cancellationToken).Type is not INamedTypeSymbol contract
                 || !MessageFiles.IsContract(contract, contracts)
+                || generic.TypeArgumentList.Arguments.Count != contract.TypeArguments.Length
                 || generic.TypeArgumentList.Arguments[0] is not IdentifierNameSyntax missing
-                || model.GetTypeInfo(missing, cancellationToken).Type is not { TypeKind: TypeKind.Error })
+                || model.GetTypeInfo(missing, cancellationToken).Type is not { TypeKind: TypeKind.Error }
+                || generic.TypeArgumentList.Arguments.Skip(1).SelectMany(static argument => argument.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+                    .Any(name => model.GetSymbolInfo(name, cancellationToken).Symbol is ITypeParameterSymbol))
             {
                 continue;
             }
@@ -185,9 +200,10 @@ public sealed class RequestRefactorings : CodeRefactoringProvider
                 continue;
             }
 
+            // The name as written, so a keyword keeps its @; the file is named without it.
             string name = missing.Identifier.ValueText;
             string file = MessageFiles.FreeName(document, handler.ContainingNamespace, name, typeToo: false);
-            string text = $"{MessageFiles.Visibility(handler)} sealed record {name} : {message};";
+            string text = $"{MessageFiles.Visibility(handler)} sealed record {missing.Identifier.Text} : {message};";
             return CodeAction.Create(
                 $"Add {kind} '{name}'",
                 token => MessageFiles.AddFileAsync(document, handler.ContainingNamespace, file, text, token),
