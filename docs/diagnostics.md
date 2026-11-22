@@ -274,12 +274,15 @@ services.AddRelevox(config =>
 ```
 
 The statements now run when `AddRelevox` calls the lambda, after any statements that stood between them and the
-call. Other statements may stand there, but the object is left alone, and the compiler error stays, when one of
-them changes a variable the moved code reads, when a moved statement declares a variable, when a `#if` or other
-directive stands between the declaration and the call, or when the object is passed to a method, stored, used after
-the call, filled in inside an `if` or a loop, built in another method, or passed from inside a lambda. An object
-made in the call is left alone when something called `options`, the name the lambda's parameter takes, is already
-in scope.
+call. Other statements may stand there only if they mention no variable, field, property or event the moved code
+mentions, and every argument and assigned value in the moved code is a literal, `default`, a `typeof` or a member
+of one, a constant or enum member, a lambda, or a read of a local or parameter. Otherwise the object is left alone,
+and the compiler error stays. So it is when a moved statement declares a variable or contains an `await`, when a
+`#if`, `#region` or other directive stands between the declaration and the call, or when the object is passed to a
+method, stored, used after the call, filled in inside an `if` or a loop, returned by a method, built in another
+method, or passed from inside a lambda. An object made in the call is left alone when something called `options`,
+the name the lambda's parameter takes, is already in scope. Where the call stays, the MediatR names inside the
+object are still moved by the fix for that call.
 
 ## RVX0008
 

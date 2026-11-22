@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Relevox.CodeFixes;
 using Relevox.Migration;
@@ -498,6 +499,20 @@ public sealed class MigrationCodeFixTests
                     config.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
                     MediatRServiceCollectionExtensions.AddMediatR(services, config);
                 }
+
+                public static void Qualified(IServiceCollection services)
+                {
+                    var qualified = new MediatRServiceConfiguration(); // the mediator
+                    qualified.AddOpenBehavior(typeof(Logging<,>));
+                    Microsoft.Extensions.DependencyInjection.MediatRServiceCollectionExtensions.AddMediatR(services, qualified);
+                }
+
+                public static void Escaped(IServiceCollection services)
+                {
+                    var @event = new MediatRServiceConfiguration();
+                    @event.AddOpenBehavior(typeof(Logging<,>));
+                    services.AddMediatR(@event);
+                }
             }
             """);
 
@@ -539,6 +554,14 @@ public sealed class MigrationCodeFixTests
         startup.ShouldContain("options.AddOpenBehavior(typeof(Logging<,>))");
         startup.ShouldContain("config.RequestExceptionActionProcessorStrategy = Relevox.RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;");
         startup.ShouldContain("RelevoxServiceCollectionExtensions.AddRelevox(services, config =>");
+
+        // The comment at the end of the declaration line stays, on a line of its own.
+        startup.ShouldContain("""
+                    // the mediator
+                    Microsoft.Extensions.DependencyInjection.RelevoxServiceCollectionExtensions.AddRelevox(services, qualified =>
+            """.ReplaceLineEndings("\n"));
+        startup.ShouldContain("services.AddRelevox(@event =>");
+        startup.ShouldContain("@event.AddOpenBehavior(typeof(Logging<,>));");
         ShouldBuildWithTheGenerator(fixedSources);
     }
 
@@ -580,6 +603,8 @@ public sealed class MigrationCodeFixTests
         string[] fixedSources = await Migrate(Handlers, """
             using MediatR;
             using Microsoft.Extensions.DependencyInjection;
+
+            using Registrations = Microsoft.Extensions.DependencyInjection.MediatRServiceCollectionExtensions;
 
             namespace Shop;
 
@@ -652,7 +677,90 @@ public sealed class MigrationCodeFixTests
                 public static void Shadowed(IServiceCollection services, string options) =>
                     services.AddMediatR(new MediatRServiceConfiguration { LicenseKey = options });
 
+                public static void SideEffect(IServiceCollection services)
+                {
+                    var effect = new MediatRServiceConfiguration();
+                    effect.Lifetime = Settings.Lifetime;
+                    Settings.Reset();
+                    services.AddMediatR(effect);
+                }
+
+                public static void Mentioned(IServiceCollection services, System.Type behavior)
+                {
+                    var mentioned = new MediatRServiceConfiguration();
+                    mentioned.AddOpenBehavior(behavior);
+                    System.Console.WriteLine(behavior);
+                    services.AddMediatR(mentioned);
+                }
+
+                public static async System.Threading.Tasks.Task Awaited(IServiceCollection services)
+                {
+                    var awaited = new MediatRServiceConfiguration();
+                    awaited.AddOpenBehavior(await System.Threading.Tasks.Task.FromResult(typeof(Logging<,>)));
+                    services.AddMediatR(awaited);
+                }
+
+                public static void Looped(IServiceCollection services, System.Type[] behaviors)
+                {
+                    var looped = new MediatRServiceConfiguration();
+                    foreach (System.Type each in behaviors) { looped.AddOpenBehavior(each); }
+                    services.AddMediatR(looped);
+                }
+
+                public static void OuterBlock(IServiceCollection services, bool register)
+                {
+                    var outer = new MediatRServiceConfiguration();
+                    if (register)
+                    {
+                        services.AddMediatR(outer);
+                    }
+                }
+
+                public static void Declares(IServiceCollection services)
+                {
+                    var declares = new MediatRServiceConfiguration();
+                    declares.AddOpenBehavior(Behavior(out int count));
+                    services.AddMediatR(declares);
+                }
+
+                public static void Made(IServiceCollection services)
+                {
+                    var made = Create();
+                    services.AddMediatR(made);
+                }
+
+                public static void Region(IServiceCollection services)
+                {
+                    var region = new MediatRServiceConfiguration();
+                    #region Behaviours
+                    region.AddOpenBehavior(typeof(Logging<,>));
+                    #endregion
+                    services.AddMediatR(region);
+                }
+
+                public static void Aliased(IServiceCollection services)
+                {
+                    var aliased = new MediatRServiceConfiguration();
+                    aliased.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
+                    Registrations.AddMediatR(services, aliased);
+                }
+
                 private static void Fill(MediatRServiceConfiguration configuration) => configuration.Lifetime = ServiceLifetime.Scoped;
+
+                private static System.Type Behavior(out int count)
+                {
+                    count = 1;
+                    return typeof(Logging<,>);
+                }
+
+                private static MediatRServiceConfiguration Create() => new();
+            }
+
+            public static class Settings
+            {
+                public static ServiceLifetime Lifetime { get; set; }
+
+                public static void Reset() => Lifetime = ServiceLifetime.Singleton;
             }
             """);
 
@@ -667,6 +775,40 @@ public sealed class MigrationCodeFixTests
         startup.ShouldContain("services.AddMediatR(second);");
         startup.ShouldContain("services.AddMediatR(deferred)");
         startup.ShouldContain("services.AddMediatR(new RelevoxOptions { LicenseKey = options })");
+        startup.ShouldContain("services.AddMediatR(effect);");
+        startup.ShouldContain("services.AddMediatR(mentioned);");
+        startup.ShouldContain("services.AddMediatR(awaited);");
+        startup.ShouldContain("services.AddMediatR(looped);");
+        startup.ShouldContain("services.AddMediatR(outer);");
+        startup.ShouldContain("services.AddMediatR(declares);");
+        startup.ShouldContain("services.AddMediatR(made);");
+        startup.ShouldContain("services.AddMediatR(region);");
+        startup.ShouldContain("Registrations.AddMediatR(services, aliased);");
+
+        // Where the call stays, the MediatR names in the object were still moved, by the AddMediatR fix, since the
+        // analyzer left them to it.
+        startup.ShouldContain("aliased.RequestExceptionActionProcessorStrategy = Relevox.RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;");
+        NothingLeftToMove(fixedSources);
+    }
+
+    /// <summary>
+    /// No name RVX0007 would move is left after one "Fix all": each one was either reported and fixed, or moved by
+    /// the fix for the AddMediatR call whose options object holds it.
+    /// </summary>
+    private static void NothingLeftToMove(string[] sources)
+    {
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "Shop",
+            sources.Select((source, index) => CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview), $"File{index}.cs")),
+            GeneratorHarness.References);
+        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+        {
+            SemanticModel model = compilation.GetSemanticModel(tree);
+            tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>()
+                .Where(name => MediatRUsageAnalyzer.KindOf(name, model, CancellationToken.None) is not null)
+                .Select(static name => name.Parent?.ToString())
+                .ShouldBeEmpty();
+        }
     }
 
     [Fact]
