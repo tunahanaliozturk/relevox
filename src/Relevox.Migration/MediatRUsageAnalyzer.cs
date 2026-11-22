@@ -99,7 +99,14 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
 
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeName), SyntaxKind.IdentifierName);
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeInvocation), SyntaxKind.InvocationExpression);
-            start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeCref), SyntaxKind.XmlCrefAttribute);
+            // Relevox's own assemblies: the contracts, and the runtime that declares RelevoxOptions.
+            HashSet<IAssemblySymbol> relevox = new(SymbolEqualityComparer.Default) { start.Compilation.GetTypeByMetadataName("Relevox.IBaseRequest")!.ContainingAssembly };
+            if (start.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.RelevoxOptions") is { } options)
+            {
+                relevox.Add(options.ContainingAssembly);
+            }
+
+            start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(context => AnalyzeCref(context, relevox)), SyntaxKind.XmlCrefAttribute);
         });
     }
 
@@ -118,16 +125,20 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
             SyntaxFactory.IdentifierName(name.Identifier.ValueText == "MediatR" ? "Relevox" : "RelevoxOptions").WithTriviaFrom(name));
     }
 
-    private static void AnalyzeCref(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeCref(SyntaxNodeAnalysisContext context, HashSet<IAssemblySymbol> relevox)
     {
         // A cref is moved as a whole: one with MediatR names in its parameters as well as its type would not resolve
         // with only some of them moved. One whose Relevox counterpart does not resolve either, MediatR.Mediator for
-        // example, is left for the compiler to point at, as unmapped names in code are.
+        // example, is left for the compiler to point at, as unmapped names in code are. So is one that resolves
+        // to something outside Relevox, such as a type of your own called RelevoxOptions.
         CrefSyntax cref = ((XmlCrefAttributeSyntax)context.Node).Cref;
         CrefSyntax moved = Moved(cref);
         if (moved == cref
             || context.SemanticModel.GetSymbolInfo(cref, context.CancellationToken) is { Symbol: not null } or { CandidateSymbols.Length: > 0 }
-            || context.SemanticModel.GetSpeculativeSymbolInfo(cref.SpanStart, moved, SpeculativeBindingOption.BindAsTypeOrNamespace).Symbol is null)
+            || context.SemanticModel.GetSpeculativeSymbolInfo(cref.SpanStart, moved, SpeculativeBindingOption.BindAsTypeOrNamespace).Symbol is not { } symbol
+            || !(symbol is INamespaceSymbol space
+                ? space.ConstituentNamespaces.Any(part => part.ContainingAssembly is { } assembly && relevox.Contains(assembly))
+                : symbol.ContainingAssembly is { } owner && relevox.Contains(owner)))
         {
             return;
         }

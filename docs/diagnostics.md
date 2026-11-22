@@ -243,7 +243,9 @@ alone, for a person to decide:
 
 - an options object it cannot turn into a lambda without risk, as described below;
 - names in MediatR namespaces Relevox has no counterpart for, such as `MediatR.Registration`, and a documentation
-  `cref` whose Relevox counterpart does not resolve, such as `MediatR.Mediator`: the compiler's CS1574 points at it;
+  `cref` whose Relevox counterpart does not resolve to a Relevox type or member, such as `MediatR.Mediator`, or
+  `MediatRServiceConfiguration` where a type of your own called `RelevoxOptions` is in scope: the compiler's
+  CS1574 points at it;
 - a namespace of your own called `MediatR`, which resolves and so is not reported: rename it first.
 
 A documentation `cref` is moved as a whole, so one with MediatR names in its parameters, such as
