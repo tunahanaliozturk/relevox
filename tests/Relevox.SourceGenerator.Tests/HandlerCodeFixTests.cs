@@ -31,8 +31,9 @@ public sealed class HandlerCodeFixTests
 
     private static readonly AdhocWorkspace Host = new();
 
-    // Stands for RVX0001 where a test reports it by hand, to ask the fix about a declaration the analyzer skips.
-    private static readonly DiagnosticDescriptor Rvx0001 = new RelevoxAnalyzer().SupportedDiagnostics.Single(static rule => rule.Id == "RVX0001");
+    // Stands for RVX0001 where a test reports it by hand, to ask the fix about a declaration the analyzer skips. The
+    // first of the rule's two messages: the second is for a request whose only handler is generated code.
+    private static readonly DiagnosticDescriptor Rvx0001 = new RelevoxAnalyzer().SupportedDiagnostics.First(static rule => rule.Id == "RVX0001");
 
     public static TheoryData<string, string, string> Shapes => new()
     {
@@ -246,6 +247,21 @@ public sealed class HandlerCodeFixTests
 
         (await Refactorings(project, "Orders.cs", "Place :")).ShouldBeEmpty();
         (await Refactorings(project, "Orders.cs", "Place :", asFix: true)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_request_whose_only_handler_is_generated_code_is_not_offered_a_second_one()
+    {
+        // RVX0001 is reported, naming the generated handler; writing another would leave two once that file counts.
+        Project project = WithImplicitUsings(
+            ("Ping.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed record Ping : IRequest<int>;\n"),
+            ("PingHandler.g.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed class PingHandler : IRequestHandler<Ping, int>\n{\n    public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);\n}\n"));
+
+        Diagnostic diagnostic = (await Diagnostics(project)).ShouldHaveSingleItem();
+        diagnostic.Id.ShouldBe("RVX0001");
+        diagnostic.Properties.ShouldContainKey("HandlerOnlyInGeneratedCode");
+        (await Fixes(project, "Ping.cs")).ShouldBeEmpty();
+        (await Refactorings(project, "Ping.cs", "Ping :")).ShouldBeEmpty();
     }
 
     [Fact]

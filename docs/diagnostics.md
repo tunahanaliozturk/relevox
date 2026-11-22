@@ -95,9 +95,14 @@ interface, the message names it and its file, and says how to count it:
 > Handlers.g.cs implements one but is generated code, which Relevox leaves out; to count it, set
 > generated_code = false for that file in .editorconfig.
 
-Set `generated_code = false` for that file, or move the handler into a file of your own. For a class marked
-`[GeneratedCode]` the message says to remove the attribute instead, since `.editorconfig` does not undo it. A
-handler that another source generator writes cannot be counted either way: this generator never sees it.
+Set `generated_code = false` for that file, or move the handler into a file of your own. A `[GeneratedCode]`
+attribute on the class, or on a class that contains it, keeps it out whatever `.editorconfig` says, so then the
+message names the type to remove it from; when both apply, it names both. **Add handler** is not offered here:
+the handler exists, and a second one would make two once that file counts.
+
+A handler that another source generator writes, such as a Razor component, cannot be counted at all: this
+generator never sees another's output, and neither remedy changes that. The analyzer cannot tell such a file from
+one of your own, so the message gives the same advice for it, and that advice will not help.
 
 ## RVX0002
 
