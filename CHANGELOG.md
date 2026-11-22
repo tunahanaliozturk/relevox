@@ -41,7 +41,7 @@ All notable changes to this project are written down here. The format follows
 
 ### Changed
 
-- The migration guide has a section for solutions that use central package management: the\n  `Directory.Packages.props` and `Directory.Build.props` changes, that the code fix does not edit MSBuild files,\n  and a search for what is left (#60).\n- RVX0007 and its code fix move `MediatR` names in documentation `cref`s, in `<see>`, `<seealso>`, `<exception>`
+- A third migration trial is written up: a modular monolith on MediatR 12.4.1 with handlers in seven projects and\n  three mediators, moved with the command-line fix; its tests pass before and after\n  ([docs/migration-trial.md](docs/migration-trial.md), #176). The MediatR guide now covers several projects calling\n  `AddMediatR`, references that come through another project, the scan's assembly list not being kept, private\n  nested handlers and RVX0003, and handler classes registered by hand keeping their own lifetime.\n- The migration guide has a section for solutions that use central package management: the\n  `Directory.Packages.props` and `Directory.Build.props` changes, that the code fix does not edit MSBuild files,\n  and a search for what is left (#60).\n- RVX0007 and its code fix move `MediatR` names in documentation `cref`s, in `<see>`, `<seealso>`, `<exception>`
   and `<inheritdoc>` alike, so a build with documentation generation and warnings as errors no longer breaks on
   them after the migration (#61). A `cref` whose counterpart is not a Relevox type or member, such as
   `MediatR.Mediator`, is left for the compiler's CS1574.
