@@ -43,7 +43,7 @@ public sealed class PublishLayerAnalyzer : DiagnosticAnalyzer
         category: "Relevox",
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0011",
+        helpLinkUri: HelpLink.To("rvx0011"),
         description: "The project's settings say which layers may publish notifications of a given kind, such as domain events published only by the code that saves the entities raising them. Nothing is reported without such settings.");
 
     /// <summary>A layer setting that cannot be used.</summary>
@@ -55,7 +55,7 @@ public sealed class PublishLayerAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0012",
+        helpLinkUri: HelpLink.To("rvx0012"),
         description: "A warning, unlike the architecture rules, because it is only ever reported to a project that wrote the setting, and a rule that silently checks nothing is worse than no rule.");
 
     /// <inheritdoc />

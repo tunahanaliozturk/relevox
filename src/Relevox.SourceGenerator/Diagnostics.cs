@@ -15,8 +15,10 @@ internal static class Diagnostics
 {
     private const string Category = "Relevox";
 
-    // Each rule links to its section of docs/diagnostics.md, which says why it exists and how to fix it.
-    private const string Help = "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#";
+
+    // Each rule links to its page on the documentation site, built from its section of docs/diagnostics.md,
+    // which says why the rule exists and how to fix it.
+    private static string Help(string id) => "https://tunahanaliozturk.github.io/relevox/rules/" + id + ".html";
 
     // Every rule is reported once the whole compilation has been seen, because whether a request has one
     // handler, none or two is only known then. Roslyn requires such rules to say so.
@@ -34,7 +36,7 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
-        helpLinkUri: Help + "rvx0001",
+        helpLinkUri: Help("rvx0001"),
         description: "Every request and stream request needs exactly one handler. This one has none that the generator can see, so sending it compiles and then fails when it runs.");
 
     /// <summary>
@@ -56,7 +58,7 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
-        helpLinkUri: Help + "rvx0001",
+        helpLinkUri: Help("rvx0001"),
         description: "Every request and stream request needs exactly one handler. Relevox leaves out handlers in generated code, as the analyzer that reports this does, so that the two agree on what is a handler.");
 
     /// <summary>
@@ -71,7 +73,7 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
-        helpLinkUri: Help + "rvx0002",
+        helpLinkUri: Help("rvx0002"),
         description: "A request or stream request is handled by exactly one handler. Use a notification when several handlers should all run.");
 
     /// <summary>
@@ -86,7 +88,7 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
-        helpLinkUri: Help + "rvx0003",
+        helpLinkUri: Help("rvx0003"),
         description: "The generated mediator is ordinary C# in this assembly, so it can only call handlers this assembly can see. Make the handler public, or add InternalsVisibleTo for this assembly.");
 
     public static readonly DiagnosticDescriptor GenericHandler = new(
@@ -97,7 +99,7 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
-        helpLinkUri: Help + "rvx0004",
+        helpLinkUri: Help("rvx0004"),
         description: "The generator writes dispatch for closed types, so a generic handler is registered by closing it at build time: a notification handler declared as H<T> : INotificationHandler<T> over every notification it can see, and a request or stream handler over the types that satisfy its constraints. Anything else is reported here; declare a closed handler per request instead.");
 
     /// <summary>
@@ -112,7 +114,7 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: CompilationEnd,
-        helpLinkUri: Help + "rvx0005",
+        helpLinkUri: Help("rvx0005"),
         description: "Projects whose handlers belong to the application should reference Relevox.Contracts. Only the project that calls AddRelevox, usually the host, references Relevox itself.");
 
     /// <summary>
@@ -127,7 +129,7 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        helpLinkUri: Help + "rvx0006",
+        helpLinkUri: Help("rvx0006"),
         description: "Each project that references Relevox gets its own AddRelevox. When another project's is visible too, through InternalsVisibleTo, a call can bind to it, and this project's handlers are then never registered.");
 
     public static readonly DiagnosticDescriptor[] All = [NoHandler, HandlerOnlyInGeneratedCode, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator, ForeignRegistration];

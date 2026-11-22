@@ -74,7 +74,7 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
         category: "Relevox",
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0007",
+        helpLinkUri: HelpLink.To("rvx0007"),
         description: "Reported only where MediatR is no longer referenced and the name does not resolve. The code fix rewrites the namespace, the configuration type and the AddMediatR call; 'Fix all in solution' does the whole migration.");
 
     /// <inheritdoc />

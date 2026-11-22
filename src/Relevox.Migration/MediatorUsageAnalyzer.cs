@@ -50,7 +50,7 @@ public sealed class MediatorUsageAnalyzer : DiagnosticAnalyzer
         category: "Relevox",
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0017",
+        helpLinkUri: HelpLink.To("rvx0017"),
         description: "Reported only where Mediator is no longer referenced and the name does not resolve. The code fix rewrites the namespace, the handlers and messages in Mediator's shape and the AddMediator call; 'Fix all in solution' does the whole move.");
 
     /// <inheritdoc />

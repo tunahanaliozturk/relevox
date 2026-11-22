@@ -44,7 +44,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0014",
+        helpLinkUri: HelpLink.To("rvx0014"),
         description: "Counts the handlers, and the behaviours and processors without Relevox's interface, that still run on MediatR while the bridge is in place.");
 
     /// <summary>A MediatR behaviour or processor that moved requests skip.</summary>
@@ -56,7 +56,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0015",
+        helpLinkUri: HelpLink.To("rvx0015"),
         description: "Through the bridge each request runs the pipeline of the library that handles it. A behaviour or processor with only MediatR's interface never sees a request that has moved.");
 
     /// <summary>Nothing left on MediatR.</summary>
@@ -68,7 +68,7 @@ public sealed class BridgeAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        helpLinkUri: "https://github.com/tunahanaliozturk/relevox/blob/main/docs/diagnostics.md#rvx0016",
+        helpLinkUri: HelpLink.To("rvx0016"),
         description: "Every handler the build can see is on Relevox, so the bridge sends nothing to MediatR any more.");
 
     // MediatR's handler interfaces.

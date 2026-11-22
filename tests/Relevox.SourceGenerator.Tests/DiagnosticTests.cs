@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Relevox.SourceGenerator.Tests;
 
@@ -157,9 +158,35 @@ public sealed class DiagnosticTests
 
         foreach (DiagnosticDescriptor rule in Diagnostics.All.Append(Relevox.Migration.MediatRUsageAnalyzer.Rule).Append(Relevox.Migration.MediatorUsageAnalyzer.Rule).Concat(new Relevox.Migration.HandlerSendAnalyzer().SupportedDiagnostics).Append(Relevox.Migration.BlockingCallAnalyzer.Rule).Concat(new Relevox.Migration.PublishLayerAnalyzer().SupportedDiagnostics).Append(Relevox.Migration.PipelineOrderAnalyzer.SameOrder))
         {
-            rule.HelpLinkUri.ShouldEndWith("/docs/diagnostics.md#" + rule.Id.ToLowerInvariant());
+            rule.HelpLinkUri.ShouldBe($"https://tunahanaliozturk.github.io/relevox/rules/{rule.Id.ToLowerInvariant()}.html");
             // A heading of the id alone, so its anchor is the lower-case id the link ends with.
             page.ReplaceLineEndings("\n").ShouldContain($"## {rule.Id}\n\n**{rule.Title}.**");
+        }
+    }
+
+    [Fact]
+    public void Every_rule_any_analyzer_supports_has_a_heading_on_the_diagnostics_page_so_its_site_page_exists()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "Relevox.slnx")))
+        {
+            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("Relevox.slnx not found above the test output.");
+        }
+
+        // The site build makes one page per "## RVXnnnn" heading, and the help links point at those pages.
+        string page = File.ReadAllText(Path.Combine(root, "docs", "diagnostics.md")).ReplaceLineEndings("\n");
+
+        IEnumerable<DiagnosticAnalyzer> analyzers = new[] { typeof(Relevox.Migration.MediatRUsageAnalyzer).Assembly, typeof(Diagnostics).Assembly }
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => !type.IsAbstract && type.IsAssignableTo(typeof(DiagnosticAnalyzer)))
+            .Select(type => (DiagnosticAnalyzer)Activator.CreateInstance(type)!);
+
+        string[] ids = [.. analyzers.SelectMany(analyzer => analyzer.SupportedDiagnostics).Concat(Diagnostics.All).Select(rule => rule.Id).Distinct()];
+
+        ids.ShouldNotBeEmpty();
+        foreach (string id in ids)
+        {
+            page.ShouldContain($"\n## {id}\n");
         }
     }
 
