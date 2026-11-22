@@ -182,7 +182,8 @@ jobs:
 
       # Packs the packages into a local feed and builds a new application against the .nupkg files, with no
       # project references, once for net10.0 and once for net11.0. Every other job uses project references, which
-      # hide packaging mistakes.
+      # hide packaging mistakes. The templates package is installed too, and the solution its two templates write is
+      # built with warnings as errors and tested, on each framework.
       - name: Pack, install and run
         run: bash eng/package-smoke.sh
 
