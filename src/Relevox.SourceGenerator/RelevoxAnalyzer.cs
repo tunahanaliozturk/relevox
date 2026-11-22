@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -33,6 +36,7 @@ public sealed class RelevoxAnalyzer : DiagnosticAnalyzer
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
     [
         Diagnostics.NoHandler,
+        Diagnostics.HandlerOnlyInGeneratedCode,
         Diagnostics.AmbiguousHandler,
         Diagnostics.Inaccessible,
         Diagnostics.GenericHandler,
@@ -114,8 +118,24 @@ public sealed class RelevoxAnalyzer : DiagnosticAnalyzer
                     ownOpenProcessors: parts.Any(static part => part.Open.Length > 0),
                     callsAddRelevox: Volatile.Read(ref callsAddRelevox) == 1);
 
+                Dictionary<string, INamedTypeSymbol>? leftOut = null;
                 foreach (DiagnosticEntry entry in plan.Diagnostics)
                 {
+                    if (entry.Rule == Diagnostics.NoHandler.Id
+                        && (leftOut ??= GeneratedHandlers(end.Compilation, end.CancellationToken)).TryGetValue(entry.Arguments[0], out INamedTypeSymbol? handler))
+                    {
+                        end.ReportDiagnostic(Diagnostic.Create(
+                            Diagnostics.HandlerOnlyInGeneratedCode,
+                            InSource(entry.Location, end.Compilation),
+                            entry.Arguments[0],
+                            handler.ToDisplayString(),
+                            Path.GetFileName(handler.DeclaringSyntaxReferences[0].SyntaxTree.FilePath),
+                            GeneratedCode.IsMarked(handler)
+                                ? "remove the [GeneratedCode] attribute"
+                                : "set generated_code = false for that file in .editorconfig"));
+                        continue;
+                    }
+
                     end.ReportDiagnostic(Diagnostic.Create(
                         Diagnostics.Descriptor(entry.Rule),
                         InSource(entry.Location, end.Compilation),
@@ -123,6 +143,32 @@ public sealed class RelevoxAnalyzer : DiagnosticAnalyzer
                 }
             });
         });
+    }
+
+    /// <summary>
+    /// Request and stream handlers that discovery left out because they are generated code, by the request they
+    /// handle as RVX0001 names it. Only looked for when a request has no handler, and only for its message: whether
+    /// a handler counts is decided by the same rules as in the generator, which never sees these.
+    /// </summary>
+    private static Dictionary<string, INamedTypeSymbol> GeneratedHandlers(Compilation compilation, CancellationToken cancellationToken)
+    {
+        Dictionary<string, INamedTypeSymbol> found = new(StringComparer.Ordinal);
+        foreach (INamedTypeSymbol type in compilation.GetSymbolsWithName(static _ => true, SymbolFilter.Type, cancellationToken)
+            .OfType<INamedTypeSymbol>()
+            .Where(type => GeneratedCode.IsMarked(type) || type.DeclaringSyntaxReferences.Any(reference => GeneratedCode.Contains(reference.SyntaxTree, compilation, cancellationToken)))
+            .OrderBy(static type => type.ToDisplayString(), StringComparer.Ordinal))
+        {
+            foreach (HandlerModel handler in Discovery.Classify(type, compilation, fromSource: true, cancellationToken).Handlers)
+            {
+                string request = Planner.Trim(handler.Message.Type);
+                if (handler.Kind is HandlerKind.Request or HandlerKind.VoidRequest or HandlerKind.Stream && !found.ContainsKey(request))
+                {
+                    found.Add(request, type);
+                }
+            }
+        }
+
+        return found;
     }
 
     private static Location InSource(LocationModel? model, Compilation compilation)

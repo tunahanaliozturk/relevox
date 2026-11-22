@@ -38,6 +38,22 @@ internal static class Diagnostics
         description: "Every request and stream request needs exactly one handler. This one has none that the generator can see, so sending it compiles and then fails when it runs.");
 
     /// <summary>
+    /// RVX0001 again, when the only handler is in generated code. MediatR's scan finds such a handler and Relevox
+    /// leaves it out, so after a migration "has no handler" would send people looking for a class that is there.
+    /// Only the message differs: the handler still does not count.
+    /// </summary>
+    public static readonly DiagnosticDescriptor HandlerOnlyInGeneratedCode = new(
+        id: "RVX0001",
+        title: "Request has no handler",
+        messageFormat: "'{0}' has no handler the generator can use, so sending it would throw. '{1}' in {2} implements one but is generated code, which Relevox leaves out; to count it, {3}.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        customTags: CompilationEnd,
+        helpLinkUri: Help + "rvx0001",
+        description: "Every request and stream request needs exactly one handler. Relevox leaves out handlers in generated code, as the analyzer that reports this does, so that the two agree on what is a handler.");
+
+    /// <summary>
     /// An error: with two handlers there is no right answer, and picking one would make behaviour depend on
     /// the order the compiler happened to visit files in.
     /// </summary>
@@ -108,7 +124,7 @@ internal static class Diagnostics
         helpLinkUri: Help + "rvx0006",
         description: "Each project that references Relevox gets its own AddRelevox. When another project's is visible too, through InternalsVisibleTo, a call can bind to it, and this project's handlers are then never registered.");
 
-    public static readonly DiagnosticDescriptor[] All = [NoHandler, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator, ForeignRegistration];
+    public static readonly DiagnosticDescriptor[] All = [NoHandler, HandlerOnlyInGeneratedCode, AmbiguousHandler, Inaccessible, GenericHandler, OwnMediator, ForeignRegistration];
 
     public static DiagnosticDescriptor Descriptor(string rule) => rule switch
     {
