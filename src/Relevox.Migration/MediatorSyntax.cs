@@ -219,7 +219,9 @@ public static class MediatorSyntax
 
     internal static CrefSyntax? MovedCref(CrefSyntax cref, SemanticModel model, HashSet<IAssemblySymbol> relevox, CancellationToken cancellationToken)
     {
-        if (Resolves(model, cref, cancellationToken))
+        // A cref that does not parse as a whole is left whole: moving the part that parsed would not fix it.
+        SyntaxNode attribute = cref.Parent ?? cref;
+        if (attribute.ContainsSkippedText || attribute.ContainsDiagnostics || Resolves(model, cref, cancellationToken))
         {
             return null;
         }
@@ -227,6 +229,7 @@ public static class MediatorSyntax
         // Edits by span: what the cref becomes, and the probe that checks it with simple names qualified.
         Dictionary<TextSpan, string> moved = new();
         Dictionary<TextSpan, string> probe = new();
+        bool shortNames = false;
         foreach (SimpleNameSyntax simple in cref.DescendantNodes().OfType<SimpleNameSyntax>())
         {
             // Type arguments in a cref declare type parameters; they are not names to move.
@@ -255,7 +258,12 @@ public static class MediatorSyntax
                 continue;
             }
 
-            if (name.Qualifier is { } qualifier)
+            if (name.Qualifier is IdentifierNameSyntax alias && alias.Identifier.ValueText != "Mediator")
+            {
+                // An alias of Mediator, which the fix points at Relevox: the cref keeps it, the probe names its target.
+                probe[alias.Span] = "global::Relevox";
+            }
+            else if (name.Qualifier is { } qualifier)
             {
                 foreach (IdentifierNameSyntax root in qualifier.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Where(static root => root.Identifier.ValueText == "Mediator"))
                 {
@@ -265,10 +273,11 @@ public static class MediatorSyntax
             else if (model.LookupNamespacesAndTypes(cref.SpanStart, name: Identifier(written)).IsEmpty)
             {
                 probe[simple.Span] = "global::Relevox." + written;
+                shortNames = true;
             }
         }
 
-        if (moved.Count == 0 || (probe.Count > 0 && !ImportsMediator(cref, model.Compilation, cancellationToken)))
+        if (moved.Count == 0 || (shortNames && !ImportsMediator(cref, model.Compilation, cancellationToken)))
         {
             return null;
         }

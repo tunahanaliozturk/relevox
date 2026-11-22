@@ -302,7 +302,9 @@ internal sealed class MediatorTypeRewriter(SemanticModel model, CancellationToke
             SyntaxFactory.Identifier(target),
             SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(arguments)));
         TypeSyntax result = qualifier is null ? relevox : SyntaxFactory.QualifiedName(qualifier, relevox);
-        return result.WithTriviaFrom(type);
+
+        // Its trivia visited, not copied: a comment there, even a misplaced documentation one, may hold a cref.
+        return result.WithLeadingTrivia(VisitList(type.GetLeadingTrivia())).WithTrailingTrivia(VisitList(type.GetTrailingTrivia()));
     }
 
     // The expressions a method that is not async returns, in the same order for the original and the rewritten one.
