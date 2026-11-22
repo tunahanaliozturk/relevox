@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Tunahan Ali Ozturk",
+  "classifications": ["Relevox", "Request", "Handler"],
+  "identity": "Relevox.Templates.Feature",
+  "name": "Relevox request, handler and test",
+  "description": "A request and its handler in the application project, and a test for the handler in its test project. Run it in the folder that holds both, the layout relevox-webapi creates.",
+  "shortName": "relevox-feature",
+  "sourceName": "RelevoxFeature",
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "app": {
+      "type": "parameter",
+      "description": "The application project, the folder and namespace that get the request and its handler. The test goes to <app>.Tests.",
+      "datatype": "text",
+      "isRequired": true,
+      "replaces": "RelevoxApp",
+      "fileRename": "RelevoxApp"
+    },
+    "response": {
+      "type": "parameter",
+      "description": "The type the handler answers with.",
+      "datatype": "text",
+      "defaultValue": "string",
+      "replaces": "RelevoxResponse"
+    }
+  }
+}

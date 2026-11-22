@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The dotnet new templates, packed as content. Nothing here is compiled: the projects under content/ are what
+    `dotnet new` writes out, and eng/package-smoke.sh instantiates, builds and tests them from the packed .nupkg.
+    This project is left out of Relevox.slnx so the solution's build and format gates never see the template
+    files (ADR 0027).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageType>Template</PackageType>
+    <PackageId>Relevox.Templates</PackageId>
+    <Description>dotnet new templates for Relevox: relevox-webapi, a minimal API with Relevox registered and a test project, and relevox-feature, a request, its handler and a test.</Description>
+    <PackageTags>mediator;cqrs;mediatr;dotnet-new;templates</PackageTags>
+    <RelevoxPackageReadme>$(MSBuildThisFileDirectory)../../docs/templates-package-readme.md</RelevoxPackageReadme>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- Packs .template.config, which the default excludes skip as a dot folder. -->
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- No assembly, so no symbols and no API to compare with a baseline. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="content/**" Exclude="content/**/bin/**;content/**/obj/**;content/**/*.csproj" Pack="true" PackagePath="content" />
+    <TemplateProject Include="content/**/*.csproj" Exclude="content/**/bin/**;content/**/obj/**" />
+  </ItemGroup>
+
+  <!--
+    A generated project references the Relevox version this package is packed with. The project files carry the
+    token RELEVOX_VERSION, replaced here in a copy under obj, and the copy is what gets packed.
+  -->
+  <Target Name="StampRelevoxVersion" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_StampedContent>$(IntermediateOutputPath)content/</_StampedContent>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_StampedContent)%(TemplateProject.RecursiveDir)%(TemplateProject.Filename)%(TemplateProject.Extension)"
+                      Lines="$([MSBuild]::Escape($([System.IO.File]::ReadAllText('%(TemplateProject.FullPath)').Replace('RELEVOX_VERSION', '$(Version)').TrimEnd())))"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Content Include="$(_StampedContent)%(TemplateProject.RecursiveDir)%(TemplateProject.Filename)%(TemplateProject.Extension)"
+               Pack="true"
+               PackagePath="content/%(TemplateProject.RecursiveDir)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

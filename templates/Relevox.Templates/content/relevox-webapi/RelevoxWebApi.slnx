@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RelevoxWebApi/RelevoxWebApi.csproj" />
+  <Project Path="RelevoxWebApi.Tests/RelevoxWebApi.Tests.csproj" />
+</Solution>
