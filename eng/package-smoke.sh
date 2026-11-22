@@ -224,6 +224,10 @@ templates() {
   dotnet new relevox-webapi --name Shop --output "$work/Shop" --framework "$tfm" --debug:custom-hive "$hive"
   (cd "$work/Shop" && dotnet new relevox-feature --name PlaceOrder --app Shop --response int --debug:custom-hive "$hive")
   (cd "$work/Shop" && dotnet new relevox-feature --name GetName --app Shop --debug:custom-hive "$hive")
+  (cd "$work/Shop" && dotnet new relevox-feature --name Notify --app Shop --response none --debug:custom-hive "$hive")
+  grep -q "IRequestHandler<Notify>" "$work/Shop/Shop/Notify.cs" && grep -q "public Task Handle" "$work/Shop/Shop/Notify.cs" \
+    && ! grep -q "^#" "$work/Shop/Shop/Notify.cs" "$work/Shop/Shop.Tests/NotifyTests.cs" \
+    || { cat "$work/Shop/Shop/Notify.cs" >&2; echo "--response none did not write an IRequest with a Task handler." >&2; exit 1; }
   [[ -f "$work/Shop/Shop/PlaceOrder.cs" && -f "$work/Shop/Shop.Tests/PlaceOrderTests.cs" ]] \
     || { find "$work/Shop" -type f >&2; echo "relevox-feature did not write to Shop and Shop.Tests." >&2; exit 1; }
   grep -q "<TargetFramework>$tfm</TargetFramework>" "$work/Shop/Shop/Shop.csproj" \
@@ -233,7 +237,7 @@ templates() {
   local output
   output="$(cd "$work/Shop" && NUGET_PACKAGES="$work/packages" dotnet test --configuration Release -p:TreatWarningsAsErrors=true 2>&1)" \
     || { echo "$output" >&2; echo "The solution relevox-webapi and relevox-feature wrote did not build clean or pass its tests." >&2; exit 1; }
-  grep -q "succeeded: 3" <<<"$output" || { echo "$output" >&2; echo "Expected the three generated tests to pass." >&2; exit 1; }
+  grep -q "succeeded: 4" <<<"$output" || { echo "$output" >&2; echo "Expected the four generated tests to pass." >&2; exit 1; }
   echo "relevox-webapi and relevox-feature wrote a solution that builds clean on $tfm and passes its tests."
 }
 
