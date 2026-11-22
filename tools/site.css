@@ -1,0 +1,126 @@
+/* The documentation site's only stylesheet. Colours are the brand's, from tools/diagrams.py; fonts are whatever the
+   reader's system has, so nothing is fetched from another site. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #FFFFFF;
+  --ink: #18181B;
+  --muted: #52525B;
+  --line: #D4D4D8;
+  --fill: #FAFAFA;
+  --accent: #CA9A04;
+  --chip: #FEF3C7;
+  --link: #854D0E;
+  --sans: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  --mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #09090B;
+    --ink: #F4F4F5;
+    --muted: #A1A1AA;
+    --line: #3F3F46;
+    --fill: #18181B;
+    --accent: #FACC15;
+    --chip: #422006;
+    --link: #FDE68A;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 var(--sans);
+}
+
+a { color: var(--link); }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  border-top: 3px solid var(--accent);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  max-width: 76rem;
+  margin: 0 auto;
+}
+
+nav { padding: 1.5rem 1rem; border-right: 1px solid var(--line); }
+nav ul { position: sticky; top: 1rem; margin: 0; padding: 0; list-style: none; }
+nav a { display: block; padding: 0.25rem 0.6rem; border-radius: 4px; color: var(--muted); text-decoration: none; }
+nav a:hover { color: var(--ink); }
+nav a[aria-current] { background: var(--chip); color: var(--ink); }
+
+main { min-width: 0; padding: 1.5rem 2.5rem 4rem; }
+
+h1, h2, h3, h4 { position: relative; line-height: 1.25; }
+h1 { font-size: 2rem; }
+h2 { margin-top: 2.25rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--line); }
+
+.anchor {
+  position: absolute;
+  left: -1.1em;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0;
+}
+h1:hover .anchor, h2:hover .anchor, h3:hover .anchor, h4:hover .anchor, .anchor:focus { opacity: 1; }
+
+code, pre { font-family: var(--mono); font-size: 0.875em; }
+code { padding: 0.1em 0.3em; border-radius: 4px; background: var(--fill); }
+pre {
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--fill);
+  line-height: 1.45;
+}
+pre code { padding: 0; background: none; font-size: inherit; }
+
+table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+th, td { padding: 0.35rem 0.65rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { background: var(--fill); }
+
+img { max-width: 100%; height: auto; }
+
+blockquote { margin: 0; padding: 0 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
+
+.pager { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.9rem; }
+
+.source {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 48rem) {
+  .layout { display: block; }
+  nav { padding: 0.5rem 1rem; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav ul { position: static; display: flex; flex-wrap: wrap; gap: 0.15rem; }
+  nav a { padding: 0.2rem 0.5rem; }
+  main { padding: 1rem 1.25rem 3rem; }
+  h1 { font-size: 1.6rem; }
+}
