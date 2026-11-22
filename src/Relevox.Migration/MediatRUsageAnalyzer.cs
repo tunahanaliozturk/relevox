@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -47,6 +48,12 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
     /// </remarks>
     public const string StrategyKind = "Strategy";
 
+    /// <summary>
+    /// A <c>cref</c> in a documentation comment naming MediatR code, reported once for the whole <c>cref</c> and
+    /// only when its Relevox counterpart resolves.
+    /// </summary>
+    public const string CrefKind = "Cref";
+
     // MediatR namespaces whose types Relevox has under the same names below Relevox.
     private static readonly HashSet<string> Mapped = new(System.StringComparer.Ordinal) { "Pipeline", "NotificationPublishers", "Entities" };
 
@@ -90,7 +97,40 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
 
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeName), SyntaxKind.IdentifierName);
             start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeInvocation), SyntaxKind.InvocationExpression);
+            start.RegisterSyntaxNodeAction(GeneratedFiles.HandKept(AnalyzeCref), SyntaxKind.XmlCrefAttribute);
         });
+    }
+
+    /// <summary>
+    /// The <c>cref</c> with every MediatR name the code fix moves written as Relevox's: <c>MediatR</c> at the root
+    /// of a name as <c>Relevox</c>, and <c>MediatRServiceConfiguration</c> as <c>RelevoxOptions</c>. Shared with the
+    /// code fix, which writes what this analyzer checked resolves.
+    /// </summary>
+    /// <param name="cref">A <c>cref</c> from a documentation comment.</param>
+    /// <returns>The <c>cref</c>, the same instance when there is nothing to move.</returns>
+    public static CrefSyntax Moved(CrefSyntax cref)
+    {
+        IEnumerable<IdentifierNameSyntax> names = cref.DescendantNodes().OfType<IdentifierNameSyntax>().Where(static name =>
+            name.Identifier.ValueText == "MediatRServiceConfiguration" || (name.Identifier.ValueText == "MediatR" && IsMovable(name)));
+        return cref.ReplaceNodes(names, static (name, _) =>
+            SyntaxFactory.IdentifierName(name.Identifier.ValueText == "MediatR" ? "Relevox" : "RelevoxOptions").WithTriviaFrom(name));
+    }
+
+    private static void AnalyzeCref(SyntaxNodeAnalysisContext context)
+    {
+        // A cref is moved as a whole: one with MediatR names in its parameters as well as its type would not resolve
+        // with only some of them moved. One whose Relevox counterpart does not resolve either, MediatR.Mediator for
+        // example, is left for the compiler to point at, as unmapped names in code are.
+        CrefSyntax cref = ((XmlCrefAttributeSyntax)context.Node).Cref;
+        CrefSyntax moved = Moved(cref);
+        if (moved == cref
+            || context.SemanticModel.GetSymbolInfo(cref, context.CancellationToken) is { Symbol: not null } or { CandidateSymbols.Length: > 0 }
+            || context.SemanticModel.GetSpeculativeSymbolInfo(cref.SpanStart, moved, SpeculativeBindingOption.BindAsTypeOrNamespace).Symbol is null)
+        {
+            return;
+        }
+
+        Report(context, cref, CrefKind, cref.ToString());
     }
 
     private static void AnalyzeName(SyntaxNodeAnalysisContext context)
@@ -98,6 +138,7 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
         IdentifierNameSyntax name = (IdentifierNameSyntax)context.Node;
         string text = name.Identifier.ValueText;
         if (text is not ("MediatR" or "MediatRServiceConfiguration" or "RequestExceptionActionProcessorStrategy")
+            || name.FirstAncestorOrSelf<CrefSyntax>() is not null
             || Resolves(context.SemanticModel, name, context))
         {
             return;

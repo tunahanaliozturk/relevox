@@ -20,6 +20,9 @@ namespace Relevox.SourceGenerator.Tests;
 /// </remarks>
 public sealed class MigrationCodeFixTests
 {
+    // A cref the compiler cannot resolve, or whose parameters or syntax it cannot.
+    private static readonly string[] UnresolvedCref = ["CS1574", "CS1580", "CS1581", "CS1584"];
+
     private const string Handlers = """
         using MediatR;
         using MediatR.Pipeline;
@@ -500,6 +503,105 @@ public sealed class MigrationCodeFixTests
         fixedSources[0].ShouldContain("MediatR.Registration.ServiceRegistrar");
     }
 
+    [Fact]
+    public async Task MediatR_names_in_documentation_crefs_are_moved_by_the_same_fix_all_as_the_code()
+    {
+        // With documentation generation on and warnings as errors, a cref that no longer resolves breaks the build.
+        string[] fixedSources = await Migrate(Handlers, """
+            using MediatR;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop;
+
+            /// <summary>
+            /// Sends through <see cref="MediatR.ISender.Send{TResponse}(MediatR.IRequest{TResponse}, System.Threading.CancellationToken)"/>,
+            /// so the request is a <see cref="MediatR.IRequest{TResponse}"/> and runs behind every
+            /// <see cref="MediatR.Pipeline.IRequestPreProcessor{TRequest}"/> and <see cref="global::MediatR.IMediator"/>,
+            /// set up with <see cref="MediatRServiceConfiguration"/>. <see cref="IMediator"/> resolves again once the using moves.
+            /// </summary>
+            public static class Sender
+            {
+                /// <returns><see cref="MediatR.Unit.Value"/>.</returns>
+                public static MediatR.Unit Done() => MediatR.Unit.Value;
+            }
+            """);
+
+        string sender = fixedSources[1];
+        sender.ShouldNotContain("MediatR");
+        sender.ShouldContain("""<see cref="Relevox.ISender.Send{TResponse}(Relevox.IRequest{TResponse}, System.Threading.CancellationToken)"/>""");
+        sender.ShouldContain("""<see cref="Relevox.IRequest{TResponse}"/>""");
+        sender.ShouldContain("""<see cref="Relevox.Pipeline.IRequestPreProcessor{TRequest}"/>""");
+        sender.ShouldContain("""<see cref="global::Relevox.IMediator"/>""");
+        sender.ShouldContain("""<see cref="RelevoxOptions"/>""");
+        sender.ShouldContain("""<see cref="IMediator"/>""");
+        sender.ShouldContain("""<returns><see cref="Relevox.Unit.Value"/>.</returns>""");
+        sender.ShouldContain("public static Relevox.Unit Done() => Relevox.Unit.Value;");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_short_cref_that_resolves_once_the_using_moves_is_not_reported()
+    {
+        ImmutableArray<Diagnostic> diagnostics = await Reported("""
+            using MediatR;
+
+            /// <summary>Uses <see cref="IMediator"/> and <see cref="IRequest{TResponse}"/>.</summary>
+            public sealed record Ping : IRequest<int>;
+            """);
+
+        // The using, and nothing in the comment.
+        diagnostics.ShouldHaveSingleItem().Location.GetLineSpan().StartLinePosition.Line.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_cref_to_a_MediatR_type_with_no_Relevox_counterpart_is_left_for_the_compiler_to_point_at()
+    {
+        // MediatR's Mediator class has no Relevox counterpart: the mediator is generated. Renaming the cref would
+        // only swap one name that does not resolve for another, so the compiler's CS1574 is what stays.
+        const string Source = """
+            using MediatR;
+
+            /// <summary>Not <see cref="MediatR.Mediator"/>, nor <see cref="MediatR.Registration.ServiceRegistrar"/>, nor <see cref="MediatR.ISender.Missing"/>.</summary>
+            public sealed record Ping : IRequest<int>;
+            """;
+
+        ImmutableArray<Diagnostic> diagnostics = await Reported(Source);
+        string[] fixedSources = await Migrate(Source);
+
+        diagnostics.ShouldHaveSingleItem().Location.GetLineSpan().StartLinePosition.Line.ShouldBe(0);
+        fixedSources[0].ShouldContain("using Relevox;");
+        fixedSources[0].ShouldContain("""<see cref="MediatR.Mediator"/>""");
+        fixedSources[0].ShouldContain("""<see cref="MediatR.Registration.ServiceRegistrar"/>""");
+        fixedSources[0].ShouldContain("""<see cref="MediatR.ISender.Missing"/>""");
+    }
+
+    [Fact]
+    public async Task A_cref_is_not_reported_while_MediatR_is_still_referenced()
+    {
+        // A stand-in for the MediatR package: with it referenced, nothing is reported, crefs included, even one
+        // that does not resolve against it.
+        ImmutableArray<Diagnostic> diagnostics = await Reported("""
+            namespace MediatR { public interface IMediator; }
+
+            /// <summary>Uses <see cref="MediatR.IRequest{TResponse}"/> and <see cref="MediatR.IMediator"/>.</summary>
+            public static class Sender;
+            """);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    /// <summary>What RVX0007 reports for one file, without fixing anything.</summary>
+    private static async Task<ImmutableArray<Diagnostic>> Reported(string source)
+    {
+        using AdhocWorkspace workspace = new();
+        Project project = workspace.AddProject("Shop", LanguageNames.CSharp)
+            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+            .WithMetadataReferences(GeneratorHarness.References)
+            .AddDocument("File0.cs", source).Project;
+
+        return await AnalyzerDiagnostics.Collect(project, CancellationToken.None);
+    }
+
     /// <summary>
     /// Runs the fix the way the IDE's "Fix all in solution" does: once, started on RVX0007, over every RVX0007
     /// the analyzer reports, merged by the batch fixer.
@@ -563,16 +665,19 @@ public sealed class MigrationCodeFixTests
         const string ImplicitUsings = "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;";
         string[] files = application ? [.. sources, ImplicitUsings] : sources;
 
+        // Documentation comments are checked, as with GenerateDocumentationFile on, so a cref left pointing at
+        // MediatR fails here as it fails such a build.
+        CSharpParseOptions parse = new CSharpParseOptions(LanguageVersion.Preview).WithDocumentationMode(DocumentationMode.Diagnose);
         CSharpCompilation compilation = CSharpCompilation.Create(
             "Shop",
-            files.Select((source, index) => CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview), $"File{index}.cs")),
+            files.Select((source, index) => CSharpSyntaxTree.ParseText(source, parse, $"File{index}.cs")),
             GeneratorHarness.References,
             new CSharpCompilationOptions(application ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
         CSharpGeneratorDriver
-            .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: new CSharpParseOptions(LanguageVersion.Preview))
+            .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: parse)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
 
-        output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error || UnresolvedCref.Contains(diagnostic.Id)).ShouldBeEmpty();
     }
 }

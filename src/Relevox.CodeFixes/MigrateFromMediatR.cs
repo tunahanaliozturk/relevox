@@ -18,11 +18,11 @@ namespace Relevox.CodeFixes;
 /// </summary>
 /// <remarks>
 /// <para>
-/// RVX0007 points at three kinds of leftover, and this rewrites each: a name rooted at <c>MediatR</c> becomes
-/// one rooted at <c>Relevox</c>, <c>MediatRServiceConfiguration</c> becomes <c>RelevoxOptions</c>, and an
-/// <c>AddMediatR</c> call becomes <c>AddRelevox</c> without the settings that only drove MediatR's assembly
-/// scan, its licence check or its run-time closing of generic handlers. Because every kind shares the one id,
-/// "Fix all in solution" does the whole migration in one go.
+/// RVX0007 points at three kinds of leftover, and this rewrites each: a name rooted at <c>MediatR</c>, in code or
+/// in a documentation <c>cref</c>, becomes one rooted at <c>Relevox</c>, <c>MediatRServiceConfiguration</c> becomes
+/// <c>RelevoxOptions</c>, and an <c>AddMediatR</c> call becomes <c>AddRelevox</c> without the settings that only
+/// drove MediatR's assembly scan, its licence check or its run-time closing of generic handlers. Because every
+/// kind shares the one id, "Fix all in solution" does the whole migration in one go.
 /// </para>
 /// <para>
 /// Where the configuration cannot be carried over without guessing, as when it is built as an object and
@@ -72,11 +72,13 @@ public sealed class MigrateFromMediatR : CodeFixProvider
 
         foreach (Diagnostic diagnostic in context.Diagnostics)
         {
-            SyntaxNode node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+            // Inside trivia too: a cref lives in a documentation comment.
+            SyntaxNode node = root.FindNode(diagnostic.Location.SourceSpan, findInsideTrivia: true, getInnermostNodeForTie: true);
             diagnostic.Properties.TryGetValue("Kind", out string? kind);
 
             (SyntaxNode Target, SyntaxNode Replacement)? edit = (kind, node) switch
             {
+                ("Cref", _) when node.FirstAncestorOrSelf<XmlCrefAttributeSyntax>() is { } attribute => (attribute.Cref, MediatRUsageAnalyzer.Moved(attribute.Cref)),
                 ("Name", IdentifierNameSyntax name) when name.FirstAncestorOrSelf<UsingDirectiveSyntax>() is { Parent: { } block } => (block, UsingsMover.Moved(block, static candidate => candidate.Identifier.ValueText == "MediatR" && MediatRUsageAnalyzer.IsMovable(candidate))),
                 ("Name", IdentifierNameSyntax name) => (name, UsingsMover.Renamed(name, "Relevox")),
                 ("Configuration", IdentifierNameSyntax name) => (name, UsingsMover.Renamed(name, "RelevoxOptions")),

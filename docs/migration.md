@@ -53,8 +53,8 @@ bind to the library's method, and the build warns with [RVX0006](diagnostics.md#
 Steps 2 and 3 are a code fix. Once the packages are swapped, every piece of MediatR code is marked with
 [RVX0007](diagnostics.md#rvx0007), a suggestion that offers **Move from MediatR to Relevox**. Choose *Fix all
 occurrences in: Solution* on any of them and the IDE rewrites the `using` directives, names rooted at
-`MediatR`, `MediatRServiceConfiguration` and the registration calls in one go, dropping the scanning, licence
-and generic-closing settings that steps 2 and 3 describe. What it leaves, such as `using
+`MediatR` in code and in documentation `cref`s, `MediatRServiceConfiguration` and the registration calls in one
+go, dropping the scanning, licence and generic-closing settings that steps 2 and 3 describe. What it leaves, such as `using
 MediatR.Registration;` or an options object passed to `AddMediatR`, stays a compiler error for you to decide
 about; the RVX0007 page lists those cases.
 
