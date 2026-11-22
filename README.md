@@ -20,6 +20,9 @@ signatures as MediatR 12. MIT licensed, no licence key, no telemetry.
 The name joins *relevo*, the relay race in Spanish and Portuguese, and *vox*, Latin for voice: the message
 handed from runner to runner. A request goes the same way, through each behaviour to its handler.
 
+The guides, and a page for each diagnostic, are on the
+[documentation site](https://tunahanaliozturk.github.io/relevox/), built from this README and [docs/](docs).
+
 ```bash
 dotnet add package Relevox             # the application, which calls AddRelevox
 dotnet add package Relevox.Contracts   # libraries that only declare requests and handlers
@@ -241,6 +244,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [24. Moving from the Mediator library](docs/adr/0024-moving-from-mediator.md)
 - [25. net11.0 alongside net10.0, and two packages that stay pinned](docs/adr/0025-net11-alongside-net10.md)
 - [26. Singleton handlers are held per container, scoped ones per mediator on first use](docs/adr/0026-singletons-held-per-container.md)
+- [27. The documentation site is built by a script with one markdown library](docs/adr/0027-documentation-site-script.md)
 
 ## Roadmap
 

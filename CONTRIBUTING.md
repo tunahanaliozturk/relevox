@@ -17,6 +17,19 @@ bash eng/package-smoke.sh
 The last one packs both packages and builds a new application against them. Run it after touching anything
 the package carries: the generator, project files, `Directory.Build.props`.
 
+The documentation site is built from `README.md` and `docs/` by `tools/site.py`
+([ADR 0027](docs/adr/0027-documentation-site-script.md)). After changing either, build it and open
+`artifacts/site/index.html`. It fails on any link or anchor that leads nowhere:
+
+```bash
+python3 -m venv artifacts/site-venv
+artifacts/site-venv/bin/pip install --require-hashes -r tools/site-requirements.txt   # Scripts\ on Windows
+artifacts/site-venv/bin/python tools/site.py
+```
+
+A new page in `docs/` goes on the site once it has a line in `PAGES` at the top of `tools/site.py`. Link between
+documents with relative links to the `.md` files, as GitHub expects; the script turns them into links between pages.
+
 ## Ground rules
 
 **Warnings are errors.** Every project builds with `TreatWarningsAsErrors` and enforced code style. Run
