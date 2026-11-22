@@ -83,6 +83,44 @@ done
 unzip -p "$templates_package" content/relevox-webapi/RelevoxWebApi/RelevoxWebApi.csproj | grep -q "Include=\"Relevox\" Version=\"$version\"" \
   || { echo "Relevox.Templates.$version.nupkg does not reference Relevox $version" >&2; exit 1; }
 
+# The templates write package versions by hand, and Dependabot does not see them. Each one has to match the version
+# Directory.Packages.props uses for the same package and framework (Relevox itself is stamped at pack time).
+declare -A central
+group=all
+while IFS= read -r line; do
+  case "$line" in
+    *'<ItemGroup Label="Runtime, net10.0"'*) group=net10.0 ;;
+    *'<ItemGroup Label="Runtime, net11.0"'*) group=net11.0 ;;
+    *'<ItemGroup'*) group=all ;;
+    *'<PackageVersion Include="'*)
+      name="$(sed -E 's/.*Include="([^"]+)".*/\1/' <<<"$line")"
+      pinned="$(sed -E 's/.*Version="([^"]+)".*/\1/' <<<"$line")"
+      if [[ $group == all ]]; then central["$name|net10.0"]="$pinned"; central["$name|net11.0"]="$pinned"; else central["$name|$group"]="$pinned"; fi ;;
+  esac
+done <"$root/Directory.Packages.props"
+
+while IFS= read -r project; do
+  scope=all
+  while IFS= read -r line; do
+    case "$line" in
+      *'#if (Framework == "net11.0")'*) scope=net11.0 ;;
+      *'#else'*) scope=net10.0 ;;
+      *'#endif'*) scope=all ;;
+      *'<PackageReference Include="'*)
+        name="$(sed -E 's/.*Include="([^"]+)".*/\1/' <<<"$line")"
+        written="$(sed -E 's/.*Version="([^"]+)".*/\1/' <<<"$line")"
+        [[ $name == Relevox ]] && continue
+        for tfm in net10.0 net11.0; do
+          [[ $scope == all || $scope == "$tfm" ]] || continue
+          expected="${central["$name|$tfm"]:-}"
+          [[ -n $expected ]] || { echo "${project#"$root"/}: $name is not in Directory.Packages.props, so its version cannot be checked." >&2; exit 1; }
+          [[ $written == "$expected" ]]             || { echo "${project#"$root"/}: $name is $written for $tfm, but Directory.Packages.props has $expected." >&2; exit 1; }
+        done ;;
+    esac
+  done <"$project"
+done < <(find "$root/templates/Relevox.Templates/content" -name '*.csproj' -not -path '*/obj/*')
+echo "The package versions in the templates match Directory.Packages.props."
+
 # The leftover copies below live outside the repository and are removed when the script ends.
 leftovers=()
 trap 'rm -rf "${leftovers[@]}"' EXIT
