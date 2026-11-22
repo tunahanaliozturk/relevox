@@ -8,6 +8,10 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- `relevox-feature --response none` writes a request implementing `IRequest` with a `Task`-returning
+  `IRequestHandler<TRequest>` handler and a test. `--app-dir` and `--tests-dir` set the application and test
+  folders (default `<app>` and `<app>.Tests`), so solutions under `src/` and `tests/` work. The smoke script now
+  fails when a package version written in a template differs from `Directory.Packages.props` (#181).
 - The RVX0007 code fix turns an options object passed to `AddMediatR` into the lambda `AddRelevox` takes, when
   the object is made in the call or in a local filled in by plain statements and used nowhere else
   ([ADR 0029](docs/adr/0029-options-object-to-lambda.md), #62). It moves those statements past others only when
