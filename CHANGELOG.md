@@ -41,7 +41,7 @@ All notable changes to this project are written down here. The format follows
 
 ### Changed
 
-- RVX0007 and its code fix move `MediatR` names in documentation `cref`s, in `<see>`, `<seealso>`, `<exception>`
+- The migration guide has a section for solutions that use central package management: the\n  `Directory.Packages.props` and `Directory.Build.props` changes, that the code fix does not edit MSBuild files,\n  and a search for what is left (#60).\n- RVX0007 and its code fix move `MediatR` names in documentation `cref`s, in `<see>`, `<seealso>`, `<exception>`
   and `<inheritdoc>` alike, so a build with documentation generation and warnings as errors no longer breaks on
   them after the migration (#61). A `cref` whose counterpart is not a Relevox type or member, such as
   `MediatR.Mediator`, is left for the compiler's CS1574.
