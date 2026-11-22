@@ -239,6 +239,26 @@ templates() {
     || { echo "$output" >&2; echo "The solution relevox-webapi and relevox-feature wrote did not build clean or pass its tests." >&2; exit 1; }
   grep -q "succeeded: 4" <<<"$output" || { echo "$output" >&2; echo "Expected the four generated tests to pass." >&2; exit 1; }
   echo "relevox-webapi and relevox-feature wrote a solution that builds clean on $tfm and passes its tests."
+
+  # The same solution laid out as src/Shop and tests/Shop.Tests, with the feature written there through --app-dir and
+  # --tests-dir. The namespace stays Shop.
+  local layout="$work/Layout"
+  dotnet new relevox-webapi --name Shop --output "$layout" --framework "$tfm" --debug:custom-hive "$hive"
+  mkdir "$layout/src" "$layout/tests"
+  mv "$layout/Shop" "$layout/src/Shop"
+  mv "$layout/Shop.Tests" "$layout/tests/Shop.Tests"
+  sed -i 's#"\.\./Shop/#"../../src/Shop/#' "$layout/tests/Shop.Tests/Shop.Tests.csproj"
+  sed -i 's#Path="Shop/#Path="src/Shop/#; s#Path="Shop.Tests/#Path="tests/Shop.Tests/#' "$layout/Shop.slnx"
+  (cd "$layout" && dotnet new relevox-feature --name Archive --app Shop --app-dir src/Shop --tests-dir tests/Shop.Tests --debug:custom-hive "$hive")
+  [[ -f "$layout/src/Shop/Archive.cs" && -f "$layout/tests/Shop.Tests/ArchiveTests.cs" && ! -e "$layout/Shop" && ! -e "$layout/Shop.Tests" ]] \
+    || { find "$layout" -type f -not -path '*/obj/*' >&2; echo "relevox-feature did not honour --app-dir and --tests-dir." >&2; exit 1; }
+  grep -q "^namespace Shop;" "$layout/src/Shop/Archive.cs" \
+    || { cat "$layout/src/Shop/Archive.cs" >&2; echo "The namespace is not Shop." >&2; exit 1; }
+  sed "s#../../artifacts/smoke-feed#$feed_path#" "$app/nuget.config" >"$layout/nuget.config"
+  output="$(cd "$layout" && NUGET_PACKAGES="$work/packages" dotnet test --configuration Release -p:TreatWarningsAsErrors=true 2>&1)" \
+    || { echo "$output" >&2; echo "The src/ and tests/ solution did not build clean or pass its tests." >&2; exit 1; }
+  grep -q "succeeded: 2" <<<"$output" || { echo "$output" >&2; echo "Expected the two tests of the src/ and tests/ solution to pass." >&2; exit 1; }
+  echo "relevox-feature wrote into src/ and tests/ on $tfm."
 }
 
 for tfm in "${frameworks[@]}"; do
