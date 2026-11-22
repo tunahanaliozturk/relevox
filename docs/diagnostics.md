@@ -246,7 +246,7 @@ A documentation `cref` is moved as a whole, so one with MediatR names in its par
 one step. A short `cref` such as `IMediator` is not reported: it resolves again once the `using` is moved.
 
 `AddRelevox` takes a lambda, not an options object, so an object passed to `AddMediatR` becomes one
-([ADR 0028](adr/0028-options-object-to-lambda.md)). That works for an object made in the call,
+([ADR 0029](adr/0029-options-object-to-lambda.md)). That works for an object made in the call,
 `AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssembly(...))`, and for a local made with `new`,
 with or without an object initializer or a chain of calls, in the block that makes the call, filled in by
 statements of the form `config.Member(...);` or `config.Member = value;` and used nowhere else:

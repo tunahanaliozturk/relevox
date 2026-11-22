@@ -1,4 +1,4 @@
-# 28. An options object passed to AddMediatR becomes a lambda
+# 29. An options object passed to AddMediatR becomes a lambda
 
 Status: accepted
 Date: 2026-11-22
