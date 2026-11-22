@@ -17,8 +17,41 @@
       "description": "The application project, the folder and namespace that get the request and its handler. The test goes to <app>.Tests.",
       "datatype": "text",
       "isRequired": true,
-      "replaces": "RelevoxApp",
-      "fileRename": "RelevoxApp"
+      "replaces": "RelevoxApp"
+    },
+    "appDir": {
+      "type": "parameter",
+      "description": "The folder for the request and its handler, relative to where the template runs. Defaults to <app>.",
+      "datatype": "text"
+    },
+    "testsDir": {
+      "type": "parameter",
+      "description": "The folder for the test, relative to where the template runs. Defaults to <app>.Tests.",
+      "datatype": "text"
+    },
+    "defaultTestsDir": {
+      "type": "generated",
+      "generator": "join",
+      "parameters": {
+        "symbols": [
+          { "type": "ref", "value": "app" },
+          { "type": "const", "value": ".Tests" }
+        ]
+      }
+    },
+    "appPath": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": { "sourceVariableName": "appDir", "fallbackVariableName": "app" },
+      "replaces": "AppDir",
+      "fileRename": "AppDir"
+    },
+    "testsPath": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": { "sourceVariableName": "testsDir", "fallbackVariableName": "defaultTestsDir" },
+      "replaces": "TestsDir",
+      "fileRename": "TestsDir"
     },
     "response": {
       "type": "parameter",
