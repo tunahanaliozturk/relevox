@@ -925,6 +925,18 @@ public sealed class MigrationCodeFixTests
     }
 
     [Fact]
+    public async Task A_cref_that_does_not_parse_is_not_reported()
+    {
+        // Moving the part that parsed would leave CS1584 on a cref the fix had touched.
+        ImmutableArray<Diagnostic> diagnostics = await Reported("""
+            /// <summary>A <see cref="MediatR.IRequest{T} garbage"/>.</summary>
+            public static class Sender;
+            """);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_short_cref_that_resolves_once_the_using_moves_is_not_reported()
     {
         ImmutableArray<Diagnostic> diagnostics = await Reported("""

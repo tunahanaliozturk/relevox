@@ -69,7 +69,7 @@ All notable changes to this project are written down here. The format follows
 
 ### Fixed
 
-- Every RVX rule's help link points at its page on the documentation site,\n  `https://tunahanaliozturk.github.io/relevox/rules/rvxNNNN.html`, instead of `docs/diagnostics.md` on GitHub.\n  Links in earlier versions keep working. A test checks that every rule has a section, so a new rule cannot ship\n  with a dead link (#178).\n- ADR 0004 said singleton behaviours were resolved once and held. They are resolved on every send, as in MediatR,
+- RVX0007 no longer reports or moves a documentation `cref` that does not parse. It moved the part that parsed and\n  left the compiler's CS1584 on a `cref` the fix had touched (#192).\n- Every RVX rule's help link points at its page on the documentation site,\n  `https://tunahanaliozturk.github.io/relevox/rules/rvxNNNN.html`, instead of `docs/diagnostics.md` on GitHub.\n  Links in earlier versions keep working. A test checks that every rule has a section, so a new rule cannot ship\n  with a dead link (#178).\n- ADR 0004 said singleton behaviours were resolved once and held. They are resolved on every send, as in MediatR,
   and that stays: for all-singleton behaviours the container returns one cached array, so holding them would save
   a lookup of about 8 ns and no bytes. The ADR now says so.
 
