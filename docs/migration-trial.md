@@ -8,6 +8,8 @@ Every other test in this repository runs code written for it. This page is about
 - Microsoft's [eShop reference application](https://github.com/dotnet/eShop) (MIT), on MediatR 13.1.0.
 - neozhu's [Blazor Clean Architecture template](https://github.com/neozhu/CleanArchitectureWithBlazorServer)
   (MIT), on Mediator 3.0.2, the source-generated library, following [its own guide](migration-from-mediator.md).
+- Peter Kneale's [modular monolith SaaS sample](https://github.com/PeterKneale/modular_monolith_saas) (MIT), on
+  MediatR 12.4.1, with handlers in seven projects and three modules that each build a mediator of their own.
 
 ## Clean Architecture
 
@@ -319,6 +321,126 @@ Relevox is in the code fix and its tests; the rest is in the guide.
   notification that reached no handler, with an [RVX0005](diagnostics.md#rvx0005) warning saying why. They now
   call `AddApplication()`, as the host does. The unit test project keeps RVX0005, because its publisher tests
   declare handler classes of their own; the RVX0005 page now covers that case.
+
+## Modular monolith on MediatR 12
+
+### The project
+
+- [PeterKneale/modular_monolith_saas](https://github.com/PeterKneale/modular_monolith_saas), upstream commit
+  `533aec5`, 2025-01-03, .NET 9.
+- MediatR **12.4.1**, the Apache-2.0 line, and `MediatR.Contracts` 2.0.1.
+- Three modules, Tenants, Translations and Users, each with Domain, Application, Infrastructure, Messages and
+  Web projects, and a shared `Micro.Common`. Each module's Infrastructure builds a service provider of its own
+  and calls `AddMediatR(c => { c.RegisterServicesFromAssemblies(assemblies); })` over its own Infrastructure,
+  its own Application and Common. That is three mediators, and Common's handlers are in all three.
+- Handlers in seven projects: 21, 19 and 20 in the three Application projects, 3, 5 and 1 in the three
+  Infrastructure projects, and Common's inbox and outbox handlers. Most of them are the `Handler` class nested in
+  one static class per use case, next to its request, validator and result.
+- Behaviours: logging and validation from Common, and a unit of work per module, all registered with
+  `services.AddTransient(typeof(IPipelineBehavior<,>), ...)` rather than through MediatR's options.
+- The MediatR packages were referenced by Common, `Micro.Users.Application` and two of the three Infrastructure
+  projects. Everything else, the third `AddMediatR` call included, had MediatR through Common.
+- Tests: 45 domain unit tests in four projects; 67 integration tests in three projects that send commands and
+  queries through a module's mediator against PostgreSQL, validation failures included; and one system test
+  that starts all three modules and checks that users, organisations and projects created in one reach the
+  others through the outbox and inbox. The acceptance tests drive the web site with Playwright in Docker and are
+  left out on both sides.
+
+**Why this one.** Of the candidates a GitHub code search for `RegisterServicesFromAssemblies` and a search for
+modular monoliths turned up, it was the only one on MediatR 12 with handlers in more than two projects, tests
+that send through the mediator, and a licence. Passed over: ByteSync, Accord and Azure's transactional outbox
+sample, MIT and on 12.5.0 but with handlers in one or two projects; mehmetozkaya's EshopModularMonoliths, on
+12.4.0 with handlers in five projects and no tests; mehdihadeli's food delivery monolith, on MediatR 11; and the
+Chapter 2 modular monolith of evolutionary-architecture-by-example, which has three handlers outside its tests.
+It is a smaller project than the other three subjects and was last changed in January 2025.
+
+**How it was run.** Relevox does not target .NET 9 ([before you start](migration.md#before-you-start)), so the
+first change, not counted below, retargeted all 29 projects from `net9.0` to `net10.0`. The tests passed the
+same, untouched on .NET 9 and retargeted on .NET 10. The project's own tests start PostgreSQL 15.3 in Docker,
+which did not start on this machine, so all of them ran against a throwaway PostgreSQL 18 cluster, with the
+user and password the project defaults to:
+
+```bash
+initdb -D trial3-pg -U admin --pwfile=pw.txt -A scram-sha-256   # pw.txt holds the default, "password"
+pg_ctl -D trial3-pg -o "-p 55432" start
+psql -h localhost -p 55432 -U admin -d postgres -c "create database db;"
+export DB_PORT=55432
+dotnet build MicroSaas.sln -c Release -p:NuGetAudit=false
+dotnet test MicroSaas.sln -c Release --no-build --filter Type=Unit
+dotnet test tests/Micro.Users.IntegrationTests -c Release --no-build   # and the other two, and Micro.Modules.SystemTests
+```
+
+Relevox came from main at `8fb6e8d`, packed into a local feed with `-p:Version=99.0.0-smoke` and restored into
+an empty `NUGET_PACKAGES` folder, so no older package of that version was used.
+
+### What the migration took
+
+1. The package swap, five project files. Common's `MediatR` and `MediatR.Contracts` became `Relevox.Contracts`.
+   `Micro.Users.Application` lost `MediatR.Contracts`; it has `Relevox.Contracts` through Common. The two
+   Infrastructure projects with a `MediatR` reference got `Relevox` instead, and `Micro.Users.Infrastructure`,
+   which called `AddMediatR` with MediatR only through Common, got a new reference to `Relevox`.
+2. One command:
+
+   ```bash
+   dotnet format analyzers MicroSaas.sln --diagnostics RVX0007 --severity info
+   ```
+
+   It took 16 seconds and changed 14 files: seven `global using MediatR;` lines, four `using MediatR;` lines in
+   the test fixtures, and the three registrations, each of which became `services.AddRelevox();`.
+3. The build failed with 11 [RVX0003](diagnostics.md#rvx0003) errors, one for each query handler declared
+   `private class Handler`. By hand, 14 files: the 11 handlers became `internal`, and each Application
+   project's `AssemblyInfo.cs` gave its module's Infrastructure `InternalsVisibleTo`. Making the handlers
+   `public` instead would have been 11 files.
+4. Nothing else. The solution built with the same nine warnings as before, all the project's own, and none
+   from Relevox.
+
+| | MediatR 12.4.1 | Relevox |
+|---|---:|---:|
+| Domain unit tests | 45 passed | 45 passed |
+| Integration tests, PostgreSQL | 67 passed | 67 passed |
+| System test, three modules | 1 passed | 1 passed |
+| Files changed by the fix | | 14, +21 / -21 lines |
+| Files changed by hand | | 19, +24 / -16 lines |
+
+The counts leave out the retargeting and the local package feed in `nuget.config`.
+
+From the package swap to passing tests took about eight minutes, most of it the restore and three builds. One
+of those builds was wasted, as the first point below explains.
+
+Only the three Infrastructure projects generate a mediator. Web, the command line tool and the test projects
+reference them and generate nothing. Each generated registration holds its module's
+handlers and Common's two, the same set MediatR's three scans registered, because no Infrastructure project
+references anything else with handlers. The validation behaviour, registered with the container directly, ran
+through Relevox: the tests that expect a `ValidationException` passed.
+
+### What it found
+
+- **RVX0003 gave the wrong reason.** Every one of the 11 errors said the handler "is internal to" its
+  Application project. The handlers are private. The fix the rule page gives for an internal handler,
+  `InternalsVisibleTo`, was added first, and the next build failed with the same 11 errors. Only reading the
+  handlers showed why. The generator says "is internal to" for any handler from another project that it cannot
+  call, whatever the reason. Not fixed here; a separate issue.
+- **RVX0003 has no location.** A handler in another project is reported as `CSC : error RVX0003`, with no file
+  and line. The IDE has nothing to go to, and no code fix can be offered, so the person searches for each
+  handler by name. Not fixed here; a separate issue.
+- **Private nested handlers.** One static class per use case, with a private handler inside, is a common
+  vertical-slice layout. MediatR's scan reached private types through reflection; the generated mediator in
+  another project cannot call them, and `InternalsVisibleTo` does not change that. The guide now says so.
+- **Three projects call `AddMediatR`, none of them the host.** The guide spoke of "the project that calls
+  `AddMediatR`, usually the host". Here each module's Infrastructure became a project with a mediator of its
+  own, as each had one with MediatR, and nothing else was needed. The guide now says that is what happens.
+- **A project with MediatR only through another.** `Micro.Users.Infrastructure` had no MediatR reference of its
+  own and needed `Relevox` added. Two Application projects declare handlers with MediatR only through Common,
+  and the third had only `MediatR.Contracts`; `Relevox.Contracts` reached all three through Common, and none
+  needed a reference of its own. The guide now says both.
+- **The assemblies listed in `RegisterServicesFromAssemblies` are not kept.** The mediator gets the handlers of
+  the project that calls `AddRelevox` and of everything it references. Here each list was exactly that, so
+  nothing changed, but a list narrower than the references would have made more handlers live. The guide now
+  says so.
+- **Two handlers changed lifetime.** Common registers `InboxHandler` and `OutboxHandler` with `AddScoped`, before
+  `AddRelevox`. MediatR resolved them through the transient registration its scan made; the generated mediator
+  resolves a handler by its class ([compatibility](compatibility.md#different-on-purpose)), so it uses the scoped
+  one. The tests did not notice, and nothing reported it. The guide now lists it with the other differences.
 
 ## Why bother
 
