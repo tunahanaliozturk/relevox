@@ -1,6 +1,6 @@
 # 24. Moving from the Mediator library: RVX0017 and its code fix
 
-Status: accepted, revisited after the trial (2026-11-17)
+Status: accepted, revisited after the trial (2026-11-17), documentation crefs added (2026-11-22)
 Date: 2026-10-30
 
 ## Context
@@ -161,3 +161,29 @@ A review of the changes above settled three more points:
 - `new ValueTask<T>(task)` and `new(task)`, which the list above left for the compiler, return the task.
 - `ForeachAwaitPublisher` and `TaskWhenAllPublisher` become Relevox's only when the name does not resolve, which
   is Mediator's; a class of the project's with one of those names is kept.
+
+## Documentation crefs (#183)
+
+A project that builds its documentation with warnings as errors breaks on every `cref` still naming Mediator code,
+since the compiler reports each as CS1574. RVX0007 moves MediatR's (#61); RVX0017 now moves Mediator's, as a
+fourth kind, with the same rules: a `cref` is moved as a whole, and only when the result resolves into Relevox's
+own assemblies. Anything else is left for CS1574.
+
+- **The table applies, by name and arity, as a generic type definition.** Type arguments in a `cref` name type
+  parameters, not types, so `IRequest{Unit}` names `IRequest<TResponse>` with its parameter called `Unit`. That
+  is the definition the code now implements, and the name says what the code fills it with:
+  `ICommand{TResponse}` becomes `IRequest{TResponse}`, `ICommand` becomes `IRequest{Unit}` and
+  `ICommandHandler{TCommand}` becomes `IRequestHandler{TCommand, Unit}`. `Mediator` at the root of a name
+  Relevox has becomes `Relevox`, as in code.
+- **A short `cref` is checked as it will read after the fix.** `IRequest{TResponse}` resolves only once
+  `using Mediator;` has become `using Relevox;`, so it is checked as `global::Relevox.IRequest{TResponse}`, and
+  only where such a using covers it and no other type of that name is in scope. One that would name a type of
+  the project's own is left.
+- **Inside a type that is moved, the type's rewrite moves its `cref`s.** Every RVX0017 in such a type is fixed by
+  rewriting the type, so the batch fixer merges identical edits. A separate edit for the `cref` would overlap the
+  rewrite and one of the two would be dropped. The rewrite visits documentation comments for that reason, and the
+  `cref`s of nested types with them.
+
+Rejected: writing every moved `cref` fully qualified, which needs no check against the usings but rewrites short
+names nobody asked to have qualified, unlike the code around them; and mapping a void `ICommand` to Relevox's
+void `IRequest` in documentation only, which would describe a type the code does not implement.

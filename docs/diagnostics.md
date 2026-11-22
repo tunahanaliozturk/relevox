@@ -480,11 +480,13 @@ package, then finish with [the migration steps](migration.md).
 **Mediator code to move to Relevox.** Info.
 
 Reported once the [Mediator](https://github.com/martinothamar/Mediator) package is gone, on each piece of Mediator
-code the compiler can no longer resolve. It has three kinds, under the one id so that a single *Fix all
+code the compiler can no longer resolve. It has four kinds, under the one id so that a single *Fix all
 occurrences in: Solution* does the whole move:
 
 - a name rooted at `Mediator`, in a `using` directive or a qualified name such as `Mediator.IMediator` or
   `global::Mediator.Unit.Value`;
+- a documentation `cref` naming Mediator code, reported as a whole and only when its Relevox counterpart
+  resolves to a Relevox type or member;
 - a class, record, struct or interface in Mediator's shape, reported as a whole: its base list names `ICommand`,
   `IQuery`, `IStreamCommand`, `IStreamQuery`, a void `IRequest` or one of their handlers, or it implements a
   handler or a behaviour and has a `Handle` method that returns `ValueTask` or takes a `MessageHandlerDelegate`
@@ -539,8 +541,21 @@ It leaves alone, for a person to decide, and the compiler errors stay to point a
 - an options object passed to `AddMediator`, a method group, a behaviour list that is not written out as
   `typeof(...)`, an option the fix does not know, and a lambda with a comment or an `#if` in it, which the fix
   would otherwise lose;
-- variables, fields and parameters typed `ValueTask` at call sites, `Mediator` names in XML documentation
-  `cref`s, and `@using Mediator` in Razor files, which code fixes cannot reach.
+- a documentation `cref` whose Relevox counterpart would not resolve to a Relevox type or member: one to a type
+  Relevox has no counterpart for, such as `Mediator.MessagePreProcessor{TMessage, TResponse}`, to a member
+  Relevox's type lacks, one that would name a type of your own, such as your own `IStreamRequest<T>`, and a short
+  one in a file with no `using Mediator;` to become `using Relevox;`. The compiler's CS1574 points at it;
+- variables, fields and parameters typed `ValueTask` at call sites, and `@using Mediator` in Razor files, which
+  code fixes cannot reach.
+
+A documentation `cref` is moved as a whole, as the code it describes is: `Mediator` at its root becomes `Relevox`,
+and a name in the table becomes its row's as a generic type definition, with a type parameter called `Unit` where
+the row adds `Unit`. So `Mediator.ICommand{TResponse}` becomes `Relevox.IRequest{TResponse}`,
+`ICommandHandler{TCommand}` becomes `IRequestHandler{TCommand, Unit}`, and
+`ISender.Send{TResponse}(IQuery{TResponse}, CancellationToken)` becomes
+`ISender.Send{TResponse}(IRequest{TResponse}, CancellationToken)`. A `cref` in a type that is moved moves with
+the type. A short `cref` that keeps its name, such as `IMediator`, is not reported: it resolves again once the
+`using` is moved.
 
 The mapping and the reasons are in [ADR 0024](adr/0024-moving-from-mediator.md), and what to write by hand for
 each case in [migration-from-mediator.md](migration-from-mediator.md#4-what-the-fix-leaves).
