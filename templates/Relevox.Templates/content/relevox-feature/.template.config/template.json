@@ -22,10 +22,14 @@
     },
     "response": {
       "type": "parameter",
-      "description": "The type the handler answers with.",
+      "description": "The type the handler answers with. Use none for a request with no response (IRequest).",
       "datatype": "text",
       "defaultValue": "string",
       "replaces": "RelevoxResponse"
+    },
+    "noResponse": {
+      "type": "computed",
+      "value": "response == \"none\""
     }
   }
 }
