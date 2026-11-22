@@ -50,7 +50,8 @@ jobs:
             dotnet run --project tests/Relevox.Testing.Tests --configuration Release --no-build --framework "$tfm"
           done
 
-      # Packs with the release version, installs the packages into a new application and runs it on each framework.
+      # Packs with the release version, installs the packages into a new application and runs it on each framework,
+      # and tests what the dotnet new templates write.
       - name: Pack and smoke test
         run: RELEVOX_VERSION="${{ steps.version.outputs.version }}" bash eng/package-smoke.sh
 

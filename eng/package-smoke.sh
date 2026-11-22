@@ -6,7 +6,8 @@
 # test projects happen to have. This is the build a user gets.
 #
 # The packages are packed once and checked for every framework they ship for. The application is then built and
-# run against them once per framework. Pass framework names to test fewer, for example: bash eng/package-smoke.sh net11.0
+# run against them once per framework, and so are the projects the dotnet new templates write. Pass framework names
+# to test fewer, for example: bash eng/package-smoke.sh net11.0
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,6 +30,7 @@ dotnet pack "$root/src/Relevox" --configuration Release --output "$feed" -p:Vers
 dotnet pack "$root/src/Relevox.Testing" --configuration Release --output "$feed" -p:Version="$version"
 dotnet pack "$root/src/Relevox.FluentValidation" --configuration Release --output "$feed" -p:Version="$version"
 dotnet pack "$root/src/Relevox.MediatRBridge" --configuration Release --output "$feed" -p:Version="$version"
+dotnet pack "$root/templates/Relevox.Templates" --configuration Release --output "$feed" -p:Version="$version"
 
 for package in Relevox Relevox.Contracts Relevox.Testing Relevox.FluentValidation Relevox.MediatRBridge; do
   contents="$(unzip -l "$feed/$package.$version.nupkg")"
@@ -72,9 +74,24 @@ grep -q 'id="MediatR" version="12.0.0"' <<<"$bridge" \
   && ! grep -q 'id="Relevox"' <<<"$bridge" \
   || { echo "Relevox.MediatRBridge.$version.nupkg has the wrong dependencies" >&2; exit 1; }
 
+# The templates package: both templates, and the Relevox version written into the project it generates.
+templates_package="$feed/Relevox.Templates.$version.nupkg"
+contents="$(unzip -l "$templates_package")"
+for expected in icon.png README.md content/relevox-webapi/.template.config/template.json content/relevox-feature/.template.config/template.json; do
+  grep -q " $expected\$" <<<"$contents" || { echo "Relevox.Templates.$version.nupkg has no $expected" >&2; exit 1; }
+done
+unzip -p "$templates_package" content/relevox-webapi/RelevoxWebApi/RelevoxWebApi.csproj | grep -q "Include=\"Relevox\" Version=\"$version\"" \
+  || { echo "Relevox.Templates.$version.nupkg does not reference Relevox $version" >&2; exit 1; }
+
 # The leftover copies below live outside the repository and are removed when the script ends.
 leftovers=()
 trap 'rm -rf "${leftovers[@]}"' EXIT
+
+# The templates are installed into a hive of their own, which goes with the copies, so the machine's own dotnet new
+# keeps what it had and needs no uninstall.
+hive="$(mktemp -d)"
+leftovers+=("$hive")
+dotnet new install "$templates_package" --debug:custom-hive "$hive"
 
 # Builds and runs the application, and the layered solution, against the packages for one framework.
 smoke() {
@@ -156,6 +173,33 @@ smoke() {
   echo "The packaged migration fix moved a contracts-only library off MediatR from the command line."
 }
 
+# A solution from relevox-webapi with a feature from relevox-feature added, built and tested the way a user would,
+# outside the repository so nothing of it applies. Warnings are errors, and its packages are restored into the copy,
+# so a package repacked with the same version is never served stale from the machine-wide cache.
+templates() {
+  local tfm="$1" work feed_path
+  echo "=== Templates on $tfm"
+  work="$(mktemp -d)"
+  leftovers+=("$work")
+  feed_path="$(cygpath -m "$feed" 2>/dev/null || echo "$feed")"
+
+  dotnet new relevox-webapi --name Shop --output "$work/Shop" --framework "$tfm" --debug:custom-hive "$hive"
+  (cd "$work/Shop" && dotnet new relevox-feature --name PlaceOrder --app Shop --response int --debug:custom-hive "$hive")
+  (cd "$work/Shop" && dotnet new relevox-feature --name GetName --app Shop --debug:custom-hive "$hive")
+  [[ -f "$work/Shop/Shop/PlaceOrder.cs" && -f "$work/Shop/Shop.Tests/PlaceOrderTests.cs" ]] \
+    || { find "$work/Shop" -type f >&2; echo "relevox-feature did not write to Shop and Shop.Tests." >&2; exit 1; }
+  grep -q "<TargetFramework>$tfm</TargetFramework>" "$work/Shop/Shop/Shop.csproj" \
+    || { echo "relevox-webapi did not target $tfm." >&2; exit 1; }
+  sed "s#../../artifacts/smoke-feed#$feed_path#" "$app/nuget.config" >"$work/Shop/nuget.config"
+
+  local output
+  output="$(cd "$work/Shop" && NUGET_PACKAGES="$work/packages" dotnet test --configuration Release -p:TreatWarningsAsErrors=true 2>&1)" \
+    || { echo "$output" >&2; echo "The solution relevox-webapi and relevox-feature wrote did not build clean or pass its tests." >&2; exit 1; }
+  grep -q "succeeded: 3" <<<"$output" || { echo "$output" >&2; echo "Expected the three generated tests to pass." >&2; exit 1; }
+  echo "relevox-webapi and relevox-feature wrote a solution that builds clean on $tfm and passes its tests."
+}
+
 for tfm in "${frameworks[@]}"; do
   smoke "$tfm"
+  templates "$tfm"
 done
