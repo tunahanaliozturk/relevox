@@ -8,6 +8,11 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- The RVX0007 code fix turns an options object passed to `AddMediatR` into the lambda `AddRelevox` takes, when
+  the object is made in the call or in a local filled in by plain statements and used nowhere else
+  ([ADR 0029](docs/adr/0029-options-object-to-lambda.md), #62). It moves those statements past others only when
+  neither can affect the other. Shapes it cannot move without risk keep their compiler error; the MediatR names
+  inside them are still moved.
 - `Relevox.Templates`, a `dotnet new` template package released with the other packages
   ([ADR 0030](docs/adr/0030-dotnet-new-templates.md), #174). `relevox-webapi` writes a minimal API with Relevox
   registered, one endpoint that sends a request, and an xUnit test project, for `net10.0` (default) or `net11.0`.
@@ -32,6 +37,13 @@ All notable changes to this project are written down here. The format follows
 
 ### Changed
 
+- RVX0007 and its code fix move `MediatR` names in documentation `cref`s, in `<see>`, `<seealso>`, `<exception>`
+  and `<inheritdoc>` alike, so a build with documentation generation and warnings as errors no longer breaks on
+  them after the migration (#61). A `cref` whose counterpart is not a Relevox type or member, such as
+  `MediatR.Mediator`, is left for the compiler's CS1574.
+- RVX0001 names the handler, its file and each reason it is left out when the request's only handler is in
+  generated code, and **Add handler** is not offered for it, since that would write a duplicate (#63). Its id,
+  severity and which handlers count do not change.
 - The repository compiles as C# 14 (`LangVersion` 14.0) instead of `preview`, which under the .NET 11 SDK had
   started to mean C# 15 with its preview features. Nothing in the packages' API or behaviour changes.
 - The generator no longer binds every `Send`, `Publish` and `CreateStream` call on each edit when the message map
