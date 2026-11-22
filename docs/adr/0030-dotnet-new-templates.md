@@ -56,6 +56,18 @@ and no symbols package.
   vulnerability fails the smoke test.
 - A request with no response (`IRequest`) is not a choice in `relevox-feature` yet.
 
+## Later
+
+Three of the limits above were lifted in 1.9.0 (issue #181):
+
+- `relevox-feature --response none` writes an `IRequest` with an `IRequestHandler<TRequest>` whose `Handle`
+  returns `Task`. Any other value is the response type, as before.
+- `--app-dir` and `--tests-dir` set the two folders and default to `<app>` and `<app>.Tests`. The namespace is
+  still `--app`, so the alternative of a path parameter that is also the namespace did not come back: the folder
+  names are separate parameters, and the template engine renames the content folders from them.
+- `eng/package-smoke.sh` compares the versions the templates write by hand with `Directory.Packages.props`, for
+  each framework, and fails naming the package and both versions.
+
 ## Alternatives considered
 
 - **`relevox-feature` as an item template run twice, once in each project with a switch for the test.** Works

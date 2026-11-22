@@ -128,7 +128,8 @@ Order order = await sender.Send(new GetOrder(42), cancellationToken);
 
 A new solution can start from a template instead. `relevox-webapi` writes a minimal API with Relevox registered,
 one endpoint that sends a request, and a test project; `relevox-feature` adds a request, its handler and a test to
-it. The projects reference the Relevox version the templates were released with
+it. `--response none` writes a request with no response, and `--app-dir` and `--tests-dir` point it at a solution
+under `src/` and `tests/`. The projects reference the Relevox version the templates were released with
 ([ADR 0030](docs/adr/0030-dotnet-new-templates.md)).
 
 ```bash
