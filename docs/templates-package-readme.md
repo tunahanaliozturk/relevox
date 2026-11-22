@@ -36,3 +36,15 @@ dotnet new relevox-feature -n PlaceOrder --app Shop --response int
 
 This writes `Shop/PlaceOrder.cs` and `Shop.Tests/PlaceOrderTests.cs`. `--response` defaults to `string`. The
 handler answers `default` until you give it something to do, and the test checks exactly that, so change both.
+
+`--response none` writes a request that implements `IRequest`, with a handler that implements
+`IRequestHandler<TRequest>` and returns `Task`, and a test that calls it.
+
+A solution laid out as `src/Shop` and `tests/Shop.Tests` is targeted with two folder options. The namespace is
+still the `--app` name:
+
+```bash
+dotnet new relevox-feature -n PlaceOrder --app Shop --app-dir src/Shop --tests-dir tests/Shop.Tests
+```
+
+`--app-dir` defaults to `<app>` and `--tests-dir` to `<app>.Tests`.
