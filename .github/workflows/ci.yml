@@ -21,6 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The documentation site, built as pages.yml builds it for publishing (ADR 0027). It fails on any link, anchor or
+      # image in README.md or docs/ that leads nowhere, on GitHub or on the site. It is here, in a required job, so a
+      # pull request cannot break the site; it takes seconds and needs only the runner's python3.
+      - name: Documentation site
+        run: |
+          python3 -m venv "$RUNNER_TEMP/site-venv"
+          "$RUNNER_TEMP/site-venv/bin/pip" install --require-hashes -r tools/site-requirements.txt
+          "$RUNNER_TEMP/site-venv/bin/python" tools/site.py "$RUNNER_TEMP/site"
+
       # Both SDKs: 11 builds and is what global.json asks for, and the net10.0 half of every test run needs the 10
       # runtime.
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
