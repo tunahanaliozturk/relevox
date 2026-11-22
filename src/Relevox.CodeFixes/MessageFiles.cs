@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Simplification;
 using Microsoft.CodeAnalysis.Text;
+using Relevox.Migration;
 
 namespace Relevox.CodeFixes;
 
@@ -55,15 +56,16 @@ internal static class MessageFiles
 
     /// <summary>
     /// Whether a handler can be written for the type in a file of its own: a class or struct that can be created,
-    /// that code outside its containing types can name, and that is not generic.
+    /// that code in another file can name, that can be a type argument, and that is not generic.
     /// </summary>
     /// <remarks>
     /// The generator does not report a generic request, since one is reached through its closed forms, and a
-    /// generic handler for it is a design choice (ADR 0008) a template should not make.
+    /// generic handler for it is a design choice (ADR 0008) a template should not make. A file-local type cannot be
+    /// named from another file, and a ref struct cannot be the handler interface's type argument.
     /// </remarks>
     public static bool CanHaveHandler(INamedTypeSymbol type, Compilation compilation)
     {
-        if (type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || type.IsAbstract || type.IsStatic
+        if (type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || type.IsAbstract || type.IsStatic || type.IsRefLikeType
             || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
         {
             return false;
@@ -71,7 +73,7 @@ internal static class MessageFiles
 
         for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
         {
-            if (current.TypeParameters.Length > 0)
+            if (current.TypeParameters.Length > 0 || current.IsFileLocal)
             {
                 return false;
             }
@@ -160,7 +162,11 @@ internal static class MessageFiles
     /// <summary>Adds <paramref name="declaration"/>, written with names in full, as <c>fileName.cs</c> next to <paramref name="beside"/>.</summary>
     public static async Task<Solution> AddFileAsync(Document beside, INamespaceSymbol space, string fileName, string declaration, CancellationToken cancellationToken)
     {
-        SyntaxNode besideRoot = (await beside.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!;
+        if (await beside.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false) is not { } besideRoot)
+        {
+            return beside.Project.Solution;
+        }
+
         SourceText besideText = await beside.GetTextAsync(cancellationToken).ConfigureAwait(false);
 
         string text = space.IsGlobalNamespace
@@ -174,14 +180,17 @@ internal static class MessageFiles
             : null;
         Document document = beside.Project.AddDocument(fileName + ".cs", SourceText.From(text + "\n"), beside.Folders, path);
 
-        SyntaxNode root = (await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))!;
+        if (await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false) is not { } root)
+        {
+            return beside.Project.Solution;
+        }
+
         root = root.ReplaceNodes(
             root.DescendantNodes().OfType<NameSyntax>().Where(static name => name.Parent is not (NameSyntax or BaseNamespaceDeclarationSyntax)),
             static (_, name) => name.WithAdditionalAnnotations(Simplifier.Annotation, Simplifier.AddImportsAnnotation));
         document = document.WithSyntaxRoot(root);
 
-        document = await ImportAdder.AddImportsAsync(document, Simplifier.AddImportsAnnotation, cancellationToken: cancellationToken).ConfigureAwait(false);
-        document = await Simplifier.ReduceAsync(document, Simplifier.Annotation, cancellationToken: cancellationToken).ConfigureAwait(false);
+        document = await ImportAndSimplifyAsync(document, cancellationToken).ConfigureAwait(false);
         document = await Formatter.FormatAsync(document, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // The new file ends its lines the way the file next to it does, whatever the formatter's default is.
@@ -192,6 +201,37 @@ internal static class MessageFiles
         }
 
         return document.WithText(SourceText.From(written, besideText.Encoding)).Project.Solution;
+    }
+
+    /// <summary>
+    /// Adds the usings that names marked with <see cref="Simplifier.AddImportsAnnotation"/> need, shortens the names
+    /// marked with <see cref="Simplifier.Annotation"/>, and takes the import mark off.
+    /// </summary>
+    /// <remarks>
+    /// The import step does not see global usings, so it can add a using that simplifying then removes again,
+    /// leaving a blank line behind. When the usings come out the same as they went in, the document is only
+    /// simplified. The mark comes off so that the IDE's clean-up after an action does not run the step again.
+    /// </remarks>
+    public static async Task<Document> ImportAndSimplifyAsync(Document document, CancellationToken cancellationToken)
+    {
+        Document imported = await ImportAdder.AddImportsAsync(document, Simplifier.AddImportsAnnotation, cancellationToken: cancellationToken).ConfigureAwait(false);
+        imported = await Simplifier.ReduceAsync(imported, Simplifier.Annotation, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (await Usings(imported, cancellationToken).ConfigureAwait(false) == await Usings(document, cancellationToken).ConfigureAwait(false))
+        {
+            imported = await Simplifier.ReduceAsync(document, Simplifier.Annotation, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await imported.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false) is not { } root)
+        {
+            return imported;
+        }
+
+        return imported.WithSyntaxRoot(root.ReplaceNodes(
+            root.GetAnnotatedNodes(Simplifier.AddImportsAnnotation),
+            static (_, node) => node.WithoutAnnotations(Simplifier.AddImportsAnnotation)));
+
+        static async Task<int> Usings(Document document, CancellationToken cancellationToken) =>
+            (await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false))?.DescendantNodes().OfType<UsingDirectiveSyntax>().Count() ?? 0;
     }
 
     private static string? NewLine(SourceText text)
@@ -207,11 +247,20 @@ internal static class MessageFiles
         return null;
     }
 
-    /// <summary>The type declarations a span in a type's header, from its modifiers to its base list, is in.</summary>
+    /// <summary>
+    /// Whether the actions may change code in the document: not a source generator's output, and not a file a tool
+    /// writes, by the rules the migration analyzers use.
+    /// </summary>
+    public static bool Editable(Document document, SyntaxTree tree, Compilation compilation, CancellationToken cancellationToken) =>
+        document is not SourceGeneratedDocument && !GeneratedFiles.WrittenByATool(tree, compilation, cancellationToken);
+
+    /// <summary>The type declaration whose header, from its modifiers to its base list, holds the span.</summary>
     public static TypeDeclarationSyntax? HeaderAt(SyntaxNode root, TextSpan span)
     {
-        TypeDeclarationSyntax? declaration = root.FindToken(span.Start).Parent?.FirstAncestorOrSelf<TypeDeclarationSyntax>();
-        if (declaration is null)
+        TypeDeclarationSyntax? declaration = root.FullSpan.Contains(span)
+            ? root.FindToken(span.Start).Parent?.FirstAncestorOrSelf<TypeDeclarationSyntax>()
+            : null;
+        if (declaration is null || declaration.Identifier.IsMissing)
         {
             return null;
         }

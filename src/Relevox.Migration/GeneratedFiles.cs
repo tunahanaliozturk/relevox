@@ -24,7 +24,7 @@ namespace Relevox.Migration;
 /// name their files that way almost without exception; one that does not is reported like a scaffolded file.
 /// </para>
 /// </remarks>
-internal static class GeneratedFiles
+public static class GeneratedFiles
 {
     private static readonly string[] Suffixes = [".designer", ".generated", ".g", ".g.i"];
 
@@ -40,7 +40,12 @@ internal static class GeneratedFiles
             }
         };
 
-    private static bool WrittenByATool(SyntaxTree tree, Compilation compilation, CancellationToken cancellationToken) =>
+    /// <summary>Whether a tool wrote the file: so marked in .editorconfig or, failing that, named like one.</summary>
+    /// <param name="tree">The file.</param>
+    /// <param name="compilation">The compilation it is part of.</param>
+    /// <param name="cancellationToken">Cancels the check.</param>
+    /// <returns>True for a file a tool wrote.</returns>
+    public static bool WrittenByATool(SyntaxTree tree, Compilation compilation, CancellationToken cancellationToken) =>
         compilation.Options.SyntaxTreeOptionsProvider?.IsGenerated(tree, cancellationToken) switch
         {
             GeneratedKind.MarkedGenerated => true,

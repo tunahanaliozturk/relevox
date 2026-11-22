@@ -31,6 +31,9 @@ public sealed class HandlerCodeFixTests
 
     private static readonly AdhocWorkspace Host = new();
 
+    // Stands for RVX0001 where a test reports it by hand, to ask the fix about a declaration the analyzer skips.
+    private static readonly DiagnosticDescriptor Rvx0001 = new RelevoxAnalyzer().SupportedDiagnostics.Single(static rule => rule.Id == "RVX0001");
+
     public static TheoryData<string, string, string> Shapes => new()
     {
         {
@@ -223,17 +226,79 @@ public sealed class HandlerCodeFixTests
         // Reached through its closed forms (ADR 0008); a generic handler for it is a choice a template should not make.
         Project project = WithImplicitUsings(("Page.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed record Page<T>(int Size) : IRequest<List<T>>;\n"));
 
-        (await Fixes(project, "Page.cs")).ShouldBeEmpty();
+        (await ReportedIds(project)).ShouldNotContain("RVX0001");
         (await Refactorings(project, "Page.cs", "Page<T>")).ShouldBeEmpty();
+        (await Refactorings(project, "Page.cs", "Page<T>", asFix: true)).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("public static class Orders\n{\n    private sealed record Place : IRequest<int>;\n}")]
+    [InlineData("public class Orders\n{\n    protected sealed record Place : IRequest<int>;\n}")]
+    [InlineData("public static class Orders\n{\n    private static class Inner\n    {\n        public sealed record Place : IRequest<int>;\n    }\n}")]
+    [InlineData("public static class Orders<T>\n{\n    public sealed record Place : IRequest<int>;\n}")]
+    [InlineData("file sealed record Place : IRequest<int>;")]
+    [InlineData("public static class Orders\n{\n    public ref struct Place : IRequest<int>;\n}")]
+    public async Task A_request_a_handler_in_another_file_could_not_name_or_take_is_not_offered_one(string declaration)
+    {
+        // Private, protected or file-local: the new file cannot name it. Nested in a generic type: reached through
+        // closed forms, as a generic request is. A ref struct cannot be a type argument of the handler interface.
+        Project project = WithImplicitUsings(("Orders.cs", "using Relevox;\n\nnamespace Shop;\n\n" + declaration + "\n"));
+
+        (await Refactorings(project, "Orders.cs", "Place :")).ShouldBeEmpty();
+        (await Refactorings(project, "Orders.cs", "Place :", asFix: true)).ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_request_nested_in_a_private_type_is_not_offered_a_handler_that_could_not_name_it()
+    public async Task A_file_a_tool_writes_is_not_offered_anything()
     {
-        Project project = WithImplicitUsings(("Orders.cs", "using Relevox;\n\nnamespace Shop;\n\npublic static class Orders\n{\n    private sealed record Place : IRequest<int>;\n}\n"));
+        Project project = WithImplicitUsings(
+            ("Ping.g.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed record Ping : IRequest<int>;\n\npublic sealed record Pong;\n"),
+            ("PlaceHandler.g.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed class PlaceHandler : IRequestHandler<Place>\n{\n    public Task Handle(Place request, CancellationToken cancellationToken) => Task.CompletedTask;\n}\n"));
 
-        (await Refactorings(project, "Orders.cs", "Place :")).ShouldBeEmpty();
-        (await Refactorings(project, "Orders.cs", "Place :", plain: true)).ShouldBeEmpty();
+        (await Refactorings(project, "Ping.g.cs", "Ping :")).ShouldBeEmpty();
+        (await Refactorings(project, "Ping.g.cs", "Ping :", asFix: true)).ShouldBeEmpty();
+        (await Refactorings(project, "Ping.g.cs", "Pong;")).ShouldBeEmpty();
+        (await Refactorings(project, "PlaceHandler.g.cs", "PlaceHandler :")).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_diagnostic_from_another_file_gets_no_fix()
+    {
+        Project project = WithImplicitUsings(
+            ("Ping.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed record Ping : IRequest<int>;\n"),
+            ("Other.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed record Pong : IRequest<int>;\n\npublic sealed record Long : IRequest<int>;\n"));
+        Diagnostic fromOther = (await Diagnostics(project)).Single(diagnostic => diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture).Contains("Long", StringComparison.Ordinal));
+
+        (await FixesFor(Doc(project, "Ping.cs"), fromOther)).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("public sealed record ( : IRequest<int>;", "record", 0)]
+    [InlineData("public sealed class PlaceHandler : IRequestHandler<Place", "PlaceHandler", 1)]
+    [InlineData("public sealed class PlaceHandler : IRequestHandler<, int>\n{\n}", "PlaceHandler", 0)]
+    [InlineData("public sealed class PlaceHandler : IRequestHandler<Place, int, int>\n{\n}", "PlaceHandler", 0)]
+    [InlineData("public sealed record Ping : IRequest<int>, IRequest<long>;", "Ping", 0)]
+    public async Task Odd_or_malformed_syntax_does_not_throw_and_offers_only_what_makes_sense(string source, string at, int offers)
+    {
+        const string path = "Ping.cs";
+        Project project = WithImplicitUsings((path, "using Relevox;\n\nnamespace Shop;\n\n" + source + "\n"));
+        Document document = Doc(project, path);
+        string text = (await document.GetTextAsync()).ToString();
+
+        CodeAction[] offered = await Refactorings(project, path, at);
+        foreach (CodeAction action in offered)
+        {
+            await action.GetOperationsAsync(CancellationToken.None);
+        }
+
+        offered.Length.ShouldBe(offers);
+        List<CodeAction> outside = [];
+        await new RequestRefactorings().ComputeRefactoringsAsync(new CodeRefactoringContext(document, new TextSpan(text.Length + 10, 0), outside.Add, CancellationToken.None));
+        outside.ShouldBeEmpty();
+
+        SyntaxTree tree = (await document.GetSyntaxTreeAsync())!;
+        Diagnostic whole = Diagnostic.Create(Rvx0001, Location.Create(tree, new TextSpan(0, text.Length)));
+        (await FixesFor(document, whole)).ShouldBeEmpty();
     }
 
     [Fact]
@@ -386,7 +451,60 @@ public sealed class HandlerCodeFixTests
     {
         Project project = WithImplicitUsings(("PlaceHandler.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed class PlaceHandler : IRequestHandler<Place, int>\n{\n    public Task<int> Handle(Place request, CancellationToken cancellationToken) => Task.FromResult(1);\n}\n"));
 
-        (await Refactorings(project, "PlaceHandler.cs", "Place, int")).ShouldHaveSingleItem().Title.ShouldBe("Add request 'Place'");
+        CodeAction action = (await Refactorings(project, "PlaceHandler.cs", "Place, int")).ShouldHaveSingleItem();
+        action.Title.ShouldBe("Add request 'Place'");
+        Project changed = await Apply(action, project);
+
+        (await Text(changed, "Place.cs")).ShouldBe("using Relevox;\n\nnamespace Shop;\n\npublic sealed record Place : IRequest<int>;\n");
+        await ShouldBuildClean(changed);
+    }
+
+    [Fact]
+    public async Task A_request_named_with_a_keyword_keeps_its_escape()
+    {
+        Project project = WithImplicitUsings(("PlaceHandler.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed class PlaceHandler : IRequestHandler<@event, int>\n{\n    public Task<int> Handle(@event request, CancellationToken cancellationToken) => Task.FromResult(1);\n}\n"));
+
+        Project changed = await Apply((await Refactorings(project, "PlaceHandler.cs", "PlaceHandler :")).ShouldHaveSingleItem(), project);
+
+        (await Text(changed, "event.cs")).ShouldBe("using Relevox;\n\nnamespace Shop;\n\npublic sealed record @event : IRequest<int>;\n");
+        await ShouldBuildClean(changed);
+    }
+
+    [Theory]
+    [InlineData("public sealed class PlaceHandler<T> : IRequestHandler<Place, T>")]
+    [InlineData("public sealed class PlaceHandler<T> : IRequestHandler<Place, List<T>>")]
+    [InlineData("public static class Outer<T>\n{\n    public sealed class PlaceHandler : IStreamRequestHandler<Place, T[]>")]
+    public async Task A_missing_request_whose_response_names_a_type_parameter_is_left_to_a_person(string handler)
+    {
+        Project project = WithImplicitUsings(("PlaceHandler.cs", "using Relevox;\n\nnamespace Shop;\n\n" + handler + "\n{\n}\n" + (handler.Contains("Outer", StringComparison.Ordinal) ? "}\n" : string.Empty)));
+
+        (await Refactorings(project, "PlaceHandler.cs", "PlaceHandler")).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_global_using_for_Relevox_is_not_repeated()
+    {
+        Project project = Shop(
+            ("Usings.cs", ImplicitUsings + "global using Relevox;\n"),
+            ("Ping.cs", "namespace Shop;\n\npublic sealed record Ping : IRequest<int>;\n\npublic sealed record Pong(int Value);\n"));
+
+        Project fixedProject = await Apply((await Fixes(project, "Ping.cs")).ShouldHaveSingleItem(), project);
+        (await Text(fixedProject, "PingHandler.cs")).ShouldStartWith("namespace Shop;\n\npublic sealed class PingHandler : IRequestHandler<Ping, int>\n");
+
+        Project changed = await Apply((await Refactorings(project, "Ping.cs", "Pong("))[0], project);
+        (await Text(changed, "Ping.cs")).ShouldBe("namespace Shop;\n\npublic sealed record Ping : IRequest<int>;\n\npublic sealed record Pong(int Value) : IRequest;\n");
+    }
+
+    [Theory]
+    [InlineData("public interface IPingHandler : IRequestHandler<Ping, int>;")]
+    [InlineData("public abstract class PingHandlerBase : IRequestHandler<Ping, int>\n{\n    public abstract Task<int> Handle(Ping request, CancellationToken cancellationToken);\n}")]
+    [InlineData("public static class Outer\n{\n    private sealed class Hidden : IRequestHandler<Ping, int>\n    {\n        public Task<int> Handle(Ping request, CancellationToken cancellationToken) => Task.FromResult(1);\n    }\n}")]
+    public async Task A_handler_the_generator_would_not_dispatch_to_does_not_hide_Add_handler(string notAHandler)
+    {
+        Project project = WithImplicitUsings(("Ping.cs", "using Relevox;\n\nnamespace Shop;\n\npublic sealed record Ping : IRequest<int>;\n\n" + notAHandler + "\n"));
+
+        (await ReportedIds(project)).ShouldContain("RVX0001");
+        (await Refactorings(project, "Ping.cs", "Ping :")).ShouldHaveSingleItem().Title.ShouldBe("Add handler 'PingHandler'");
     }
 
     [Fact]
@@ -440,45 +558,55 @@ public sealed class HandlerCodeFixTests
         return project;
     }
 
+    private static async Task<ImmutableArray<Diagnostic>> Diagnostics(Project project)
+    {
+        Compilation compilation = (await project.GetCompilationAsync())!;
+        return await compilation.WithAnalyzers([new RelevoxAnalyzer()]).GetAnalyzerDiagnosticsAsync();
+    }
+
+    private static async Task<string[]> ReportedIds(Project project) => [.. (await Diagnostics(project)).Select(static diagnostic => diagnostic.Id)];
+
     /// <summary>What the IDE offers for each RVX0001 the analyzer reports in the file.</summary>
     private static async Task<CodeAction[]> Fixes(Project project, string path)
     {
-        Compilation compilation = (await project.GetCompilationAsync())!;
-        ImmutableArray<Diagnostic> diagnostics = await compilation.WithAnalyzers([new RelevoxAnalyzer()]).GetAnalyzerDiagnosticsAsync();
         Document document = Doc(project, path);
         SyntaxTree tree = (await document.GetSyntaxTreeAsync())!;
 
         List<CodeAction> actions = [];
-        foreach (Diagnostic diagnostic in diagnostics.Where(diagnostic => diagnostic.Id == "RVX0001" && diagnostic.Location.SourceTree == tree))
+        foreach (Diagnostic diagnostic in (await Diagnostics(project)).Where(diagnostic => diagnostic.Id == "RVX0001" && diagnostic.Location.SourceTree == tree))
         {
-            await new WriteMissingHandler().RegisterCodeFixesAsync(new CodeFixContext(document, diagnostic, (action, _) => actions.Add(action), CancellationToken.None));
+            actions.AddRange(await FixesFor(document, diagnostic));
         }
 
         return [.. actions];
     }
 
+    private static async Task<CodeAction[]> FixesFor(Document document, Diagnostic diagnostic)
+    {
+        List<CodeAction> actions = [];
+        await new WriteMissingHandler().RegisterCodeFixesAsync(new CodeFixContext(document, diagnostic, (action, _) => actions.Add(action), CancellationToken.None));
+        return [.. actions];
+    }
+
     /// <summary>
-    /// What the IDE offers with the caret where <paramref name="at"/> starts. With <paramref name="plain"/>, the
-    /// RVX0001 fix is asked too, as if the rule had been reported there.
+    /// What the IDE offers with the caret where <paramref name="at"/> starts. With <paramref name="asFix"/>, the
+    /// RVX0001 fix is asked instead, as if the rule had been reported on the word <paramref name="at"/> starts with.
     /// </summary>
-    private static async Task<CodeAction[]> Refactorings(Project project, string path, string at, bool plain = false)
+    private static async Task<CodeAction[]> Refactorings(Project project, string path, string at, bool asFix = false)
     {
         Document document = Doc(project, path);
         string text = (await document.GetTextAsync()).ToString();
         TextSpan span = new(text.IndexOf(at, StringComparison.Ordinal), 0);
 
-        List<CodeAction> actions = [];
-        if (plain)
+        if (asFix)
         {
             SyntaxTree tree = (await document.GetSyntaxTreeAsync())!;
-            Diagnostic diagnostic = Diagnostic.Create(new DiagnosticDescriptor("RVX0001", "t", "m", "c", DiagnosticSeverity.Warning, true), Location.Create(tree, new TextSpan(span.Start, at.IndexOf(' ', StringComparison.Ordinal))));
-            await new WriteMissingHandler().RegisterCodeFixesAsync(new CodeFixContext(document, diagnostic, (action, _) => actions.Add(action), CancellationToken.None));
-        }
-        else
-        {
-            await new RequestRefactorings().ComputeRefactoringsAsync(new CodeRefactoringContext(document, span, actions.Add, CancellationToken.None));
+            int length = at.IndexOfAny([' ', '<', ';']) is var end and > 0 ? end : at.Length;
+            return await FixesFor(document, Diagnostic.Create(Rvx0001, Location.Create(tree, new TextSpan(span.Start, length))));
         }
 
+        List<CodeAction> actions = [];
+        await new RequestRefactorings().ComputeRefactoringsAsync(new CodeRefactoringContext(document, span, actions.Add, CancellationToken.None));
         return [.. actions];
     }
 
