@@ -29,6 +29,7 @@ dotnet add package Relevox.Contracts   # libraries that only declare requests an
 dotnet add package Relevox.Testing     # test projects: a fake mediator and a notification recorder
 dotnet add package Relevox.FluentValidation   # a validation behaviour, only for requests with a validator
 dotnet add package Relevox.MediatRBridge      # MediatR and Relevox side by side while a solution moves
+dotnet new install Relevox.Templates          # dotnet new relevox-webapi and relevox-feature
 ```
 
 | Package | Version | Downloads | Reference it from |
@@ -123,6 +124,19 @@ public sealed class GetOrderHandler(OrderStore store) : IRequestHandler<GetOrder
 
 // Wherever ISender, IPublisher or IMediator is injected:
 Order order = await sender.Send(new GetOrder(42), cancellationToken);
+```
+
+A new solution can start from a template instead. `relevox-webapi` writes a minimal API with Relevox registered,
+one endpoint that sends a request, and a test project; `relevox-feature` adds a request, its handler and a test to
+it. The projects reference the Relevox version the templates were released with
+([ADR 0030](docs/adr/0030-dotnet-new-templates.md)).
+
+```bash
+dotnet new install Relevox.Templates
+dotnet new relevox-webapi -n Shop            # --framework net11.0 for .NET 11
+cd Shop
+dotnet new relevox-feature -n PlaceOrder --app Shop --response int
+dotnet test
 ```
 
 Behaviours, processors and lifetimes are configured as in MediatR:
@@ -245,6 +259,7 @@ are, and a request with no behaviours skips the pipeline entirely.
 - [25. net11.0 alongside net10.0, and two packages that stay pinned](docs/adr/0025-net11-alongside-net10.md)
 - [26. Singleton handlers are held per container, scoped ones per mediator on first use](docs/adr/0026-singletons-held-per-container.md)
 - [27. The documentation site is built by a script with one markdown library](docs/adr/0027-documentation-site-script.md)
+- [30. The dotnet new templates](docs/adr/0030-dotnet-new-templates.md)
 
 ## Roadmap
 
@@ -259,7 +274,7 @@ The packages target `net10.0` and `net11.0`; the test projects do too, so `dotne
 dotnet build Relevox.slnx
 dotnet run --project tests/Relevox.SourceGenerator.Tests -f net11.0   # generator: output, diagnostics, incrementality
 dotnet run --project tests/Relevox.DifferentialTests -f net11.0       # every scenario on MediatR 12.5.0 and on Relevox
-bash eng/package-smoke.sh                                # pack, install into a new app on each framework, run it
+bash eng/package-smoke.sh                                # pack, install into a new app on each framework, run it; test the templates' output
 dotnet run --project tools/Relevox.LicenseAudit -- .       # every dependency permissively licensed
 ```
 

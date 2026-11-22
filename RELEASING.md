@@ -55,17 +55,20 @@ NuGet, waits for an approval.
    ```
 
    A version with a suffix, such as `-rc.1`, becomes a pre-release on GitHub and on NuGet.
-4. The workflow builds, runs the generator, differential, web sample and testing package tests, packs the three
-   packages with the tag's version, installs them into a new application and runs it, and validates SourceLink,
+4. The workflow builds, runs the generator, differential, web sample and testing package tests, packs every
+   package with the tag's version, `Relevox.Templates` included, installs them into a new application and runs
+   it, writes a solution with `relevox-webapi` and `relevox-feature` and runs its tests, and validates SourceLink,
    determinism and compiler flags. It then creates the GitHub release with the packages attached. NativeAOT, the licence audit and the
    benchmark sanity run are CI's, on the commit being tagged: tag only a commit whose CI is green.
 5. Approve the `publish to NuGet` job when you are ready. It pushes every package and its symbols. The trusted
-   publishing policy on nuget.org has to cover each package id, or its push is refused; `Relevox*` does.
+   publishing policy on nuget.org has to cover each package id, or its push is refused; `Relevox*` does, and
+   that covers `Relevox.Templates`.
 6. Once the packages are on nuget.org, set `PackageValidationBaselineVersion` in `Directory.Build.props` to the
    version just released. Every later pack then fails on a member removed or changed since that release,
    `Relevox.Internal` included ([ADR 0011](docs/adr/0011-internal-api-is-a-contract.md)). A new
    package's project file sets the property empty, which keeps validation from looking for a version that does
-   not exist yet; remove that override after the package's first release.
+   not exist yet; remove that override after the package's first release. `Relevox.Templates` has no assembly
+   and turns validation off, so it needs neither.
 
    A new major version is the one release allowed to break it, and the check would still stop it. Record each
    intended break in the pull request that makes it: pack with `-p:ApiCompatGenerateSuppressionFile=true`, which

@@ -4,7 +4,7 @@
     The dotnet new templates, packed as content. Nothing here is compiled: the projects under content/ are what
     `dotnet new` writes out, and eng/package-smoke.sh instantiates, builds and tests them from the packed .nupkg.
     This project is left out of Relevox.slnx so the solution's build and format gates never see the template
-    files (ADR 0027).
+    files (ADR 0030).
   -->
 
   <PropertyGroup>
