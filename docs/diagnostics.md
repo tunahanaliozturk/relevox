@@ -224,7 +224,7 @@ check or its run-time closing of generic handlers, and keeping comments and `#if
 at the end of a removed line goes with it, since it was about that line. It leaves
 alone, for a person to decide:
 
-- an options object built before the call and passed to `AddMediatR`, which `AddRelevox` cannot take;
+- an options object it cannot turn into a lambda without risk, as described below;
 - names in MediatR namespaces Relevox has no counterpart for, such as `MediatR.Registration`, and a documentation
   `cref` whose Relevox counterpart does not resolve, such as `MediatR.Mediator`: the compiler's CS1574 points at it;
 - a namespace of your own called `MediatR`, which resolves and so is not reported: rename it first.
@@ -232,6 +232,35 @@ alone, for a person to decide:
 A documentation `cref` is moved as a whole, so one with MediatR names in its parameters, such as
 `MediatR.ISender.Send{TResponse}(MediatR.IRequest{TResponse}, System.Threading.CancellationToken)`, is rewritten in
 one step. A short `cref` such as `IMediator` is not reported: it resolves again once the `using` is moved.
+
+`AddRelevox` takes a lambda, not an options object, so an object passed to `AddMediatR` becomes one
+([ADR 0028](adr/0028-options-object-to-lambda.md)). That works for an object made in the call,
+`AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssembly(...))`, and for a local made with `new`,
+with or without an object initializer or a chain of calls, in the block that makes the call, filled in by
+statements of the form `config.Member(...);` or `config.Member = value;` and used nowhere else:
+
+```csharp
+// Before
+var config = new MediatRServiceConfiguration { Lifetime = ServiceLifetime.Scoped };
+config.RegisterServicesFromAssembly(typeof(Program).Assembly);
+config.AddOpenBehavior(typeof(LoggingBehavior<,>));
+services.AddMediatR(config);
+
+// After
+services.AddRelevox(config =>
+{
+    config.Lifetime = ServiceLifetime.Scoped;
+    config.AddOpenBehavior(typeof(LoggingBehavior<,>));
+});
+```
+
+The statements now run when `AddRelevox` calls the lambda, after any statements that stood between them and the
+call. Other statements may stand there, but the object is left alone, and the compiler error stays, when one of
+them changes a variable the moved code reads, when a moved statement declares a variable, when a `#if` or other
+directive stands between the declaration and the call, or when the object is passed to a method, stored, used after
+the call, filled in inside an `if` or a loop, built in another method, or passed from inside a lambda. An object
+made in the call is left alone when something called `options`, the name the lambda's parameter takes, is already
+in scope.
 
 ## RVX0008
 

@@ -430,13 +430,6 @@ public sealed class MigrationCodeFixTests
                 public static IServiceCollection Static(IServiceCollection services) =>
                     MediatRServiceCollectionExtensions.AddMediatR(services, options => options.AddOpenBehavior(typeof(Logging<,>)));
 
-                public static IServiceCollection Object(IServiceCollection services)
-                {
-                    MediatRServiceConfiguration options = new();
-                    options.AddOpenBehavior(typeof(Logging<,>));
-                    return services.AddMediatR(options);
-                }
-
                 private static void Configure(MediatRServiceConfiguration options) => options.AddOpenBehavior(typeof(Logging<,>));
             }
             """);
@@ -447,9 +440,233 @@ public sealed class MigrationCodeFixTests
         startup.ShouldContain("services.AddRelevox(options => options.AddOpenBehavior(typeof(Logging<,>)))");
         startup.ShouldNotContain("configuration:");
         startup.ShouldContain("RelevoxServiceCollectionExtensions.AddRelevox(services, options => options.AddOpenBehavior(typeof(Logging<,>)))");
+    }
 
-        // An options object built before the call cannot become a delegate without guessing; the error stays.
-        startup.ShouldContain("return services.AddMediatR(options);");
+    [Fact]
+    public async Task An_options_object_filled_in_and_passed_to_AddMediatR_becomes_the_lambda()
+    {
+        // The shapes found in public code: a local filled in by statements, with others in between; one made with an
+        // object initializer or a chain; and the object made inline in the call.
+        string[] fixedSources = await Migrate(Handlers, """
+            using MediatR;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop;
+
+            public static class Startup
+            {
+                public static IServiceCollection Filled(IServiceCollection services)
+                {
+                    // The mediator.
+                    var config = new MediatRServiceConfiguration();
+                    config.RegisterServicesFromAssembly(typeof(Startup).Assembly);
+                    services.AddSingleton<object>(new object());
+                    // Logging goes first.
+                    config.AddOpenBehavior(typeof(Logging<,>));
+                    config.Lifetime = ServiceLifetime.Scoped;
+                    return services.AddMediatR(config);
+                }
+
+                public static void Initialized(IServiceCollection services)
+                {
+                    var config = new MediatRServiceConfiguration { Lifetime = ServiceLifetime.Scoped, LicenseKey = "key" };
+                    config.RegisterServicesFromAssembly(typeof(Startup).Assembly);
+                    services.AddMediatR(config);
+                }
+
+                public static void Chained(IServiceCollection services)
+                {
+                    MediatRServiceConfiguration configuration = new MediatRServiceConfiguration().RegisterServicesFromAssemblies(typeof(Startup).Assembly);
+                    services.AddMediatR(configuration);
+                }
+
+                public static void Empty(IServiceCollection services)
+                {
+                    MediatRServiceConfiguration configuration = new();
+                    services.AddMediatR(configuration);
+                }
+
+                public static IServiceCollection Inline(IServiceCollection services) =>
+                    services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssembly(typeof(Startup).Assembly));
+
+                public static IServiceCollection InlineKept(IServiceCollection services) =>
+                    services.AddMediatR(new MediatRServiceConfiguration { Lifetime = ServiceLifetime.Scoped }.RegisterServicesFromAssembly(typeof(Startup).Assembly).AddOpenBehavior(typeof(Logging<,>)));
+
+                public static void Static(IServiceCollection services)
+                {
+                    var config = new MediatRServiceConfiguration();
+                    config.RequestExceptionActionProcessorStrategy = RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;
+                    MediatRServiceCollectionExtensions.AddMediatR(services, config);
+                }
+            }
+            """);
+
+        string startup = fixedSources[1].ReplaceLineEndings("\n");
+        startup.ShouldNotContain("MediatR");
+        startup.ShouldNotContain("RegisterServicesFrom");
+        startup.ShouldNotContain("LicenseKey");
+        startup.ShouldContain("""
+                    // The mediator.
+                    services.AddSingleton<object>(new object());
+                    return services.AddRelevox(config =>
+                    {
+                        // Logging goes first.
+                        config.AddOpenBehavior(typeof(Logging<,>));
+                        config.Lifetime = ServiceLifetime.Scoped;
+                    });
+            """.ReplaceLineEndings("\n"));
+        startup.ShouldContain("""
+                    services.AddRelevox(config =>
+                    {
+                        config.Lifetime = ServiceLifetime.Scoped;
+                    });
+            """.ReplaceLineEndings("\n"));
+        startup.ShouldContain("""
+                public static void Chained(IServiceCollection services)
+                {
+                    services.AddRelevox();
+                }
+            """.ReplaceLineEndings("\n"));
+        startup.ShouldContain("""
+                public static void Empty(IServiceCollection services)
+                {
+                    services.AddRelevox();
+                }
+            """.ReplaceLineEndings("\n"));
+        startup.ShouldContain("Inline(IServiceCollection services) =>\n        services.AddRelevox();");
+        startup.ShouldContain("services.AddRelevox(options =>");
+        startup.ShouldContain("options.Lifetime = ServiceLifetime.Scoped;");
+        startup.ShouldContain("options.AddOpenBehavior(typeof(Logging<,>))");
+        startup.ShouldContain("config.RequestExceptionActionProcessorStrategy = Relevox.RequestExceptionActionProcessorStrategy.ApplyForAllExceptions;");
+        startup.ShouldContain("RelevoxServiceCollectionExtensions.AddRelevox(services, config =>");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
+    public async Task Comments_and_directives_around_an_options_object_survive()
+    {
+        string[] fixedSources = await Migrate(Handlers, """
+            using MediatR;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+            #if DEBUG
+                    var config = new MediatRServiceConfiguration();
+                    config.AddOpenBehavior(typeof(Logging<,>)); // logs each request
+                    services.AddMediatR(config);
+            #endif
+                }
+            }
+            """);
+
+        string startup = fixedSources[1];
+        startup.ShouldContain("#if DEBUG");
+        startup.ShouldContain("#endif");
+        startup.ShouldContain("config.AddOpenBehavior(typeof(Logging<,>)); // logs each request");
+        startup.ShouldContain("services.AddRelevox(config =>");
+        ShouldBuildWithTheGenerator(fixedSources);
+    }
+
+    [Fact]
+    public async Task An_options_object_the_fix_cannot_carry_over_safely_is_left_for_a_person()
+    {
+        // Each of these keeps AddMediatR and its compiler error: the object is built somewhere this call cannot see,
+        // or moving its statements could change what they do.
+        string[] fixedSources = await Migrate(Handlers, """
+            using MediatR;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Shop;
+
+            public static class Startup
+            {
+                private static MediatRServiceConfiguration? _kept;
+
+                public static void PassedOn(IServiceCollection services)
+                {
+                    var passed = new MediatRServiceConfiguration();
+                    Fill(passed);
+                    services.AddMediatR(passed);
+                }
+
+                public static void Stored(IServiceCollection services)
+                {
+                    var stored = new MediatRServiceConfiguration();
+                    _kept = stored;
+                    services.AddMediatR(stored);
+                }
+
+                public static ServiceLifetime UsedAfter(IServiceCollection services)
+                {
+                    var after = new MediatRServiceConfiguration();
+                    services.AddMediatR(after);
+                    return after.Lifetime;
+                }
+
+                public static void Parameter(IServiceCollection services, MediatRServiceConfiguration parameter) => services.AddMediatR(parameter);
+
+                public static void Nested(IServiceCollection services, bool scoped)
+                {
+                    var nested = new MediatRServiceConfiguration();
+                    if (scoped) { nested.Lifetime = ServiceLifetime.Scoped; }
+                    services.AddMediatR(nested);
+                }
+
+                public static void Changed(IServiceCollection services)
+                {
+                    ServiceLifetime lifetime = ServiceLifetime.Scoped;
+                    var changed = new MediatRServiceConfiguration();
+                    changed.Lifetime = lifetime;
+                    lifetime = ServiceLifetime.Singleton;
+                    services.AddMediatR(changed);
+                }
+
+                public static void Directive(IServiceCollection services)
+                {
+                    var directive = new MediatRServiceConfiguration();
+            #if RELEASE
+                    directive.AddOpenBehavior(typeof(Logging<,>));
+            #endif
+                    services.AddMediatR(directive);
+                }
+
+                public static void TwoSteps(IServiceCollection services)
+                {
+                    var first = new MediatRServiceConfiguration();
+                    var second = first.RegisterServicesFromAssembly(typeof(Startup).Assembly);
+                    services.AddMediatR(second);
+                }
+
+                public static void Deferred(IServiceCollection services)
+                {
+                    var deferred = new MediatRServiceConfiguration();
+                    System.Action register = () => services.AddMediatR(deferred);
+                    register();
+                }
+
+                public static void Shadowed(IServiceCollection services, string options) =>
+                    services.AddMediatR(new MediatRServiceConfiguration { LicenseKey = options });
+
+                private static void Fill(MediatRServiceConfiguration configuration) => configuration.Lifetime = ServiceLifetime.Scoped;
+            }
+            """);
+
+        string startup = fixedSources[1];
+        startup.ShouldContain("services.AddMediatR(passed);");
+        startup.ShouldContain("services.AddMediatR(stored);");
+        startup.ShouldContain("services.AddMediatR(after);");
+        startup.ShouldContain("services.AddMediatR(parameter);");
+        startup.ShouldContain("services.AddMediatR(nested);");
+        startup.ShouldContain("services.AddMediatR(changed);");
+        startup.ShouldContain("services.AddMediatR(directive);");
+        startup.ShouldContain("services.AddMediatR(second);");
+        startup.ShouldContain("services.AddMediatR(deferred)");
+        startup.ShouldContain("services.AddMediatR(new RelevoxOptions { LicenseKey = options })");
     }
 
     [Fact]
