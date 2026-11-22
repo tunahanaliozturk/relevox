@@ -130,7 +130,8 @@ not compile. So is a handler written as a `struct`: handlers are created by the 
 objects, so they have to be classes.
 
 **Fix:** make the handler a `class` if it is a `struct`. Otherwise make it `public`, or give the project that calls `AddRelevox` access with
-`[assembly: InternalsVisibleTo("YourApp")]` in the project that declares the handler.
+`[assembly: InternalsVisibleTo("YourApp")]` in the project that declares the handler. That reaches `internal`
+types only: a `private` handler, such as one nested in the class of its use case, has to become `internal` first.
 
 ## RVX0004
 

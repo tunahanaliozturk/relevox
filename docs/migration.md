@@ -28,8 +28,12 @@ diff -ru --exclude=bin --exclude=obj samples/Migration/Before samples/Migration/
 ## 1. Packages
 
 The project that calls `AddMediatR`, usually the host, references `Relevox`, which brings the source generator.
-Every other project that declares requests or handlers references `Relevox.Contracts`, which has no
-dependencies.
+It needs the reference of its own even if it had MediatR only through another project. Every other project
+that declares requests or handlers references `Relevox.Contracts`, which has no dependencies; a reference
+through another project, such as a shared library, is enough.
+
+If several projects call `AddMediatR`, as the modules of a modular monolith do, each references `Relevox` and
+gets a mediator of its own, with the handlers it can see.
 
 ```diff
  <!-- the host -->
@@ -108,9 +112,9 @@ Run it from the solution's directory: `dotnet format` only changes files below t
 `dotnet build` before the fix shows the compiler's errors for the missing `MediatR` namespace and not RVX0007,
 because the compiler does not run analyzers once there are errors; the IDE and `dotnet format` do.
 
-That is how a Clean Architecture solution and Microsoft's eShop were migrated, with their tests passing before
-and after; see [migration-trial.md](migration-trial.md). The rest of this guide is what the fix does, for reviewing its result
-and for doing it by hand.
+That is how a Clean Architecture solution, Microsoft's eShop and a modular monolith with three mediators were
+migrated, with their tests passing before and after; see [migration-trial.md](migration-trial.md). The rest of
+this guide is what the fix does, for reviewing its result and for doing it by hand.
 
 ## 2. `using` directives
 
@@ -150,7 +154,10 @@ error. Check `<Using Include="MediatR" />` items in project files as well.
 
 Delete the scanning calls, because there is nothing to scan: `RegisterServicesFromAssembly`,
 `RegisterServicesFromAssemblies`, `RegisterServicesFromAssemblyContaining`, `AssembliesToRegister` and
-`TypeEvaluator`. Delete `MediatorImplementationType` too: the mediator is generated, so there is no class to
+`TypeEvaluator`. The assemblies they named are not kept: the mediator gets the handlers of the project that
+calls `AddRelevox` and of every project it references, so a handler in a referenced project that the scan left
+out is live after the migration.
+Delete `MediatorImplementationType` too: the mediator is generated, so there is no class to
 swap. Everything else on MediatR's configuration exists on `RelevoxOptions` with the same name and number of
 parameters: behaviours, stream behaviours, processors, `Lifetime`, `NotificationPublisher`, `NotificationPublisherType`,
 `AutoRegisterRequestProcessors` and `RequestExceptionActionProcessorStrategy`. A test compares the two types
@@ -183,8 +190,10 @@ The first build tells you what MediatR would only have told you at run time:
 
 - [RVX0001](diagnostics.md#rvx0001): a request with no handler. MediatR would throw when it was sent.
 - [RVX0002](diagnostics.md#rvx0002): a request with two handlers. MediatR silently used one of them.
-- [RVX0003](diagnostics.md#rvx0003): a handler the application cannot see, usually `internal` in a library.
-  MediatR's scan registered it through reflection.
+- [RVX0003](diagnostics.md#rvx0003): a handler the application cannot see, usually `internal` in a library,
+  or `private` and nested in the class of its use case. MediatR's scan registered it through reflection.
+  `InternalsVisibleTo` reaches an `internal` handler, not a `private` one, which has to become `internal` or
+  `public`.
 - [RVX0004](diagnostics.md#rvx0004): a generic handler the build cannot close, usually one whose type parameter
   has no constraint.
 - [RVX0005](diagnostics.md#rvx0005): a library that references `Relevox` instead of `Relevox.Contracts`.
@@ -204,6 +213,9 @@ odd parts: which processors run, the order handlers run in, when a send throws i
 - **Exception handlers are found for exception types the build can see**: those some handler for the request
   names, and `Exception`. One registered directly with the container for some other exception type is not
   found.
+- **A handler is resolved by its own class.** A handler class you also registered with the container yourself,
+  for example with `AddScoped<InboxHandler>()`, runs with that registration's lifetime, where MediatR used the
+  transient one its scan made ([compatibility](compatibility.md#different-on-purpose)).
 - **Exception messages differ.** Only exception types are part of the contract.
 - **`new Mediator(serviceProvider)` does not exist.** The mediator is generated; resolve `IMediator`,
   `ISender` or `IPublisher` from the container.
