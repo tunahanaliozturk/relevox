@@ -544,7 +544,8 @@ It leaves alone, for a person to decide, and the compiler errors stay to point a
 - a documentation `cref` whose Relevox counterpart would not resolve to a Relevox type or member: one to a type
   Relevox has no counterpart for, such as `Mediator.MessagePreProcessor{TMessage, TResponse}`, to a member
   Relevox's type lacks, one that would name a type of your own, such as your own `IStreamRequest<T>`, and a short
-  one in a file with no `using Mediator;` to become `using Relevox;`. The compiler's CS1574 points at it;
+  one in a file with no `using Mediator;` to become `using Relevox;`, and one that does not parse. The compiler's
+  CS1574 or CS1584 points at it;
 - variables, fields and parameters typed `ValueTask` at call sites, and `@using Mediator` in Razor files, which
   code fixes cannot reach.
 
@@ -554,7 +555,8 @@ the row adds `Unit`. So `Mediator.ICommand{TResponse}` becomes `Relevox.IRequest
 `ICommandHandler{TCommand}` becomes `IRequestHandler{TCommand, Unit}`, and
 `ISender.Send{TResponse}(IQuery{TResponse}, CancellationToken)` becomes
 `ISender.Send{TResponse}(IRequest{TResponse}, CancellationToken)`. A `cref` in a type that is moved moves with
-the type. A short `cref` that keeps its name, such as `IMediator`, is not reported: it resolves again once the
+the type. One through an alias, `M.ICommand{TResponse}` with `using M = Mediator;`, keeps the alias, which the
+fix points at `Relevox`. A short `cref` that keeps its name, such as `IMediator`, is not reported: it resolves again once the
 `using` is moved.
 
 The mapping and the reasons are in [ADR 0024](adr/0024-moving-from-mediator.md), and what to write by hand for
