@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Relevox.CodeFixes;
 using Relevox.Migration;
@@ -21,6 +22,9 @@ namespace Relevox.SourceGenerator.Tests;
 /// </remarks>
 public sealed class MediatorMigrationCodeFixTests
 {
+    // A cref the compiler cannot resolve, or whose parameters or syntax it cannot.
+    private static readonly string[] UnresolvedCref = ["CS1574", "CS1580", "CS1581", "CS1584"];
+
     // Sorted the way the IDE sorts, so every test also shows the usings staying in order.
     private const string Header = """
         using System.Collections.Generic;
@@ -907,7 +911,14 @@ public sealed class MediatorMigrationCodeFixTests
             new MediatorUsageAnalyzer(),
             new Dictionary<string, string>(),
             [mediator],
-            "using Mediator; public sealed record Place : ICommand<int>; public static class S { public static object Add(Microsoft.Extensions.DependencyInjection.IServiceCollection s) => s.AddMediator(); }");
+            """
+            using Mediator;
+
+            /// <summary>An <see cref="ICommand{T}"/>, not yet a <see cref="Mediator.IQuery{T}"/>.</summary>
+            public sealed record Place : ICommand<int>;
+
+            public static class S { public static object Add(Microsoft.Extensions.DependencyInjection.IServiceCollection s) => s.AddMediator(); }
+            """);
 
         diagnostics.ShouldBeEmpty();
     }
@@ -1007,12 +1018,11 @@ public sealed class MediatorMigrationCodeFixTests
     }
 
     [Fact]
-    public async Task Documentation_crefs_and_a_ValueTask_variable_at_a_call_site_are_not_touched()
+    public async Task A_ValueTask_variable_at_a_call_site_is_not_touched()
     {
         string[] fixedSources = await Migrate(Header + """
             public sealed record Ping : IRequest<int>;
 
-            /// <summary>Sends through <see cref="Mediator.IMediator"/>.</summary>
             public sealed class Caller(ISender sender)
             {
                 public async Task<int> Run(CancellationToken cancellationToken)
@@ -1023,9 +1033,114 @@ public sealed class MediatorMigrationCodeFixTests
             }
             """);
 
-        fixedSources[0].ShouldContain("""<see cref="Mediator.IMediator"/>""");
         fixedSources[0].ShouldContain("ValueTask<int> pending = sender.Send(new Ping(), cancellationToken);");
         fixedSources[0].ShouldContain("using Relevox;");
+    }
+
+    [Fact]
+    public async Task Mediator_names_in_documentation_crefs_are_moved_by_the_same_fix_all_as_the_code()
+    {
+        // With documentation generation on and warnings as errors, a cref that no longer resolves breaks the build.
+        // Sender is not in Mediator's shape, so its crefs are fixed one by one; Place and PlaceHandler are, so theirs
+        // move with the rewrite of the type, the nested Notes included.
+        string[] sources =
+        [
+            Header + """
+            /// <summary>
+            /// Sends through <see cref="Mediator.ISender.Send{TResponse}(Mediator.ICommand{TResponse}, System.Threading.CancellationToken)"/>,
+            /// so the request is a <see cref="Mediator.IQuery{TResponse}"/> or a <see cref="global::Mediator.ICommand"/>,
+            /// handled by an <see cref="ICommandHandler{TCommand}"/> and sent by
+            /// <see cref="ISender.Send{TResponse}(IQuery{TResponse}, CancellationToken)"/>.
+            /// <see cref="IMediator"/> resolves again once the using moves.
+            /// </summary>
+            /// <seealso cref="Mediator.IPublisher"/>
+            public static class Sender
+            {
+                /// <returns><see cref="Mediator.Unit.Value"/>.</returns>
+                /// <exception cref="Mediator.IMediator">Never.</exception>
+                public static Mediator.Unit Done() => Mediator.Unit.Value;
+
+                /// <inheritdoc cref="Mediator.ISender.Send{TResponse}(Mediator.IQuery{TResponse}, System.Threading.CancellationToken)"/>
+                public static void Inherited() { }
+            }
+
+            /// <summary>Placed through an <see cref="ICommandHandler{TCommand, TResponse}"/>.</summary>
+            public sealed record Place(int Value) : ICommand<int>;
+
+            /// <summary>Handles a <see cref="Place"/> as an <see cref="ICommandHandler{TCommand, TResponse}"/>.</summary>
+            public sealed class PlaceHandler : ICommandHandler<Place, int>
+            {
+                /// <inheritdoc cref="ICommandHandler{TCommand, TResponse}.Handle(TCommand, CancellationToken)"/>
+                public ValueTask<int> Handle(Place command, CancellationToken cancellationToken) => new(command.Value);
+
+                /// <summary>Not a handler, inside one: <see cref="Mediator.IStreamQuery{TResponse}"/>.</summary>
+                public static class Notes;
+            }
+            """,
+        ];
+
+        (await Kinds(sources)).ShouldContain("Cref");
+
+        string[] fixedSources = await Migrate(sources);
+
+        string text = fixedSources[0];
+        text.ShouldNotContain("Mediator.");
+        text.ShouldNotContain("using Mediator;");
+        text.ShouldContain("""<see cref="Relevox.ISender.Send{TResponse}(Relevox.IRequest{TResponse}, System.Threading.CancellationToken)"/>""");
+        text.ShouldContain("""<see cref="Relevox.IRequest{TResponse}"/>""");
+        text.ShouldContain("""<see cref="global::Relevox.IRequest{Unit}"/>""");
+        text.ShouldContain("""<see cref="IRequestHandler{TCommand, Unit}"/>""");
+        text.ShouldContain("""<see cref="ISender.Send{TResponse}(IRequest{TResponse}, CancellationToken)"/>""");
+        text.ShouldContain("""<see cref="IMediator"/>""");
+        text.ShouldContain("""<seealso cref="Relevox.IPublisher"/>""");
+        text.ShouldContain("""<returns><see cref="Relevox.Unit.Value"/>.</returns>""");
+        text.ShouldContain("""<exception cref="Relevox.IMediator">""");
+        text.ShouldContain("""<inheritdoc cref="Relevox.ISender.Send{TResponse}(Relevox.IRequest{TResponse}, System.Threading.CancellationToken)"/>""");
+        text.ShouldContain("""<summary>Placed through an <see cref="IRequestHandler{TCommand, TResponse}"/>.</summary>""");
+        text.ShouldContain("""<summary>Handles a <see cref="Place"/> as an <see cref="IRequestHandler{TCommand, TResponse}"/>.</summary>""");
+        text.ShouldContain("""<inheritdoc cref="IRequestHandler{TCommand, TResponse}.Handle(TCommand, CancellationToken)"/>""");
+        text.ShouldContain("""<see cref="Relevox.IStreamRequest{TResponse}"/>""");
+        text.ShouldContain("public Task<int> Handle(Place command, CancellationToken cancellationToken) => Task.FromResult(command.Value);");
+        ShouldBuildWithTheGenerator(fixedSources);
+        NothingLeftToMove(fixedSources);
+    }
+
+    [Fact]
+    public async Task A_cref_with_no_Relevox_counterpart_or_one_that_would_name_a_type_of_your_own_is_left_for_the_compiler()
+    {
+        // None of these would resolve into Relevox: MessagePreProcessor has no counterpart, Relevox's IMediator has no
+        // Missing, MessageHandlerDelegate is not in the table, Shop's own IStreamRequest<T> would be what
+        // IStreamRequest{TResponse} names here, and the second file has no using of Mediator to become one of
+        // Relevox. They are not reported, and the compiler's CS1574 points at each.
+        string[] sources =
+        [
+            Header + """
+            public interface IStreamRequest<T>;
+
+            /// <summary>
+            /// Not <see cref="Mediator.MessagePreProcessor{TMessage, TResponse}"/>, nor <see cref="Mediator.IMediator.Missing"/>,
+            /// nor <see cref="MessageHandlerDelegate{TMessage, TResponse}"/>, nor <see cref="IStreamQuery{TResponse}"/>.
+            /// </summary>
+            public static class Sender;
+            """,
+            """
+            /// <summary>Not <see cref="ICommand{TResponse}"/> either.</summary>
+            public static class Elsewhere;
+            """,
+        ];
+
+        (await Kinds(sources)).ShouldBe(["Name"]);
+
+        string[] fixedSources = await Migrate(sources);
+
+        fixedSources[0].ShouldContain("using Relevox;");
+        fixedSources[0].ShouldContain("""<see cref="Mediator.MessagePreProcessor{TMessage, TResponse}"/>""");
+        fixedSources[0].ShouldContain("""<see cref="Mediator.IMediator.Missing"/>""");
+        fixedSources[0].ShouldContain("""<see cref="MessageHandlerDelegate{TMessage, TResponse}"/>""");
+        fixedSources[0].ShouldContain("""<see cref="IStreamQuery{TResponse}"/>""");
+        fixedSources[1].ShouldContain("""<see cref="ICommand{TResponse}"/>""");
+        BuildErrors(fixedSources).Select(static diagnostic => diagnostic.Id).ShouldBe(["CS1574", "CS1574", "CS1574", "CS1574", "CS1574"]);
+        NothingLeftToMove(fixedSources);
     }
 
     [Fact]
@@ -1132,19 +1247,44 @@ public sealed class MediatorMigrationCodeFixTests
         }
     }
 
+    /// <summary>
+    /// The errors of a build with the generator, and the warnings for a cref that does not resolve: documentation
+    /// comments are checked, as with GenerateDocumentationFile on, where warnings as errors makes those break the build.
+    /// </summary>
     private static ImmutableArray<Diagnostic> BuildErrors(string[] sources)
     {
+        CSharpParseOptions parse = new CSharpParseOptions(LanguageVersion.Preview).WithDocumentationMode(DocumentationMode.Diagnose);
         CSharpCompilation compilation = CSharpCompilation.Create(
             "Shop",
-            sources.Select((source, index) => CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview), $"File{index}.cs")),
+            sources.Select((source, index) => CSharpSyntaxTree.ParseText(source, parse, $"File{index}.cs")),
             GeneratorHarness.References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
         CSharpGeneratorDriver
-            .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: new CSharpParseOptions(LanguageVersion.Preview))
+            .Create([new RelevoxGenerator().AsSourceGenerator()], parseOptions: parse)
             .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
 
-        return [.. output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
+        return [.. output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error || UnresolvedCref.Contains(diagnostic.Id))];
+    }
+
+    /// <summary>
+    /// No cref RVX0017 would move is left after one "Fix all": each one was either reported and fixed on its own, or
+    /// moved by the rewrite of the type it is in.
+    /// </summary>
+    private static void NothingLeftToMove(string[] sources)
+    {
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "Shop",
+            sources.Select((source, index) => CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview), $"File{index}.cs")),
+            GeneratorHarness.References);
+        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+        {
+            SemanticModel model = compilation.GetSemanticModel(tree);
+            tree.GetRoot().DescendantNodes(descendIntoTrivia: true).OfType<XmlCrefAttributeSyntax>()
+                .Where(attribute => MediatorSyntax.MovedCref(attribute.Cref, model, CancellationToken.None) is not null)
+                .Select(static attribute => attribute.ToString())
+                .ShouldBeEmpty();
+        }
     }
 
     private static void ShouldBuildWithTheGenerator(string[] sources) =>
