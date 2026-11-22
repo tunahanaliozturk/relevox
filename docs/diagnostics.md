@@ -87,6 +87,18 @@ public sealed record ChargeCard(Guid OrderId) : IRequest<Receipt>;
 #pragma warning restore RVX0001
 ```
 
+**When the handler is generated code.** Relevox leaves out handlers in generated code, which MediatR's scan finds
+([compatibility.md](compatibility.md#not-supported)). When a class there implements the request's handler
+interface, the message names it and its file, and says how to count it:
+
+> 'Shop.Ping' has no handler the generator can use, so sending it would throw. 'Shop.PingHandler' in
+> Handlers.g.cs implements one but is generated code, which Relevox leaves out; to count it, set
+> generated_code = false for that file in .editorconfig.
+
+Set `generated_code = false` for that file, or move the handler into a file of your own. For a class marked
+`[GeneratedCode]` the message says to remove the attribute instead, since `.editorconfig` does not undo it. A
+handler that another source generator writes cannot be counted either way: this generator never sees it.
+
 ## RVX0002
 
 **Request has more than one handler.** Error.
