@@ -8,6 +8,13 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- RVX0001 has a code fix, **Add handler 'PingHandler'**, that writes the missing handler in a new file next to the
+  request: the matching interface and `Handle` signature, the request's namespace, only the usings the project
+  lacks (global usings count), and a body that throws `NotImplementedException`. It has no *Fix all* on purpose
+  ([ADR 0028](docs/adr/0028-writing-handlers-and-requests.md), #173).
+- Refactorings on a type's declaration: **Make 'Ping' a request**, with or without its handler; **Add handler** on
+  a request with no handler, available as you type; and **Add request 'Ping'** on a handler whose request, stream
+  request or notification does not exist yet (#173).
 - A documentation site at https://tunahanaliozturk.github.io/relevox/, built from the README and `docs/` by
   `tools/site.py` with one pinned markdown library ([ADR 0027](docs/adr/0027-documentation-site-script.md)). Each
   RVX rule has its own page under `rules/`. Every pull request builds the site and fails on a link or anchor that
