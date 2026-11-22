@@ -42,6 +42,12 @@ internal static class Diagnostics
     /// leaves it out, so after a migration "has no handler" would send people looking for a class that is there.
     /// Only the message differs: the handler still does not count.
     /// </summary>
+    /// <summary>
+    /// The property on <see cref="HandlerOnlyInGeneratedCode"/> naming the handler, read by the RVX0001 code fix,
+    /// which then writes no second handler.
+    /// </summary>
+    public const string GeneratedHandlerProperty = "HandlerOnlyInGeneratedCode";
+
     public static readonly DiagnosticDescriptor HandlerOnlyInGeneratedCode = new(
         id: "RVX0001",
         title: "Request has no handler",

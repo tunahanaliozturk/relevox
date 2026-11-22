@@ -124,15 +124,30 @@ public sealed class RelevoxAnalyzer : DiagnosticAnalyzer
                     if (entry.Rule == Diagnostics.NoHandler.Id
                         && (leftOut ??= GeneratedHandlers(end.Compilation, end.CancellationToken)).TryGetValue(entry.Arguments[0], out INamedTypeSymbol? handler))
                     {
+                        // Every reason it is left out, since each alone keeps it out. The property tells the handler
+                        // writer not to offer a second handler.
+                        SyntaxTree file = handler.DeclaringSyntaxReferences.Select(static reference => reference.SyntaxTree)
+                            .FirstOrDefault(tree => GeneratedCode.Contains(tree, end.Compilation, end.CancellationToken))
+                            ?? handler.DeclaringSyntaxReferences[0].SyntaxTree;
+                        List<string> remedies = [];
+                        if (GeneratedCode.Contains(file, end.Compilation, end.CancellationToken))
+                        {
+                            remedies.Add("set generated_code = false for that file in .editorconfig");
+                        }
+
+                        if (GeneratedCode.MarkedBy(handler) is { } marked)
+                        {
+                            remedies.Add($"remove [GeneratedCode] from '{marked.ToDisplayString()}'");
+                        }
+
                         end.ReportDiagnostic(Diagnostic.Create(
                             Diagnostics.HandlerOnlyInGeneratedCode,
                             InSource(entry.Location, end.Compilation),
+                            ImmutableDictionary<string, string?>.Empty.Add(Diagnostics.GeneratedHandlerProperty, handler.ToDisplayString()),
                             entry.Arguments[0],
                             handler.ToDisplayString(),
-                            Path.GetFileName(handler.DeclaringSyntaxReferences[0].SyntaxTree.FilePath),
-                            GeneratedCode.IsMarked(handler)
-                                ? "remove the [GeneratedCode] attribute"
-                                : "set generated_code = false for that file in .editorconfig"));
+                            Path.GetFileName(file.FilePath),
+                            string.Join(" and ", remedies)));
                         continue;
                     }
 

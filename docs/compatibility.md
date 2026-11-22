@@ -265,8 +265,9 @@ compiler counts as generated code, the same code analyzers skip: files named `*.
 .editorconfig, and types with `[GeneratedCode]`. A handler written by another source generator, such as a Razor
 component that implements `INotificationHandler<T>`, is out of reach in any case, because one generator cannot
 see another's output. Either way the build says so: a request whose only handler is generated gets `RVX0001`,
-and its message names the handler and its file. Move the handler into a file of your own, or set
-`generated_code = false` for that file; for a class marked `[GeneratedCode]`, remove the attribute.
+and its message names the handler, its file and each reason it is left out. Move the handler into a file of your
+own, or set `generated_code = false` for that file; for a class marked `[GeneratedCode]`, or inside one, remove
+the attribute. Neither helps for another generator's output, and the message cannot tell that case apart.
 
 **Behaviours added by a child scope to a request that had none.** Whether a request type has behaviours at
 all is learned on its first send and kept for the container, which is right for Microsoft's container, whose

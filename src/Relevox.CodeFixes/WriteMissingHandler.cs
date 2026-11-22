@@ -47,7 +47,10 @@ public sealed class WriteMissingHandler : CodeFixProvider
         foreach (Diagnostic diagnostic in context.Diagnostics)
         {
             // A diagnostic about another file says nothing about this one, whatever its span happens to cover here.
+            // One whose only handler is generated code has a handler already; a second would be a duplicate once
+            // that file counts. The analyzer marks it with this property.
             if (diagnostic.Location.SourceTree == root.SyntaxTree
+                && !diagnostic.Properties.ContainsKey("HandlerOnlyInGeneratedCode")
                 && root.FullSpan.Contains(diagnostic.Location.SourceSpan)
                 && root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<BaseTypeDeclarationSyntax>() is { } declaration
                 && model.GetDeclaredSymbol(declaration, context.CancellationToken) is { } request
