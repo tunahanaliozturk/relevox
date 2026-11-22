@@ -71,8 +71,9 @@ done.
 After the package swap and a restore, the Mediator code the fix can move is marked with
 [RVX0017](diagnostics.md#rvx0017), a suggestion that offers **Move from Mediator to Relevox**: names rooted at
 `Mediator`, documentation `cref`s that name Mediator code, every `AddMediator` call, and each type in a shape the
-table below maps. A `cref` follows the table too, so a project that builds its documentation with warnings as
-errors still builds. A type it cannot map, such
+table below maps. A `cref` follows the table too, and is moved only when the result resolves into Relevox, so
+in a project that builds its documentation with warnings as errors the only `cref`s left to break the build are
+the ones the [RVX0017 page](diagnostics.md#rvx0017) lists. A type it cannot map, such
 as a `MessageExceptionHandler` subclass or a notification publisher, gets no diagnostic of its own; only the
 compiler's errors point at it, and step 4 says what to write. In Visual Studio,
 Rider or VS Code, choose *Fix all occurrences in: Solution* on any of them. From the command line, in the

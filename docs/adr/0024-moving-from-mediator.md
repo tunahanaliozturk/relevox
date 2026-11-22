@@ -29,7 +29,7 @@ code `Mediator.SourceGenerator` 3.0.2 generates, differs in four ways that a ren
 **RVX0017, Info, on the same terms as RVX0007.** It is reported only where Relevox is referenced and
 `Mediator.IMediator` does not resolve, that is once the Mediator packages are gone, so a project with both
 referenced is never told to move. One id for every kind of leftover, so one "Fix all in solution" does the whole
-move. It reports three kinds:
+move. It reports four kinds:
 
 - **Name**: a name rooted at `Mediator`, in a using directive or a qualified name. The fix renames the root to
   `Relevox`, with the usings of the block kept in order, as RVX0007's fix does.
@@ -37,6 +37,8 @@ move. It reports three kinds:
   whose `Handle` method returns `ValueTask`. The fix rewrites the declaration as a whole, so a type is either moved
   or left untouched, never half moved.
 - **Registration**: an `AddMediator` call.
+- **Cref**: a documentation `cref` naming Mediator code, added later; see
+  [Documentation crefs](#documentation-crefs-183).
 
 **The type mapping.** Commands and queries become requests; nothing is lost, since Relevox dispatches by type and
 Mediator's distinction is only in the names.
@@ -178,11 +180,14 @@ own assemblies. Anything else is left for CS1574.
 - **A short `cref` is checked as it will read after the fix.** `IRequest{TResponse}` resolves only once
   `using Mediator;` has become `using Relevox;`, so it is checked as `global::Relevox.IRequest{TResponse}`, and
   only where such a using covers it and no other type of that name is in scope. One that would name a type of
-  the project's own is left.
+  the project's own is left. A `cref` through an alias, `M.ICommand{TResponse}` with `using M = Mediator;`, keeps
+  the alias, which the fix points at `Relevox`, and is checked against `global::Relevox`.
+- **A `cref` that does not parse is left whole.** Moving the part that parsed would not fix it.
 - **Inside a type that is moved, the type's rewrite moves its `cref`s.** Every RVX0017 in such a type is fixed by
   rewriting the type, so the batch fixer merges identical edits. A separate edit for the `cref` would overlap the
-  rewrite and one of the two would be dropped. The rewrite visits documentation comments for that reason, and the
-  `cref`s of nested types with them.
+  rewrite and one of the two would be dropped. The rewrite visits documentation comments for that reason: those
+  of the type, its members and nested types, and a misplaced one inside the base list, which the compiler warns
+  about (CS1587) but whose `cref` is still reported.
 
 Rejected: writing every moved `cref` fully qualified, which needs no check against the usings but rewrites short
 names nobody asked to have qualified, unlike the code around them; and mapping a void `ICommand` to Relevox's
