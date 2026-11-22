@@ -8,6 +8,10 @@ All notable changes to this project are written down here. The format follows
 
 ### Added
 
+- A documentation site at https://tunahanaliozturk.github.io/relevox/, built from the README and `docs/` by
+  `tools/site.py` with one pinned markdown library ([ADR 0027](docs/adr/0027-documentation-site-script.md)). Each
+  RVX rule has its own page under `rules/`. Every pull request builds the site and fails on a link or anchor that
+  leads nowhere; main publishes it with GitHub Pages (#175).
 - C# 15 union types on `net11.0`, as responses, stream items, requests and notifications, are tested and
   documented in `docs/unions.md` (#159). They already worked, as any other type does; now a change that broke
   them would fail CI. A published union runs the union's handlers, not those of its case. The NativeAOT sample
