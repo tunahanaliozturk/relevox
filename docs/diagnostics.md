@@ -69,8 +69,17 @@ it. Sending it compiles and then throws `InvalidOperationException`, as it would
 It is a warning rather than an error because a request often exists for a while before its handler does,
 halfway through a change. A build that treats warnings as errors still stops on it.
 
-**Fix:** add the handler, or, if it lives in a project this one does not reference, add the reference. If
-the request is sent only from another application that has the handler, suppress the warning for that type:
+**Fix:** add the handler, or, if it lives in a project this one does not reference, add the reference. The code
+fix **Add handler 'PingHandler'** writes one in a new file next to the request: the right interface and `Handle`
+signature, the request's namespace, only the usings the project does not already have, and a body that throws
+`NotImplementedException`. It has no *Fix all*, so it cannot silence every RVX0001 at once with handlers that
+throw ([ADR 0027](adr/0027-writing-handlers-and-requests.md)). The same action is a refactoring on the request's
+declaration, offered as you type, since RVX0001 itself is only reported once the whole project has been analysed.
+Two more refactorings cover the other starting points: on a class or record, **Make 'Ping' a request**, with or
+without its handler, and on a handler whose request does not exist yet, **Add request 'Ping'**, which writes the
+request, stream request or notification it names.
+
+If the request is sent only from another application that has the handler, suppress the warning for that type:
 
 ```csharp
 #pragma warning disable RVX0001 // handled by the billing service, which sends it over the bus
