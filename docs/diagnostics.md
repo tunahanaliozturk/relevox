@@ -251,7 +251,8 @@ alone, for a person to decide:
 
 A documentation `cref` is moved as a whole, so one with MediatR names in its parameters, such as
 `MediatR.ISender.Send{TResponse}(MediatR.IRequest{TResponse}, System.Threading.CancellationToken)`, is rewritten in
-one step. A short `cref` such as `IMediator` is not reported: it resolves again once the `using` is moved.
+one step. A short `cref` such as `IMediator` is not reported: it resolves again once the `using` is moved. Nor is one that
+does not parse: it is left as written for the compiler's CS1584.
 
 `AddRelevox` takes a lambda, not an options object, so an object passed to `AddMediatR` becomes one
 ([ADR 0029](adr/0029-options-object-to-lambda.md)). That works for an object made in the call,

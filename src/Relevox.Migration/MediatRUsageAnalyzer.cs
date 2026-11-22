@@ -124,10 +124,14 @@ public sealed class MediatRUsageAnalyzer : DiagnosticAnalyzer
         // A cref is moved as a whole: one with MediatR names in its parameters as well as its type would not resolve
         // with only some of them moved. One whose Relevox counterpart does not resolve either, MediatR.Mediator for
         // example, is left for the compiler to point at, as unmapped names in code are. So is one that resolves
-        // to something outside Relevox, such as a type of your own called RelevoxOptions.
-        CrefSyntax cref = ((XmlCrefAttributeSyntax)context.Node).Cref;
+        // to something outside Relevox, such as a type of your own called RelevoxOptions. And so is one that does not
+        // parse: moving the part that did would leave the compiler's error on a cref the fix had touched.
+        XmlCrefAttributeSyntax attribute = (XmlCrefAttributeSyntax)context.Node;
+        CrefSyntax cref = attribute.Cref;
         CrefSyntax moved = Moved(cref);
         if (moved == cref
+            || attribute.ContainsSkippedText
+            || attribute.ContainsDiagnostics
             || context.SemanticModel.GetSymbolInfo(cref, context.CancellationToken) is { Symbol: not null } or { CandidateSymbols.Length: > 0 }
             || context.SemanticModel.GetSpeculativeSymbolInfo(cref.SpanStart, moved, SpeculativeBindingOption.BindAsTypeOrNamespace).Symbol is not { } symbol
             || !RelevoxAssemblies.Hold(relevox, symbol))
