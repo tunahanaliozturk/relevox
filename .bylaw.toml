@@ -1,0 +1,10 @@
+# bylaw settings, read from the base branch so a pull request cannot loosen its own review.
+# https://github.com/tunahanaliozturk/bylaw
+
+# A trial next to the Codex reviewer: a summary comment only. Inline comments would open review threads, and the
+# main ruleset requires every thread resolved before a merge.
+max_comments = 0
+
+[budget]
+# Model tokens one pull request may use across all its runs.
+pr_tokens = 600000
